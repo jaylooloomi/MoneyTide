@@ -1,7 +1,7 @@
 # 台股產業熱力圖看盤介面 — 設計規格
 
 - 日期：2026-10-12
-- 狀態：已與使用者逐段確認，待最終審閱
+- 狀態：已實作。第 11 節「實作修訂」是依資料來源實測與規格審查做出的定案，與前文衝突時以第 11 節為準。
 
 ## 1. 目標與範圍
 
@@ -176,3 +176,40 @@ uv run python -m openmarket
 ```
 
 啟動後自動開啟 `http://127.0.0.1:8765`。
+
+## 11. 實作修訂（以此為準）
+
+依資料來源實測（2026-10-12）與規格審查結果定案：
+
+**資料來源**
+- HiStock：`p=all` 必要；表格 `#CPHB1_gv`，約 2,556 列、2.7 MB。漲跌／漲跌幅的 `--` 代表平盤（價格 = 昨收），解析為 0。正式抓取時列數少於 1,000 視為解析失敗。
+- HiStock 會保留約 170 檔已下市／過期代號（成交量 0）。只要有 ISIN 資料，不在 ISIN 清單中的代號一律剔除。
+- ISIN：必須用 `cp950` 解碼。`big5` 會在「碁」「恒」等字失敗，lxml 也會靜默截斷文件。上市頁約 9 MB、需 30–50 秒，所以在背景載入、不擋報價；httpx 的 15 秒逾時是單次讀取逾時，不是總時長。權證區塊略過。
+- 股數：TWSE 鍵名為 `公司代號`／`已發行普通股數或TDR原股發行股數`，TPEx 為 `SecuritiesCompanyCode`／`IssueShares`，單位都是「股」。TDR（產業別 91）不計市值。TLS 使用 httpx 預設的 certifi，不使用系統憑證庫。
+
+**證券類別**（`kind` 取代 `is_etf`）
+- `stock`：ISIN「股票」「創新板」區塊。
+- `etf`：CFICode 以 `CE` 開頭，或位於 ETF 區塊。
+- `other`：特別股、TDR、ETN、REITs、ABS 等，不放進熱力圖與產業彙總，只有在「只看自選」且被加入自選時才顯示。
+
+**產業彙總只在前端計算**（`static/js/transform.js`，單一實作）
+- 後端快照只含 `stocks`，不再回傳 `industries`。
+- 今日／本週漲跌：對「有市值且該欄有值」的成分股，以昨收市值（`market_cap / 價格 × 昨收`）加權。整個產業都沒有市值時，才改用等權。
+- 振幅：等權平均。漲跌家數依 `change` 正負計算。成交值占比以目前篩選範圍為分母。
+- 彙總包含因缺市值或無成交值而未畫進樹狀圖的股票。
+
+**狀態與 API**
+- `status` 增加 `loading`（尚未完成任何一次抓取，灰燈），`error` 表示嘗試過但從未成功。
+- `market_open` 為半開區間：09:00 ≤ t < 13:30。
+- `ETag = "<boot_id>-<revision>"`。快照內容有任何變動（資料、status、message、market_open）時 revision 就加一；回 304 時也帶 ETag。
+- `POST /api/refresh` 為非同步處理，回 202。若正在抓取中則合併到該次抓取。距上次抓取未滿 30 秒時回 429，body 為 `{"retry_after": n}`，並帶 `Retry-After` 標頭。
+- 參考資料（ISIN、股數）各自在缺少或超過 7 天時更新，失敗後每小時最多重試一次。
+- 伺服器只綁定 127.0.0.1，並以 TrustedHostMiddleware 只接受 127.0.0.1／localhost。`.js` 強制使用 `text/javascript`（Windows 登錄檔的 MIME 對照不可靠）。
+
+**前端（ECharts 5.6.0，cdnjs + SRI）**
+- 系列設定 `nodeClick: false`，並自行處理 click：點產業標題時用 `treemapRootToNode` 放大，點個股時開啟資訊卡。內建麵包屑關閉，改用 DOM 麵包屑。
+- 每次 `setOption` 都會把 view root 重設回最上層，所以放大層級存在 `app.js` 的 state，每次重繪後重新套用。
+- 矩陣 hover 用 `highlight`／`downplay` action 加黃框，不重繪。
+- 小格子用 `labelLayout` 依實際格子大小（寬 < 44 或高 < 26）隱藏文字。
+- 色階為紅漲綠跌，今日 ±7%、本週 ±15%，在 `transform.js` 的 `colorFor` 內插計算，不使用 visualMap。
+- ETF 沒有股本資料，所以在市值模式下不顯示，並提示改用成交值模式。「只看自選」時會顯示所有自選股，不受「含 ETF」限制。
