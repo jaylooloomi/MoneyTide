@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="zh-Hant-TW">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>台股產業熱力圖</title>
+  <link rel="stylesheet" href="app.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/echarts/5.6.0/echarts.min.js"
+          integrity="sha512-XSmbX3mhrD2ix5fXPTRQb2FwK22sRMVQTpBP2ac8hX7Dh/605hA2QDegVWiAvZPiXIxOV0CbkmUjGionDpbCmw=="
+          crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+  <script type="module" src="js/app.js"></script>
+</head>
+<body>
+  <header class="top">
+    <span class="logo">Open Market</span>
+    <div class="seg" data-group="market" role="group" aria-label="市場">
+      <button data-value="all">全部</button><button data-value="上市">上市</button><button data-value="上櫃">上櫃</button>
+    </div>
+    <div class="seg" data-group="sizeBy" role="group" aria-label="格子大小">
+      <button data-value="cap">大小：市值</button><button data-value="turnover">成交值</button>
+    </div>
+    <div class="seg" data-group="colorBy" role="group" aria-label="顏色指標">
+      <button data-value="today">顏色：今日</button><button data-value="week">本週</button>
+    </div>
+    <div class="seg" data-group="watchOnly" role="group" aria-label="範圍">
+      <button data-value="false">全市場</button><button data-value="true">只看自選</button>
+    </div>
+    <label class="chk"><input type="checkbox" id="includeEtf"> 含 ETF</label>
+    <span class="spacer"></span>
+    <span class="status" id="status" title="">
+      <i class="dot"></i><span id="statusText">載入中…</span>
+    </span>
+    <button class="icon" id="settingsBtn" title="更新頻率設定" aria-label="更新頻率設定">⚙</button>
+    <button class="icon" id="refreshBtn" title="立即更新" aria-label="立即更新">⟳</button>
+    <div class="popover" id="settings" hidden>
+      <label>盤中更新頻率（秒，30–600）
+        <input type="number" id="pollSeconds" min="30" max="600" step="1">
+      </label>
+      <div class="row"><button id="settingsSave" class="primary">儲存</button><button id="settingsCancel">取消</button></div>
+      <p class="err" id="settingsErr"></p>
+    </div>
+  </header>
+
+  <main class="body">
+    <section class="main">
+      <nav class="crumb" id="crumb" aria-label="目前範圍"></nav>
+      <div class="chart-wrap">
+        <div id="chart"></div>
+        <div id="empty" class="empty" hidden></div>
+        <aside id="card" class="card" hidden aria-live="polite"></aside>
+      </div>
+      <div class="foot">
+        <span class="legend"><span id="legendMin">-7%</span><span class="bar"></span><span id="legendMax">+7%</span></span>
+        <span id="note" class="note"></span>
+      </div>
+    </section>
+
+    <aside class="side">
+      <div class="tabs" role="tablist">
+        <button role="tab" data-tab="industry">產業</button>
+        <button role="tab" data-tab="watch">自選 <span id="watchCount">(0)</span></button>
+      </div>
+      <div class="table-wrap">
+        <table id="matrix" class="grid">
+          <thead><tr>
+            <th data-sort="name" class="l">產業</th>
+            <th data-sort="change_pct">今日</th>
+            <th data-sort="week_pct">本週</th>
+            <th data-sort="amplitude_pct">振幅</th>
+            <th data-sort="turnover_share" title="成交值占目前篩選範圍的比例">量占比</th>
+            <th data-sort="breadth" title="上漲家數 / 下跌家數（依漲減跌排序）">漲/跌</th>
+          </tr></thead>
+          <tbody></tbody>
+        </table>
+        <table id="watch" class="grid" hidden>
+          <thead><tr>
+            <th data-sort="code" class="l">代號</th>
+            <th data-sort="name" class="l">名稱</th>
+            <th data-sort="price">價格</th>
+            <th data-sort="change_pct">漲跌幅</th>
+            <th data-sort="week_pct">本週</th>
+            <th data-sort="turnover_100m">成交值</th>
+            <th aria-label="移除"></th>
+          </tr></thead>
+          <tbody></tbody>
+        </table>
+        <p id="watchEmpty" class="hint" hidden>尚無自選股。點熱力圖上的個股，在資訊卡中按「加入自選」。</p>
+      </div>
+    </aside>
+  </main>
+  <div id="toast" class="toast" hidden></div>
+</body>
+</html>
