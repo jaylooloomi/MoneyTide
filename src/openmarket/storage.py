@@ -32,9 +32,19 @@ def _write_json_atomic(path: Path, data: Any) -> None:
 
 
 def _read_json(path: Path) -> Any | None:
+    """Missing or corrupt file → None. Other OSErrors (e.g. a transient Windows lock) propagate,
+    so a read-modify-write such as Watchlist.add never rebuilds the file from an empty list."""
     try:
         return json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError, UnicodeDecodeError):
+    except (FileNotFoundError, json.JSONDecodeError, UnicodeDecodeError):
+        return None
+
+
+def _read_json_lenient(path: Path) -> Any | None:
+    """For caches and startup settings, where unreadable simply means "not available"."""
+    try:
+        return _read_json(path)
+    except OSError:
         return None
 
 
@@ -45,7 +55,7 @@ class JsonCache:
         self.path = path
 
     def load(self) -> tuple[Any, datetime] | None:
-        raw = _read_json(self.path)
+        raw = _read_json_lenient(self.path)
         if not isinstance(raw, dict) or "saved_at" not in raw or "data" not in raw:
             return None
         try:
@@ -68,7 +78,7 @@ class SettingsStore:
     def __init__(self, path: Path) -> None:
         self.path = path
         self._lock = threading.Lock()
-        raw = _read_json(path)
+        raw = _read_json_lenient(path)
         poll = raw.get("poll_seconds") if isinstance(raw, dict) else None
         valid = isinstance(poll, int) and POLL_SECONDS_MIN <= poll <= POLL_SECONDS_MAX
         self._poll_seconds = poll if valid else POLL_SECONDS_DEFAULT

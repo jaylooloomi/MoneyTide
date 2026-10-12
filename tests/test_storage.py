@@ -58,3 +58,34 @@ def test_settings_kept_in_memory_and_survive_unreadable_file(tmp_path):
     p.unlink()
     assert s.poll_seconds == 90  # no disk read per access
     assert SettingsStore(p).poll_seconds == 60
+
+
+def test_watchlist_write_aborts_when_file_unreadable(tmp_path, monkeypatch):
+    from pathlib import Path
+
+    w = Watchlist(tmp_path / "w.json")
+    w.add("2330")
+    w.add("2317")
+    real = Path.read_text
+
+    def locked(self, *a, **kw):
+        if self.name == "w.json":
+            raise PermissionError(13, "Permission denied")
+        return real(self, *a, **kw)
+
+    monkeypatch.setattr(Path, "read_text", locked)
+    with pytest.raises(PermissionError):
+        w.add("2454")
+    monkeypatch.setattr(Path, "read_text", real)
+    assert w.codes() == ["2330", "2317"]  # nothing lost
+
+
+def test_cache_and_settings_tolerate_unreadable_files(tmp_path, monkeypatch):
+    from pathlib import Path
+
+    def locked(self, *a, **kw):
+        raise PermissionError(13, "Permission denied")
+
+    monkeypatch.setattr(Path, "read_text", locked)
+    assert JsonCache(tmp_path / "c.json").load() is None
+    assert SettingsStore(tmp_path / "s.json").poll_seconds == 60

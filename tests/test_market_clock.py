@@ -119,3 +119,14 @@ def test_failed_attempt_retried_out_of_session():
 def test_failed_attempt_in_session_keeps_normal_interval():
     now = tpe(*MON, 10, 0, 30)
     assert next_fetch_time(now, tpe(*MON, 10, 0), 60, last_failed=True) == tpe(*MON, 10, 1)
+
+
+def test_pre_open_fetch_does_not_delay_first_session_fetch():
+    # woke 08:58 after a missed close and fetched; 600 s interval must still fetch at 09:00
+    now = tpe(*MON, 8, 59)
+    assert next_fetch_time(now, tpe(*MON, 8, 58), 600) == tpe(*MON, 9, 0)
+
+
+def test_failed_retry_skips_closing_gap():
+    now = tpe(*MON, 13, 30, 0)
+    assert next_fetch_time(now, tpe(*MON, 13, 29, 50), 30, last_failed=True) == tpe(*MON, 13, 35)

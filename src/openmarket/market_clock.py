@@ -52,7 +52,7 @@ def _scheduled_fetch_time(local: datetime, last: datetime, poll_seconds: int) ->
     if is_trading_day(local):
         open_at, close_at, final_at = _at(local, OPEN), _at(local, CLOSE), _at(local, FINAL_FETCH)
         if open_at <= local < close_at:
-            candidate = max(last + timedelta(seconds=poll_seconds), open_at)
+            candidate = open_at if last < open_at else last + timedelta(seconds=poll_seconds)
             return final_at if candidate >= close_at else candidate
     # Out of session: catch up a missed closing fetch (e.g. the laptop slept through 13:35).
     latest_final = _latest_final_fetch(local)
@@ -82,6 +82,9 @@ def next_fetch_time(
         return local
     last = _local(last_fetch)
     scheduled = _scheduled_fetch_time(local, last, poll_seconds)
-    if last_failed:
-        return min(scheduled, last + timedelta(seconds=poll_seconds))
-    return scheduled
+    if not last_failed:
+        return scheduled
+    retry = last + timedelta(seconds=poll_seconds)
+    if is_trading_day(retry) and _at(retry, CLOSE) <= retry < _at(retry, FINAL_FETCH):
+        retry = _at(retry, FINAL_FETCH)
+    return min(scheduled, retry)
