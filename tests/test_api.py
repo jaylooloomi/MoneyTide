@@ -51,7 +51,7 @@ def setup(tmp_path):
 def test_snapshot_and_etag(setup):
     client, poller, _ = setup
     r = client.get("/api/snapshot")
-    assert r.status_code == 200 and r.json()["status"] == "error"
+    assert r.status_code == 200 and r.json()["status"] == "loading"
     asyncio.run(poller.refresh_reference())
     asyncio.run(poller.fetch_once())
     r = client.get("/api/snapshot")
@@ -60,7 +60,8 @@ def test_snapshot_and_etag(setup):
     etag = r.headers["etag"]
     r2 = client.get("/api/snapshot", headers={"If-None-Match": etag})
     assert r2.status_code == 304
-    r3 = client.get("/api/snapshot", headers={"If-None-Match": '"0"'})
+    assert r2.headers["etag"] == etag
+    r3 = client.get("/api/snapshot", headers={"If-None-Match": '"x-0"'})
     assert r3.status_code == 200
 
 
@@ -79,6 +80,19 @@ def test_refresh_throttle(setup):
     asyncio.run(poller.fetch_once())
     r = client.post("/api/refresh")
     assert r.status_code == 429 and int(r.headers["retry-after"]) > 0
+    assert r.json()["retry_after"] == int(r.headers["retry-after"])
+
+
+def test_foreign_host_rejected(setup):
+    client, _, _ = setup
+    assert client.get("/api/settings", headers={"Host": "evil.example"}).status_code == 400
+
+
+def test_js_served_as_javascript(setup, tmp_path):
+    client, _, _ = setup
+    (tmp_path / "static" / "app.js").write_text("export {}", encoding="utf-8")
+    r = client.get("/app.js")
+    assert r.headers["content-type"].startswith("text/javascript")
 
 
 def test_watchlist_crud(setup):

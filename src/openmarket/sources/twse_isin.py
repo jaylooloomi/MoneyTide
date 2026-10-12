@@ -9,6 +9,8 @@ The listed page is ~9 MB (mostly warrants) and can take ~50 s: httpx's 15 s time
 
 from __future__ import annotations
 
+import asyncio
+
 import httpx
 from lxml import html
 
@@ -91,4 +93,6 @@ def parse_isin(page: bytes | str) -> dict[str, StockInfo]:
 async def fetch_isin(client: httpx.AsyncClient) -> dict[str, StockInfo]:
     twse = await get_with_retry(client, TWSE_URL)
     tpex = await get_with_retry(client, TPEX_URL)
-    return {**parse_isin(twse.content), **parse_isin(tpex.content)}
+    listed = await asyncio.to_thread(parse_isin, twse.content)
+    otc = await asyncio.to_thread(parse_isin, tpex.content)
+    return {**listed, **otc}

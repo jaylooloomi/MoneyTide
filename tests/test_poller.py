@@ -61,11 +61,11 @@ def run(coro):
     return asyncio.run(coro)
 
 
-def test_initial_state_is_error_without_data(tmp_path):
+def test_initial_state_is_loading(tmp_path):
     p, _ = make(tmp_path, Source([quote("2330")]))
-    assert p.snapshot.status == "error"
+    assert p.snapshot.status == "loading"
     assert p.snapshot.stocks == []
-    assert "尚未取得資料" in p.snapshot.message
+    assert "載入中" in p.snapshot.message
 
 
 def test_success_then_failure_keeps_old_data_as_stale_then_recovers(tmp_path):
@@ -113,7 +113,6 @@ def test_snapshot_json_is_serialised_utf8(tmp_path):
     run(p.fetch_once())
     data = json.loads(p.snapshot_json)
     assert data["stocks"][0]["industry"] == "半導體業"
-    assert data["industries"][0]["name"] == "半導體業"
     assert data["market_open"] is True
 
 

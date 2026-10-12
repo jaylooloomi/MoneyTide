@@ -2,12 +2,15 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import mimetypes
 from collections.abc import AsyncIterator
 from pathlib import Path
 
 import httpx
 from fastapi import FastAPI, HTTPException, Request, Response
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.middleware.trustedhost import TrustedHostMiddleware
 from pydantic import BaseModel
 
 from .config import STATIC_DIR, AppConfig
@@ -64,6 +67,8 @@ def create_app(
 
     app = FastAPI(title="Open Market", lifespan=lifespan)
     app.state.poller = poller
+    # Local-only app: reject other Host headers (DNS rebinding could otherwise reach the PUT routes).
+    app.add_middleware(TrustedHostMiddleware, allowed_hosts=["127.0.0.1", "localhost", "testserver"])
 
     def get_poller() -> Poller:
         p = app.state.poller
@@ -95,14 +100,15 @@ def create_app(
         return result
 
     @app.post("/api/refresh", status_code=202)
-    def refresh() -> dict:
+    def refresh() -> Response:
         try:
             get_poller().request_refresh()
         except RefreshTooSoon as exc:
-            raise HTTPException(
-                429, str(exc), headers={"Retry-After": str(int(exc.retry_after) + 1)}
-            ) from exc
-        return {"accepted": True}
+            retry_after = int(exc.retry_after) + 1
+            return JSONResponse(
+                {"retry_after": retry_after}, status_code=429, headers={"Retry-After": str(retry_after)}
+            )
+        return JSONResponse({"accepted": True}, status_code=202)
 
     @app.get("/api/watchlist")
     def get_watchlist() -> dict:
@@ -120,5 +126,8 @@ def create_app(
         return {"codes": watchlist.remove(code)}
 
     if static_dir.is_dir():
+        # Windows takes MIME types from the registry, where .js may not be text/javascript;
+        # browsers refuse ES modules served with the wrong type.
+        mimetypes.add_type("text/javascript", ".js")
         app.mount("/", StaticFiles(directory=static_dir, html=True), name="static")
     return app

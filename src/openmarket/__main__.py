@@ -2,7 +2,10 @@ from __future__ import annotations
 
 import argparse
 import logging
+import socket
+import sys
 import threading
+import time
 import webbrowser
 
 import uvicorn
@@ -11,7 +14,26 @@ from .api import create_app
 from .config import AppConfig
 
 
+def _port_free(host: str, port: int) -> bool:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        return sock.connect_ex((host, port)) != 0
+
+
+def _open_when_listening(host: str, port: int, url: str, timeout: float = 20.0) -> None:
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if not _port_free(host, port):
+            webbrowser.open(url)
+            return
+        time.sleep(0.2)
+
+
 def main() -> None:
+    # Windows consoles default to cp950, which cannot encode every company name (e.g. 堃).
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8", errors="backslashreplace")
+
     parser = argparse.ArgumentParser(prog="openmarket", description="台股產業熱力圖（本機）")
     parser.add_argument("--no-browser", action="store_true", help="啟動後不要自動開瀏覽器")
     args = parser.parse_args()
@@ -19,8 +41,12 @@ def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
     config = AppConfig.from_env()
     url = f"http://{config.host}:{config.port}"
+    if not _port_free(config.host, config.port):
+        sys.exit(f"連接埠 {config.port} 已被占用。請關閉另一個執行中的 openmarket，或設定 OPENMARKET_PORT。")
     if not args.no_browser:
-        threading.Timer(1.5, webbrowser.open, args=(url,)).start()
+        threading.Thread(
+            target=_open_when_listening, args=(config.host, config.port, url), daemon=True
+        ).start()
     print(f"Open Market → {url}")
     uvicorn.run(create_app(config), host=config.host, port=config.port, log_level="info")
 

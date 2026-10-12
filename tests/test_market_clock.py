@@ -21,7 +21,8 @@ SAT = (2026, 10, 17)
     [
         (tpe(*MON, 8, 59), False),
         (tpe(*MON, 9, 0), True),
-        (tpe(*MON, 13, 30), True),
+        (tpe(*MON, 13, 29, 59), True),
+        (tpe(*MON, 13, 30), False),
         (tpe(*MON, 13, 31), False),
         (tpe(*SAT, 10, 0), False),
     ],

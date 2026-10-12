@@ -1,7 +1,7 @@
 import pytest
 
 from openmarket.models import Quote, StockInfo
-from openmarket.snapshot import aggregate_industries, build_stocks
+from openmarket.snapshot import build_stocks
 
 
 def q(code, change, change_pct, price=100.0, week=None, amp=2.0, turnover=1.0, name=None):
@@ -54,48 +54,9 @@ def test_market_cap_uses_prev_close_when_no_trade():
     assert s.market_cap == 2000.0
 
 
-def test_industry_cap_weighted_when_all_have_cap():
-    stocks = build_stocks(
-        [q("2330", 1, 2.0, price=100, week=4.0), q("2454", -1, -1.0, price=100, week=0.0)],
-        INFOS,
-        {"2330": 3, "2454": 1},
-    )
-    (semi,) = aggregate_industries(stocks)
-    assert semi.change_pct == pytest.approx((2.0 * 300 - 1.0 * 100) / 400)
-    assert semi.week_pct == pytest.approx(3.0)
-    assert (semi.up_count, semi.down_count, semi.flat_count, semi.stock_count) == (1, 1, 0, 2)
-
-
-def test_industry_equal_weight_when_any_cap_missing():
-    stocks = build_stocks(
-        [q("2330", 1, 2.0), q("2454", -1, -1.0), q("6488", 0, 0.0)],
-        INFOS,
-        {"2330": 3, "2454": 1},  # 6488 missing shares
-    )
-    (semi,) = aggregate_industries(stocks)
-    assert semi.change_pct == pytest.approx(1.0 / 3)
-    assert semi.flat_count == 1
-
-
-def test_etf_excluded_by_default_and_sorted_desc():
-    stocks = build_stocks(
-        [q("2330", 1, 1.0), q("2603", -5, -5.0), q("0050", 1, 3.0)], INFOS, {}
-    )
-    names = [s.name for s in aggregate_industries(stocks)]
-    assert names == ["半導體業", "航運業"]
-    assert "ETF" in [s.name for s in aggregate_industries(stocks, include_etf=True)]
-
-
-def test_none_values_ignored_in_averages():
-    stocks = build_stocks([q("2330", None, None), q("2454", 1, 1.0)], INFOS, {})
-    (semi,) = aggregate_industries(stocks)
-    assert semi.change_pct == 1.0
-    assert semi.flat_count == 1
-
-
-def test_fallback_kind_and_other_never_aggregated():
+def test_preferred_is_other_and_never_takes_common_shares():
     infos = {**INFOS, "2881A": StockInfo("2881A", "富邦特", "金融保險業", "上市", "other")}
-    stocks = build_stocks([q("2881A", 1, 1.0), q("2330", 1, 1.0)], infos, {})
+    stocks = build_stocks([q("2881A", 1, 1.0), q("2330", 1, 1.0)], infos, {"2881": 5})
     by = {s.code: s for s in stocks}
     assert by["2881A"].kind == "other"
-    assert [st.name for st in aggregate_industries(stocks, include_etf=True)] == ["半導體業"]
+    assert by["2881A"].market_cap is None  # exact code match only

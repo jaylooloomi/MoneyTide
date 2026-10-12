@@ -1,14 +1,14 @@
-"""Merge quotes + classification + issued shares into stocks, and aggregate industries.
+"""Merge quotes + classification + issued shares into stocks.
 
-The industry aggregation rules are mirrored in static/js/transform.js — keep them in sync.
+Industry aggregation happens in the browser (static/js/transform.js), because it depends on the
+user's filters; keeping a single implementation avoids two copies of the weighting rules.
 """
 
 from __future__ import annotations
 
-from collections import defaultdict
 from collections.abc import Iterable, Mapping
 
-from .models import ETF_INDUSTRY, OTHER_INDUSTRY, IndustryStat, Kind, Quote, Stock, StockInfo
+from .models import ETF_INDUSTRY, OTHER_INDUSTRY, Kind, Quote, Stock, StockInfo
 
 
 def fallback_kind(code: str) -> Kind:
@@ -48,47 +48,6 @@ def merge_stock(quote: Quote, info: StockInfo | None, shares: int | None) -> Sto
         kind=kind,
         market_cap=market_cap,
     )
-
-
-def _avg(stocks: list[Stock], attr: str, cap_weighted: bool) -> float | None:
-    pairs = [(getattr(s, attr), s.market_cap) for s in stocks if getattr(s, attr) is not None]
-    if not pairs:
-        return None
-    if cap_weighted:
-        total = sum(w for _, w in pairs)
-        if total > 0:
-            return sum(v * w for v, w in pairs) / total
-    return sum(v for v, _ in pairs) / len(pairs)
-
-
-def aggregate_industry(name: str, members: list[Stock]) -> IndustryStat:
-    # Cap-weighted only when every member has a market cap; otherwise equal weight (never mixed).
-    cap_weighted = all(s.market_cap for s in members)
-    up = sum(1 for s in members if s.change is not None and s.change > 0)
-    down = sum(1 for s in members if s.change is not None and s.change < 0)
-    return IndustryStat(
-        name=name,
-        change_pct=_avg(members, "change_pct", cap_weighted),
-        week_pct=_avg(members, "week_pct", cap_weighted),
-        amplitude_pct=_avg(members, "amplitude_pct", cap_weighted=False),
-        turnover_100m=sum(s.turnover_100m or 0.0 for s in members),
-        up_count=up,
-        down_count=down,
-        flat_count=len(members) - up - down,
-        stock_count=len(members),
-    )
-
-
-def aggregate_industries(stocks: Iterable[Stock], include_etf: bool = False) -> list[IndustryStat]:
-    """Aggregate common stocks (plus ETFs when asked). kind == "other" is never aggregated."""
-    groups: dict[str, list[Stock]] = defaultdict(list)
-    for s in stocks:
-        if s.kind == "other" or (s.kind == "etf" and not include_etf):
-            continue
-        groups[s.industry].append(s)
-    stats = [aggregate_industry(name, members) for name, members in groups.items()]
-    stats.sort(key=lambda st: (st.change_pct is None, -(st.change_pct or 0.0)))
-    return stats
 
 
 def build_stocks(

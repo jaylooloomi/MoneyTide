@@ -6,7 +6,8 @@ from dataclasses import asdict, dataclass, field
 from typing import Literal
 
 Market = Literal["上市", "上櫃", "未知"]
-Status = Literal["ok", "stale", "error"]
+# loading = no fetch attempt finished yet; error = attempts failed and none ever succeeded
+Status = Literal["loading", "ok", "stale", "error"]
 # stock = 普通股/創新板/KY; etf = ETF + ETN; other = 特別股/TDR/REITs/其他（不放進熱力圖）
 Kind = Literal["stock", "etf", "other"]
 
@@ -69,28 +70,14 @@ class Stock:
     market_cap: float | None  # 元
 
 
-@dataclass(frozen=True, slots=True)
-class IndustryStat:
-    name: str
-    change_pct: float | None
-    week_pct: float | None
-    amplitude_pct: float | None
-    turnover_100m: float
-    up_count: int
-    down_count: int
-    flat_count: int
-    stock_count: int
-
-
 @dataclass(slots=True)
 class Snapshot:
     version: int = 0
     as_of: str | None = None
-    status: Status = "error"
+    status: Status = "loading"
     message: str = ""
     market_open: bool = False
     stocks: list[Stock] = field(default_factory=list)
-    industries: list[IndustryStat] = field(default_factory=list)
 
     def to_dict(self) -> dict:
         return asdict(self)

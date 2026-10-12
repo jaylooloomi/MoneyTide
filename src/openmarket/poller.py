@@ -10,6 +10,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import secrets
 from collections.abc import Awaitable, Callable
 from dataclasses import asdict
 from datetime import datetime, timedelta
@@ -17,7 +18,7 @@ from datetime import datetime, timedelta
 from .config import REFRESH_MIN_INTERVAL_SECONDS, STATIC_CACHE_MAX_AGE_DAYS, TAIPEI
 from .market_clock import is_market_open, next_fetch_time
 from .models import Quote, Snapshot, StockInfo
-from .snapshot import aggregate_industries, build_stocks
+from .snapshot import build_stocks
 from .storage import JsonCache, SettingsStore
 
 log = logging.getLogger(__name__)
@@ -66,7 +67,8 @@ class Poller:
         self._shares: dict[str, int] = {}
         self._quote_error = ""
         self._reference_errors: dict[str, str] = {}
-        self._fetch_count = 0
+        self._fetch_count = 0  # successful quote fetches (= Snapshot.version)
+        self._attempts = 0  # finished quote fetch attempts
         self._as_of: datetime | None = None
         self._force_next = False
         self._reference_task: asyncio.Task | None = None
@@ -74,7 +76,8 @@ class Poller:
         self._reference_attempted_at: dict[str, datetime] = {}
         self.last_fetch: datetime | None = None
 
-        self.snapshot = Snapshot(message="尚未取得資料")
+        self.snapshot = Snapshot(message="載入中…")
+        self.boot_id = secrets.token_hex(4)
         self.revision = 0
         self._snapshot_json = b""
         self._wake = asyncio.Event()
@@ -156,10 +159,14 @@ class Poller:
                 self._quote_error = ""
                 self._fetch_count += 1
                 self._as_of = self._clock()
+            self._attempts += 1
             self._rebuild()
 
     def request_refresh(self) -> None:
-        """Manual refresh; throttled to one fetch per REFRESH_MIN_INTERVAL_SECONDS."""
+        """Manual refresh; throttled to one fetch per REFRESH_MIN_INTERVAL_SECONDS.
+        A request while a fetch is running is coalesced into that fetch."""
+        if self._fetch_lock.locked():
+            return
         if self.last_fetch is not None:
             elapsed = (self._clock() - self.last_fetch).total_seconds()
             if elapsed < REFRESH_MIN_INTERVAL_SECONDS:
@@ -199,13 +206,13 @@ class Poller:
 
     def _rebuild(self) -> None:
         stocks = build_stocks(self._quotes, self._infos, self._shares)
-        if self._fetch_count == 0:
-            status = "error"
-        else:
+        if self._fetch_count:
             status = "stale" if self._quote_error else "ok"
+        else:
+            status = "error" if self._attempts else "loading"
         messages = [m for m in [self._quote_error, *self._reference_errors.values()] if m]
-        if self._fetch_count == 0 and not self._quote_error:
-            messages.insert(0, "尚未取得資料")
+        if status == "loading":
+            messages.insert(0, "載入中…")
         if self._quotes and not self._infos:
             messages.append("尚無產業分類資料，全部歸類為「其他」")
         snap = Snapshot(
@@ -215,7 +222,6 @@ class Poller:
             message="；".join(messages),
             market_open=is_market_open(self._clock()),
             stocks=stocks,
-            industries=aggregate_industries(stocks),
         )
         body = json.dumps(snap.to_dict(), ensure_ascii=False, separators=(",", ":")).encode("utf-8")
         if body != self._snapshot_json:
@@ -229,7 +235,7 @@ class Poller:
 
     @property
     def etag(self) -> str:
-        return f'"{self.revision}"'
+        return f'"{self.boot_id}-{self.revision}"'
 
 
 def _short(exc: BaseException) -> str:

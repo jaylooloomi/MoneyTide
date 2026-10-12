@@ -9,6 +9,7 @@ Columns are located by header text, not position. Notes from the live page:
 
 from __future__ import annotations
 
+import asyncio
 import re
 
 import httpx
@@ -17,7 +18,8 @@ from lxml import html
 from ..models import ParseError, Quote
 from .http import get_with_retry
 
-URL = "https://histock.tw/stock/rank.aspx?p=all"
+URL = "https://histock.tw/stock/rank.aspx?p=all"  # p=all is required (otherwise 50 rows/page)
+MIN_LIVE_ROWS = 1000  # a live page has ~2,500 rows; fewer means a broken/partial page
 TABLE_ID = "CPHB1_gv"
 
 COLUMNS = {
@@ -91,4 +93,7 @@ def parse_rank(page: bytes | str) -> list[Quote]:
 
 async def fetch_quotes(client: httpx.AsyncClient) -> list[Quote]:
     resp = await get_with_retry(client, URL)
-    return parse_rank(resp.content)
+    quotes = await asyncio.to_thread(parse_rank, resp.content)
+    if len(quotes) < MIN_LIVE_ROWS:
+        raise ParseError(f"HiStock returned only {len(quotes)} rows (expected > {MIN_LIVE_ROWS})")
+    return quotes

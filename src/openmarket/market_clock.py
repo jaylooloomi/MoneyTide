@@ -26,9 +26,9 @@ def is_trading_day(now: datetime) -> bool:
 
 
 def is_market_open(now: datetime) -> bool:
-    """True on weekdays from 09:00 to 13:30 inclusive (Taipei time)."""
+    """True on weekdays for 09:00 <= t < 13:30 (Taipei time)."""
     local = _local(now)
-    return is_trading_day(local) and OPEN <= local.time() <= CLOSE
+    return is_trading_day(local) and OPEN <= local.time() < CLOSE
 
 
 def _next_open(local: datetime) -> datetime:
