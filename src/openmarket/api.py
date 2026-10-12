@@ -43,6 +43,7 @@ def create_app(
     poller: Poller | None = None,
     start_polling: bool = True,
     static_dir: Path = STATIC_DIR,
+    allowed_hosts: tuple[str, ...] = ("127.0.0.1", "localhost"),
 ) -> FastAPI:
     config = config or AppConfig.from_env()
     settings = SettingsStore(config.data_dir / "settings.json")
@@ -60,7 +61,7 @@ def create_app(
         finally:
             if task is not None:
                 task.cancel()
-                with contextlib.suppress(asyncio.CancelledError):
+                with contextlib.suppress(asyncio.CancelledError, Exception):
                     await task
             if client is not None:
                 await client.aclose()
@@ -68,7 +69,7 @@ def create_app(
     app = FastAPI(title="Open Market", lifespan=lifespan)
     app.state.poller = poller
     # Local-only app: reject other Host headers (DNS rebinding could otherwise reach the PUT routes).
-    app.add_middleware(TrustedHostMiddleware, allowed_hosts=["127.0.0.1", "localhost", "testserver"])
+    app.add_middleware(TrustedHostMiddleware, allowed_hosts=list(allowed_hosts))
 
     def get_poller() -> Poller:
         p = app.state.poller
@@ -89,8 +90,9 @@ def create_app(
     def get_settings() -> dict:
         return settings.get()
 
+    # async: runs on the event-loop thread, next to the poller it wakes up
     @app.put("/api/settings")
-    def put_settings(body: SettingsBody) -> dict:
+    async def put_settings(body: SettingsBody) -> dict:
         try:
             result = settings.set_poll_seconds(body.poll_seconds)
         except ValueError as exc:
@@ -100,7 +102,7 @@ def create_app(
         return result
 
     @app.post("/api/refresh", status_code=202)
-    def refresh() -> Response:
+    async def refresh() -> Response:
         try:
             get_poller().request_refresh()
         except RefreshTooSoon as exc:

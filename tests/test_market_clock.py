@@ -89,3 +89,33 @@ def test_friday_after_close_waits_for_monday():
 def test_weekend_waits_for_monday():
     now = tpe(*SAT, 10, 0)
     assert next_fetch_time(now, tpe(*SAT, 9, 0), 60) == tpe(2026, 10, 19, 9, 0)
+
+
+# --- review regressions -------------------------------------------------------
+
+
+def test_missed_final_fetch_caught_up_on_a_later_day():
+    # slept Fri 13:20 → woke Sat 10:00: Friday's close must be fetched now
+    now = tpe(*SAT, 10, 0)
+    assert next_fetch_time(now, tpe(*FRI, 13, 20), 60) <= now
+
+
+def test_missed_final_fetch_caught_up_next_morning_before_open():
+    now = tpe(2026, 10, 13, 8, 0)  # Tue
+    assert next_fetch_time(now, tpe(*MON, 13, 20), 60) <= now
+
+
+def test_after_friday_close_fetched_weekend_waits_for_monday():
+    now = tpe(*SAT, 10, 0)
+    assert next_fetch_time(now, tpe(*FRI, 13, 35), 60) == tpe(2026, 10, 19, 9, 0)
+
+
+def test_failed_attempt_retried_out_of_session():
+    now = tpe(*SAT, 10, 0, 30)
+    assert next_fetch_time(now, tpe(*SAT, 10, 0), 60, last_failed=True) == tpe(*SAT, 10, 1)
+    assert next_fetch_time(now, tpe(*SAT, 10, 0), 60, last_failed=False) == tpe(2026, 10, 19, 9, 0)
+
+
+def test_failed_attempt_in_session_keeps_normal_interval():
+    now = tpe(*MON, 10, 0, 30)
+    assert next_fetch_time(now, tpe(*MON, 10, 0), 60, last_failed=True) == tpe(*MON, 10, 1)

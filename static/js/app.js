@@ -83,7 +83,10 @@ async function pollSnapshot() {
   try {
     const headers = state.etag ? { 'If-None-Match': state.etag } : {};
     const { resp, body } = await api('/api/snapshot', { headers });
-    if (resp.status === 304) return;
+    if (resp.status === 304) {
+      renderStatus(); // clears a previous connection error
+      return;
+    }
     if (!resp.ok || !body) throw new Error(`HTTP ${resp.status}`);
     state.etag = resp.headers.get('ETag');
     state.snapshot = body;
@@ -108,7 +111,13 @@ async function loadWatchlist() {
 }
 
 async function setWatched(code, watched) {
-  const { resp, body } = await api(`/api/watchlist/${encodeURIComponent(code)}`, { method: watched ? 'PUT' : 'DELETE' });
+  let resp, body;
+  try {
+    ({ resp, body } = await api(`/api/watchlist/${encodeURIComponent(code)}`, { method: watched ? 'PUT' : 'DELETE' }));
+  } catch {
+    toast('自選清單更新失敗（無法連線）');
+    return;
+  }
   if (!resp.ok || !body) {
     toast('自選清單更新失敗');
     return;
@@ -139,6 +148,7 @@ function zoomTo(name) {
   if (!hasIndustry(name)) return;
   state.zoomIndustry = name;
   chart.dispatchAction({ type: 'treemapRootToNode', seriesId: 'map', targetNodeId: 'ind:' + name });
+  reapplyHighlight();
   renderCrumb();
   syncMatrixZoom();
 }
@@ -146,8 +156,14 @@ function zoomTo(name) {
 function zoomOut() {
   state.zoomIndustry = null;
   chart.dispatchAction({ type: 'treemapRootToNode', seriesId: 'map', targetNodeId: ROOT_ID });
+  reapplyHighlight();
   renderCrumb();
   syncMatrixZoom();
+}
+
+/** Re-rooting or re-rendering rebuilds the treemap elements and drops their emphasis state. */
+function reapplyHighlight() {
+  if (state.hoverIndustry) chart.dispatchAction({ type: 'highlight', seriesId: 'map', name: state.hoverIndustry });
 }
 
 function syncMatrixZoom() {
@@ -171,7 +187,7 @@ function renderChart(stocks) {
   } else {
     state.zoomIndustry = null;
   }
-  if (state.hoverIndustry) chart.dispatchAction({ type: 'highlight', seriesId: 'map', name: state.hoverIndustry });
+  reapplyHighlight();
 }
 
 // ---- rendering --------------------------------------------------------------
@@ -476,6 +492,8 @@ function bindEvents() {
         toast('更新中…');
         schedulePoll(2500);
       } else toast('更新失敗');
+    } catch {
+      toast('更新失敗（無法連線）');
     } finally {
       setTimeout(() => (btn.disabled = false), 1500);
     }
@@ -498,11 +516,17 @@ function bindEvents() {
       $('#settingsErr').textContent = '請輸入 30 到 600 之間的整數';
       return;
     }
-    const { resp, body } = await api('/api/settings', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ poll_seconds: value }),
-    });
+    let resp, body;
+    try {
+      ({ resp, body } = await api('/api/settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ poll_seconds: value }),
+      }));
+    } catch {
+      $('#settingsErr').textContent = '儲存失敗（無法連線）';
+      return;
+    }
     if (!resp.ok || !body) {
       $('#settingsErr').textContent = '儲存失敗';
       return;

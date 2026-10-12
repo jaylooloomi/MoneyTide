@@ -197,3 +197,121 @@ def test_run_loop_fetches_on_start_and_on_manual_refresh(tmp_path):
             await task
 
     run(scenario())
+
+
+# --- review regressions -------------------------------------------------------
+
+
+def _wait_until(pred, steps=200):
+    async def go():
+        for _ in range(steps):
+            if pred():
+                return True
+            await asyncio.sleep(0.01)
+        return pred()
+
+    return go()
+
+
+def test_unreadable_reference_cache_is_ignored_and_refetched(tmp_path):
+    (tmp_path / "isin.json").write_text(
+        json.dumps({"saved_at": "2026-10-12T10:00:00+08:00", "data": {"2330": {"code": "2330", "is_etf": False}}}),
+        encoding="utf-8",
+    )
+    infos = Source(INFOS)
+    p, _ = make(tmp_path, Source([quote("2330")]), infos=infos)
+    p.load_reference_from_cache()  # must not raise
+    assert p._infos == {}
+    run(p.refresh_reference())
+    assert infos.calls == 1 and p._infos == INFOS
+
+
+def test_loop_survives_unexpected_errors(tmp_path, monkeypatch):
+    import openmarket.poller as poller_mod
+
+    monkeypatch.setattr(poller_mod, "MAX_IDLE_SLEEP_SECONDS", 0.01)
+    quotes = Source([quote("2330")])
+
+    async def scenario():
+        p, clock = make(tmp_path, quotes, clock=FakeClock(datetime(2026, 10, 12, 10, 0, tzinfo=TAIPEI)))
+        calls = {"n": 0}
+        real = p._start_reference_refresh
+
+        def flaky():
+            calls["n"] += 1
+            if calls["n"] == 2:
+                raise PermissionError(13, "Permission denied")
+            real()
+
+        p._start_reference_refresh = flaky
+        task = asyncio.create_task(p.run())
+        assert await _wait_until(lambda: quotes.calls == 1)
+        clock.advance(seconds=61)
+        assert await _wait_until(lambda: quotes.calls == 2)  # still polling after the error
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+
+    run(scenario())
+
+
+def test_failed_startup_fetch_is_retried_off_session(tmp_path, monkeypatch):
+    import openmarket.poller as poller_mod
+
+    monkeypatch.setattr(poller_mod, "MAX_IDLE_SLEEP_SECONDS", 0.01)
+    quotes = Source(RuntimeError("offline"), [quote("2330")])
+
+    async def scenario():
+        p, clock = make(tmp_path, quotes, clock=FakeClock(datetime(2026, 10, 17, 10, 0, tzinfo=TAIPEI)))
+        task = asyncio.create_task(p.run())
+        assert await _wait_until(lambda: quotes.calls == 1)
+        assert p.snapshot.status == "error"
+        clock.advance(seconds=61)
+        assert await _wait_until(lambda: p.snapshot.status == "ok")
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+
+    run(scenario())
+
+
+def test_failed_reference_retried_while_idle(tmp_path, monkeypatch):
+    import openmarket.poller as poller_mod
+
+    monkeypatch.setattr(poller_mod, "MAX_IDLE_SLEEP_SECONDS", 0.01)
+    infos = Source(RuntimeError("isin down"), INFOS)
+
+    async def scenario():
+        p, clock = make(tmp_path, Source([quote("2330")]), infos=infos,
+                        clock=FakeClock(datetime(2026, 10, 17, 10, 0, tzinfo=TAIPEI)))
+        task = asyncio.create_task(p.run())
+        assert await _wait_until(lambda: infos.calls == 1)
+        clock.advance(hours=1, seconds=1)
+        assert await _wait_until(lambda: infos.calls == 2)
+        assert await _wait_until(lambda: p.snapshot.stocks and p.snapshot.stocks[0].industry == "半導體業")
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+
+    run(scenario())
+
+
+def test_wake_from_worker_thread_is_threadsafe(tmp_path):
+    import threading
+
+    quotes = Source([quote("2330")])
+
+    async def scenario():
+        p, clock = make(tmp_path, quotes, clock=FakeClock(datetime(2026, 10, 17, 10, 0, tzinfo=TAIPEI)))
+        task = asyncio.create_task(p.run())
+        assert await _wait_until(lambda: quotes.calls == 1)
+        clock.advance(seconds=31)
+        t = threading.Thread(target=p.request_refresh)
+        t.start()
+        t.join()
+        assert await _wait_until(lambda: quotes.calls == 2)
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+
+    asyncio.run(scenario(), debug=True)

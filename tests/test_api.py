@@ -44,7 +44,7 @@ def setup(tmp_path):
     static.mkdir()
     (static / "index.html").write_text("<h1>hi</h1>", encoding="utf-8")
     app = create_app(AppConfig(data_dir=tmp_path), poller=poller, start_polling=False, static_dir=static)
-    with TestClient(app) as client:
+    with TestClient(app, base_url="http://127.0.0.1") as client:
         yield client, poller, clock
 
 
@@ -86,6 +86,8 @@ def test_refresh_throttle(setup):
 def test_foreign_host_rejected(setup):
     client, _, _ = setup
     assert client.get("/api/settings", headers={"Host": "evil.example"}).status_code == 400
+    assert client.get("/api/settings", headers={"Host": "testserver"}).status_code == 400
+    assert client.get("/api/settings", headers={"Host": "localhost:8765"}).status_code == 200
 
 
 def test_js_served_as_javascript(setup, tmp_path):

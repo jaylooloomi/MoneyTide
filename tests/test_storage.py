@@ -49,3 +49,12 @@ def test_watchlist_add_remove_dedupe_and_validation(tmp_path):
         with pytest.raises(ValueError):
             w.add(bad)
     assert Watchlist(tmp_path / "w.json").codes() == ["00878"]
+
+
+def test_settings_kept_in_memory_and_survive_unreadable_file(tmp_path):
+    p = tmp_path / "s.json"
+    s = SettingsStore(p)
+    s.set_poll_seconds(90)
+    p.unlink()
+    assert s.poll_seconds == 90  # no disk read per access
+    assert SettingsStore(p).poll_seconds == 60

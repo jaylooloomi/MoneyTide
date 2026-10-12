@@ -35,3 +35,21 @@ def test_wrong_shape_raises():
 
 def test_empty_list_ok():
     assert parse_tpex_shares([]) == {}
+
+
+def test_fetch_rejects_partial_payload():
+    import asyncio
+
+    import httpx
+
+    from openmarket.sources.shares import fetch_shares
+
+    def handler(request):
+        return httpx.Response(200, json=[])
+
+    async def go():
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+            await fetch_shares(client)
+
+    with pytest.raises(ParseError, match="partial"):
+        asyncio.run(go())

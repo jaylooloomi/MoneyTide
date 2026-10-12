@@ -12,6 +12,7 @@ const DOWN = [0x1f, 0xa2, 0x4a]; // 綠跌
 export const NO_DATA_COLOR = '#2e2e2e';
 export const INDUSTRY_BG = '#1b1d22';
 export const ROOT_BG = '#0f1115';
+export const HIGHLIGHT = '#ffd400';
 
 const hex = (rgb) => '#' + rgb.map((c) => Math.round(c).toString(16).padStart(2, '0')).join('');
 
@@ -279,6 +280,7 @@ export function buildTreemapOption(treeData) {
         type: 'treemap',
         id: 'map',
         name: ROOT_ID,
+        animation: false, // the root-level flag does not reach the treemap series
         roam: false,
         nodeClick: false,
         leafDepth: null,
@@ -297,7 +299,8 @@ export function buildTreemapOption(treeData) {
           {
             itemStyle: { color: INDUSTRY_BG, borderColor: INDUSTRY_BG, borderWidth: 2, gapWidth: 1 },
             upperLabel: { show: true },
-            emphasis: { itemStyle: { borderColor: '#ffd400' }, upperLabel: { color: '#ffd400' } },
+            // the title band is painted with the border colour, so use dark text on yellow
+            emphasis: { itemStyle: { borderColor: HIGHLIGHT }, upperLabel: { color: '#111' } },
           },
           { itemStyle: { borderWidth: 0 } },
         ],

@@ -6,6 +6,7 @@ import json
 import os
 import re
 import threading
+import time
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -19,13 +20,21 @@ def _write_json_atomic(path: Path, data: Any) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(path.suffix + ".tmp")
     tmp.write_text(json.dumps(data, ensure_ascii=False, indent=1), encoding="utf-8")
-    os.replace(tmp, path)
+    # On Windows os.replace fails with PermissionError while another handle has the target open.
+    for attempt in range(10):
+        try:
+            os.replace(tmp, path)
+            return
+        except PermissionError:
+            if attempt == 9:
+                raise
+            time.sleep(0.05)
 
 
 def _read_json(path: Path) -> Any | None:
     try:
         return json.loads(path.read_text(encoding="utf-8"))
-    except (FileNotFoundError, json.JSONDecodeError, UnicodeDecodeError):
+    except (OSError, json.JSONDecodeError, UnicodeDecodeError):
         return None
 
 
@@ -54,26 +63,29 @@ class JsonCache:
 
 
 class SettingsStore:
+    """Settings are read from disk once and kept in memory (the poller reads them every few seconds)."""
+
     def __init__(self, path: Path) -> None:
         self.path = path
         self._lock = threading.Lock()
+        raw = _read_json(path)
+        poll = raw.get("poll_seconds") if isinstance(raw, dict) else None
+        valid = isinstance(poll, int) and POLL_SECONDS_MIN <= poll <= POLL_SECONDS_MAX
+        self._poll_seconds = poll if valid else POLL_SECONDS_DEFAULT
 
     def get(self) -> dict:
-        raw = _read_json(self.path)
-        poll = raw.get("poll_seconds") if isinstance(raw, dict) else None
-        if not isinstance(poll, int) or not POLL_SECONDS_MIN <= poll <= POLL_SECONDS_MAX:
-            poll = POLL_SECONDS_DEFAULT
-        return {"poll_seconds": poll}
+        return {"poll_seconds": self._poll_seconds}
 
     @property
     def poll_seconds(self) -> int:
-        return self.get()["poll_seconds"]
+        return self._poll_seconds
 
     def set_poll_seconds(self, seconds: int) -> dict:
         if not isinstance(seconds, int) or not POLL_SECONDS_MIN <= seconds <= POLL_SECONDS_MAX:
             raise ValueError(f"poll_seconds must be an integer in {POLL_SECONDS_MIN}..{POLL_SECONDS_MAX}")
         with self._lock:
             _write_json_atomic(self.path, {"poll_seconds": seconds})
+            self._poll_seconds = seconds
         return self.get()
 
 

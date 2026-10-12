@@ -72,6 +72,7 @@ class Poller:
         self._as_of: datetime | None = None
         self._force_next = False
         self._reference_task: asyncio.Task | None = None
+        self._loop: asyncio.AbstractEventLoop | None = None
         self._reference_saved_at: dict[str, datetime] = {}
         self._reference_attempted_at: dict[str, datetime] = {}
         self.last_fetch: datetime | None = None
@@ -89,14 +90,27 @@ class Poller:
     # attempt is retried at most once per REFERENCE_RETRY (the ISIN page is ~9 MB).
 
     def load_reference_from_cache(self) -> None:
-        loaded = self._info_cache.load()
-        if loaded:
-            self._infos = {c: StockInfo(**v) for c, v in loaded[0].items()}
-            self._reference_saved_at["infos"] = loaded[1]
-        loaded = self._shares_cache.load()
-        if loaded:
-            self._shares = {c: int(v) for c, v in loaded[0].items()}
-            self._reference_saved_at["shares"] = loaded[1]
+        """Load cached reference data; an unreadable or outdated cache is treated as missing."""
+        decoders = {
+            "infos": (self._info_cache, lambda data: {c: StockInfo(**v) for c, v in data.items()}),
+            "shares": (self._shares_cache, lambda data: {c: int(v) for c, v in data.items()}),
+        }
+        for name, (cache, decode) in decoders.items():
+            loaded = cache.load()
+            if not loaded:
+                continue
+            try:
+                value = decode(loaded[0])
+                saved_at = loaded[1]
+                saved_at - self._clock()  # naive timestamps raise TypeError here
+            except (TypeError, ValueError, AttributeError, KeyError) as exc:
+                log.warning("ignoring unreadable %s cache %s: %s", name, cache.path, exc)
+                continue
+            if name == "infos":
+                self._infos = value
+            else:
+                self._shares = value
+            self._reference_saved_at[name] = saved_at
         self._rebuild()
 
     def _reference_due(self, name: str, now: datetime) -> bool:
@@ -172,35 +186,61 @@ class Poller:
             if elapsed < REFRESH_MIN_INTERVAL_SECONDS:
                 raise RefreshTooSoon(REFRESH_MIN_INTERVAL_SECONDS - elapsed)
         self._force_next = True
-        self._wake.set()
+        self._wake_up()
 
     def settings_changed(self) -> None:
+        self._wake_up()
+
+    def _wake_up(self) -> None:
+        """asyncio.Event is not thread-safe; API handlers may run in worker threads."""
+        loop = self._loop
+        if loop is not None and loop.is_running():
+            try:
+                running = asyncio.get_running_loop()
+            except RuntimeError:
+                running = None
+            if running is not loop:
+                loop.call_soon_threadsafe(self._wake.set)
+                return
         self._wake.set()
 
     async def run(self) -> None:
+        self._loop = asyncio.get_running_loop()
         self.load_reference_from_cache()
         self._start_reference_refresh()
         try:
             while True:
-                now = self._clock()
-                due = next_fetch_time(now, self.last_fetch, self._settings.poll_seconds)
-                if self._force_next or due <= now:
-                    self._force_next = False
-                    await self.fetch_once()
-                    self._start_reference_refresh()
-                    continue
-                wait = min((due - now).total_seconds(), MAX_IDLE_SLEEP_SECONDS)
-                self._wake.clear()
                 try:
-                    await asyncio.wait_for(self._wake.wait(), timeout=wait)
-                except TimeoutError:
-                    pass
-                # refresh market_open flag even when idle
-                if self.snapshot.market_open != is_market_open(self._clock()):
-                    self._rebuild()
+                    await self._step()
+                except asyncio.CancelledError:
+                    raise
+                except Exception:
+                    # Never let an unexpected error end polling for good.
+                    log.exception("poll loop error")
+                    await asyncio.sleep(MAX_IDLE_SLEEP_SECONDS)
         finally:
             if self._reference_task is not None:
                 self._reference_task.cancel()
+
+    async def _step(self) -> None:
+        now = self._clock()
+        last_failed = bool(self._quote_error) or (self._attempts > 0 and self._fetch_count == 0)
+        due = next_fetch_time(now, self.last_fetch, self._settings.poll_seconds, last_failed)
+        if self._force_next or due <= now:
+            self._force_next = False
+            await self.fetch_once()
+            self._start_reference_refresh()
+            return
+        wait = min((due - now).total_seconds(), MAX_IDLE_SLEEP_SECONDS)
+        self._wake.clear()
+        try:
+            await asyncio.wait_for(self._wake.wait(), timeout=wait)
+        except TimeoutError:
+            pass
+        # idle housekeeping: market_open flips at 09:00/13:30; failed reference data is retried
+        if self.snapshot.market_open != is_market_open(self._clock()):
+            self._rebuild()
+        self._start_reference_refresh()
 
     # ---- snapshot -----------------------------------------------------
 

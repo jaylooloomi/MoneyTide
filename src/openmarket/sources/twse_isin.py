@@ -24,6 +24,7 @@ STOCK_SECTIONS = {"股票", "創新板", "臺灣創新板"}
 ETF_SECTION = "ETF"
 SKIP_SECTIONS_PREFIX = ("上市認購(售)權證", "上櫃認購(售)權證")  # tens of thousands of rows, never quoted
 HEADER_FIRST_CELL = "有價證券代號及名稱"
+MIN_STOCKS_TWSE, MIN_STOCKS_TPEX = 800, 600  # live: ~1,085 listed, ~893 OTC common stocks
 
 
 def _decode(page: bytes | str) -> str:
@@ -95,4 +96,8 @@ async def fetch_isin(client: httpx.AsyncClient) -> dict[str, StockInfo]:
     tpex = await get_with_retry(client, TPEX_URL)
     listed = await asyncio.to_thread(parse_isin, twse.content)
     otc = await asyncio.to_thread(parse_isin, tpex.content)
+    n_listed = sum(1 for i in listed.values() if i.kind == "stock")
+    n_otc = sum(1 for i in otc.values() if i.kind == "stock")
+    if n_listed < MIN_STOCKS_TWSE or n_otc < MIN_STOCKS_TPEX:
+        raise ParseError(f"ISIN listing looks partial (listed {n_listed}, OTC {n_otc} stocks)")
     return {**listed, **otc}

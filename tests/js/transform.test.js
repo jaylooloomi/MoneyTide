@@ -196,4 +196,7 @@ test('buildTreemapOption: fixed series config', () => {
   assert.equal(s.nodeClick, false);
   assert.equal(s.breadcrumb.show, false);
   assert.equal(s.levels.length, 3);
+  assert.equal(s.animation, false);
+  const emph = s.levels[1].emphasis;
+  assert.notEqual(emph.upperLabel.color, emph.itemStyle.borderColor);
 });

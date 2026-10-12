@@ -19,6 +19,9 @@ TPEX_URL = "https://www.tpex.org.tw/openapi/v1/mopsfin_t187ap03_O"
 TWSE_CODE, TWSE_SHARES, TWSE_INDUSTRY = "公司代號", "已發行普通股數或TDR原股發行股數", "產業別"
 TPEX_CODE, TPEX_SHARES = "SecuritiesCompanyCode", "IssueShares"
 TDR_INDUSTRY_CODE = "91"
+# Live datasets have ~1,090 (TWSE) and ~890 (TPEx) companies; far fewer means a partial response,
+# which must not overwrite a good cache for 7 days.
+MIN_TWSE, MIN_TPEX = 800, 600
 
 
 def _parse(records: Any, code_key: str, shares_key: str, skip=lambda r: False) -> dict[str, int]:
@@ -49,6 +52,8 @@ def parse_tpex_shares(records: Any) -> dict[str, int]:
 
 
 async def fetch_shares(client: httpx.AsyncClient) -> dict[str, int]:
-    twse = await get_with_retry(client, TWSE_URL)
-    tpex = await get_with_retry(client, TPEX_URL)
-    return {**parse_twse_shares(twse.json()), **parse_tpex_shares(tpex.json())}
+    twse = parse_twse_shares((await get_with_retry(client, TWSE_URL)).json())
+    tpex = parse_tpex_shares((await get_with_retry(client, TPEX_URL)).json())
+    if len(twse) < MIN_TWSE or len(tpex) < MIN_TPEX:
+        raise ParseError(f"shares data looks partial (TWSE {len(twse)}, TPEx {len(tpex)})")
+    return {**twse, **tpex}
