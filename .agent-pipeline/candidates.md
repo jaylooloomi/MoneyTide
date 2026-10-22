@@ -143,3 +143,10 @@
 因為原始需求是 **回溯每一天的強勢族群**，所以頂尖做法會順便做 **以日曆熱力圖呈現每天的漲跌廣度／報酬，快速找出值得回看的日子**（TradingView Seasonality Heatmap 以月／星期格子顯示報酬；thetrading.tools Market Heatmap 每日報告「多少檔收漲（% green）」；Strike Advance-Decline Heatmap 顯示漲跌家數）；目前的成果 **沒有**——要用 ◀▶ 一天天找哪天全面大漲。
 - 參考：TradingView Seasonality Heatmap https://www.tradingview.com/script/Bfz2VMKL-Seasonality-Heatmap-QuantAlgo/ ；thetrading.tools Market Heatmap https://www.thetrading.tools/market-heatmap ；Strike Advance-Decline https://www.strike.money/?p=12411
 - 範圍：store 一次 SQL 彙總每日上漲／下跌家數與等權平均漲幅；GET /api/history/calendar；歷史頁新增「F · 每日廣度月曆」（每列一個月、格子顏色＝上漲家數佔比，點擊切換日期，標示目前日期）；測試。
+
+# 加分候選（第 12 輪）
+
+## AB1. 族群成分股清單（點 B 列展開當日成分股表：漲幅、5／20 日、成交值，可排序）
+因為原始需求是 **回溯強勢族群、哪些股票集體上漲**，所以頂尖做法會順便做 **點族群即看其成分股清單與表現**（MarketInOut 產業排行：點產業看其股票、點類股看全部成分股；Barchart Top Performing 族群點開顯示前幾名）；目前的成果 **只有部分**——A 放大可看格子，但沒有可排序的成分股表（小型股格子太小看不到）。
+- 參考：MarketInOut Industry Growth https://www.marketinout.com/stock-screener/report/industry-growth ；Barchart Top Performing Stocks https://www.barchart.com/ca/investing-ideas/top-performing-stocks ；OpenBB Finviz groups https://docs.openbb.co/python/reference/equity/compare/groups
+- 範圍：前端以已載入的 A 資料（st.stocks，含 change_pct／week_pct／period_20／turnover）過濾該族群；B 表下方展開成分股表（可排序、點擊開個股卡片）；history.js；無後端改動；測試以 transform 純函式 groupMembers()。
