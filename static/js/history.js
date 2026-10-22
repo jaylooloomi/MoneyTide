@@ -15,7 +15,7 @@ import {
   sortRows,
 } from './transform.js';
 import { toCsv } from './transform.js';
-import { breadthBarHtml, marketBreadth } from './transform.js';
+import { breadthBarHtml, breadthShare, marketBreadth } from './transform.js';
 import { getGroups, loadGroups, onGroupsChange, openGroupPanel, setStockNames } from './groups.js';
 
 const PREFS_KEY = 'openmarket.history.v1';
@@ -138,6 +138,7 @@ async function selectDate(date) {
   await Promise.all([loadDay(), loadGroups_(), loadMovers()]);
   loadIndex(); // bonus-04
   renderRotationSelection();
+  markCalendar(); // bonus-14
 }
 
 // ---- A: day heatmap ---------------------------------------------------------
@@ -517,6 +518,7 @@ export async function showHistory() {
     await applyHashDate(); // bonus-12
     await loadRotation();
     loadIndex(); // bonus-04
+    loadCalendar(); // bonus-14
     return;
   }
   chart.resize();
@@ -524,6 +526,7 @@ export async function showHistory() {
   await loadDays();
   loadRotation();
   loadIndex(); // bonus-04
+  loadCalendar(); // bonus-14
 }
 
 // ---- bonus-02: stock card with a short price history ----------------------------
@@ -955,4 +958,62 @@ function renderHistColorSeg() {
     });
   }
   for (const b of seg.querySelectorAll('button')) b.classList.toggle('on', b.dataset.value === histColor.by);
+}
+
+// ---- bonus-14: F · daily market-breadth calendar --------------------------------------
+
+function calendarSection() {
+  let sec = $('#hCalendar');
+  if (sec) return sec;
+  sec = document.createElement('section');
+  sec.id = 'hCalendar';
+  sec.className = 'panel';
+  sec.style.gridColumn = '1 / -1';
+  sec.innerHTML = `<div class="panel-h"><b>F · 每日廣度月曆</b>
+      <span class="muted">每格一個交易日；顏色＝當天上漲家數佔比（紅多漲、綠多跌）；點格子切換日期</span></div>
+    <div id="hCalBody" style="padding:8px 10px;display:grid;grid-template-columns:70px 1fr;gap:3px 8px;font-size:11px"></div>`;
+  $('#historyView').appendChild(sec);
+  $('#hCalBody').addEventListener('click', (e) => {
+    const cell = e.target.closest('[data-date]');
+    if (!cell) return;
+    stopReplay(); // manual navigation ends a running replay
+    selectDate(cell.dataset.date);
+  });
+  return sec;
+}
+
+async function loadCalendar() {
+  calendarSection();
+  let data;
+  try {
+    data = await getJson('/api/history/calendar');
+  } catch {
+    return;
+  }
+  const months = new Map();
+  for (const d of data.days) {
+    const m = d.date.slice(0, 7);
+    if (!months.has(m)) months.set(m, []);
+    months.get(m).push(d);
+  }
+  $('#hCalBody').innerHTML = [...months]
+    .reverse()
+    .map(([m, days]) => {
+      const cells = days
+        .map((d) => {
+          const share = breadthShare(d.up, d.down);
+          const title = `${d.date}：上漲 ${d.up}／下跌 ${d.down}${share === null ? '' : `（${share.toFixed(0)}%）`}，平均 ${fmtPct(d.avg_pct)}`;
+          return `<span data-date="${d.date}" title="${title}" style="display:inline-flex;align-items:center;justify-content:center;width:26px;height:22px;margin:0 2px 2px 0;border-radius:3px;cursor:pointer;color:#fff;background:${breadthColor(d.up, d.down)}">${Number(d.date.slice(8))}</span>`;
+        })
+        .join('');
+      return `<div class="muted" style="align-self:center">${m}</div><div>${cells}</div>`;
+    })
+    .join('');
+  markCalendar();
+}
+
+function markCalendar() {
+  for (const el of document.querySelectorAll('#hCalBody [data-date]')) {
+    el.style.outline = el.dataset.date === st.date ? '2px solid #fff' : '';
+  }
 }

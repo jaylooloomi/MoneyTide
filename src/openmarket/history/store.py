@@ -131,3 +131,22 @@ class HistoryStore:
             ):
                 out[date.fromisoformat(d)].append({"code": code, "kind": kind, "industry": industry, "change_pct": pct})
         return out
+
+    def daily_breadth(self) -> list[dict]:
+        """bonus-14: per trading day, advancers/decliners and the equal-weight average change of
+        common stocks — one aggregate query for the breadth calendar."""
+        with self._conn() as c:
+            rows = c.execute(
+                """SELECT q.date,
+                          SUM(CASE WHEN q.change > 0 THEN 1 ELSE 0 END),
+                          SUM(CASE WHEN q.change < 0 THEN 1 ELSE 0 END),
+                          COUNT(*),
+                          AVG(q.change_pct)
+                   FROM daily_quote q JOIN trading_day t ON t.date = q.date AND t.status = 'ok'
+                   WHERE q.kind = 'stock'
+                   GROUP BY q.date ORDER BY q.date"""
+            ).fetchall()
+        return [
+            {"date": d, "up": up, "down": down, "count": n, "avg_pct": round(avg, 4) if avg is not None else None}
+            for d, up, down, n, avg in rows
+        ]

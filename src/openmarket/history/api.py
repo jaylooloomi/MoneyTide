@@ -116,4 +116,9 @@ def create_history_router(
         g = grouping_of(grouping)
         return {"date": day, "groups": group_periods(get_store(), _date(day), grouping=g)}
 
+    # bonus-14: breadth calendar (one row per stored trading day)
+    @r.get("/calendar")
+    def calendar() -> dict:
+        return {"days": get_store().daily_breadth()}
+
     return r

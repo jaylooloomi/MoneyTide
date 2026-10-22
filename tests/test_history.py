@@ -251,3 +251,12 @@ def test_day_stocks_period_20(tmp_path):
     assert out["2330"]["week_pct"] == pytest.approx((121 / 116 - 1) * 100)
     early = {x["code"]: x for x in day_stocks(s, days[10])}
     assert early["2330"]["period_20"] is None
+
+
+def test_daily_breadth(store):
+    cal = {d["date"]: d for d in store.daily_breadth()}
+    assert "2026-10-13" not in cal  # no_data day
+    last = cal["2026-10-21"]
+    # stocks only (0050 ETF excluded): 2330 flat, 2454 down, 2603 up, 2609 up
+    assert (last["up"], last["down"], last["count"]) == (2, 1, 4)
+    assert last["avg_pct"] == pytest.approx((0 + (-1 / 96 * 100) + (10 / 140 * 100) + 10) / 4, rel=1e-4)
