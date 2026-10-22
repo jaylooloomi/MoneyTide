@@ -694,3 +694,62 @@ function renderHistBreadth() {
   const unique = st.stocks.filter((s) => !seen.has(s.code) && seen.add(s.code));
   el.innerHTML = breadthBarHtml(marketBreadth(unique));
 }
+
+// ---- bonus-06: day-by-day replay ------------------------------------------------
+
+const REPLAY_SPEEDS = [1, 2, 4]; // seconds per trading day
+const replay = { on: false, timer: null, speed: 2 };
+
+function replayControls() {
+  if ($('#hPlay')) return;
+  const wrap = document.createElement('span');
+  wrap.className = 'replay';
+  wrap.innerHTML = `<button class="icon" id="hPlay" title="從目前日期逐日播放到最新日" aria-label="播放">▶▶</button>
+    <select class="field" id="hSpeed" aria-label="播放速度" title="每個交易日停留秒數">${REPLAY_SPEEDS.map((s) => `<option value="${s}">${s} 秒/日</option>`).join('')}</select>`;
+  $('#hNext').after(wrap);
+  $('#hSpeed').value = String(replay.speed);
+  $('#hSpeed').addEventListener('change', (e) => (replay.speed = Number(e.target.value)));
+  $('#hPlay').addEventListener('click', () => (replay.on ? stopReplay() : startReplay()));
+  // any manual navigation stops the replay
+  for (const id of ['#hPrev', '#hNext', '#hDate']) $(id).addEventListener(id === '#hDate' ? 'change' : 'click', () => stopReplay(), true);
+  $('#hRotation').addEventListener('click', () => stopReplay(), true);
+}
+
+function renderReplayButton() {
+  const b = $('#hPlay');
+  if (!b) return;
+  b.textContent = replay.on ? '⏸' : '▶▶';
+  b.title = replay.on ? '暫停播放' : '從目前日期逐日播放到最新日';
+  b.classList.toggle('on', replay.on);
+}
+
+async function startReplay() {
+  if (!st.days.length) return;
+  let i = st.days.indexOf(st.date);
+  if (i <= 0) i = Math.min(20, st.days.length - 1); // at the newest day: start 20 trading days back
+  replay.on = true;
+  renderReplayButton();
+  await selectDate(st.days[i]);
+  scheduleReplayStep();
+}
+
+function scheduleReplayStep() {
+  clearTimeout(replay.timer);
+  if (!replay.on) return;
+  replay.timer = setTimeout(async () => {
+    const i = st.days.indexOf(st.date);
+    if (!replay.on || i <= 0) return stopReplay();
+    await selectDate(st.days[i - 1]);
+    if (i - 1 <= 0) return stopReplay();
+    scheduleReplayStep();
+  }, replay.speed * 1000);
+}
+
+function stopReplay() {
+  replay.on = false;
+  clearTimeout(replay.timer);
+  renderReplayButton();
+}
+
+document.addEventListener('DOMContentLoaded', replayControls);
+if (document.readyState !== 'loading') replayControls();
