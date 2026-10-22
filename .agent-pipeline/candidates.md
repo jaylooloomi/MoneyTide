@@ -78,3 +78,15 @@
 因為原始需求是 **回溯強勢族群、哪些股票集體上漲**，所以頂尖做法會順便做 **資料表匯出（XLS／CSV）供自行分析**（Goodinfo 各資料頁工具列提供 HTML／XLS／CSV／複製）；目前的成果 **沒有**。
 - 參考：Goodinfo 匯出工具列（例：https://goodinfo.tw/tw/StockCashFlow.asp 、https://goodinfo.tw/tw/DayTrading.asp）
 - 範圍：前端以目前資料組 CSV（UTF-8 BOM，Excel 可開）並觸發下載；三個區塊各一顆「CSV」；transform 純函式 toCsv 加測試。
+
+# 加分候選（第 6 輪）
+
+## V1. 盤中族群轉強提醒（桌面通知）
+因為原始需求是 **盤中用熱力圖找強勢族群**，所以頂尖做法會順便做 **條件觸發的即時提醒（桌面／推播通知）**（TradingView Alerts：價格警示、桌面與手機通知）；目前的成果 **沒有**——得一直盯著畫面。
+- 參考：TradingView Creating and Managing Alerts https://tradingview.com/wiki/Creating_and_Managing_Alerts ；Introduction to TradingView alerts https://in.tradingview.com/support/solutions/43000520149
+- 範圍：前端設定「某產業 ≥5% 家數佔比超過 X% 或漲停 ≥ N 檔」，每次快照更新時判斷，用瀏覽器 Notification API 通知（同一族群當日只提醒一次）；transform 純函式找出觸發族群＋測試。
+
+## V2. 熱力圖標示漲停／跌停個股
+因為原始需求是 **看哪些股票集體上漲**，所以頂尖做法會順便做 **突顯漲停板個股**（台股盤勢報導普遍以漲停／跌停家數與強勢漲停股描述族群強弱）；目前的成果 **只有部分**——漲停只是顏色最深，與 +7% 以上無法區分。
+- 參考：工商時報盤勢報導（強勢漲停板）https://ctee.com.tw/news/stock/409205.html ；經濟日報（盤中跌停家數）https://money.udn.com/money/amp/story/5607/9459612
+- 範圍：transform.js 葉節點在 ≥9.5%／≤−9.5% 時加亮色邊框，標籤加「漲停／跌停」，tooltip 註明；即時與歷史 A 共用；測試。
