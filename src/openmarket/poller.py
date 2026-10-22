@@ -270,6 +270,14 @@ class Poller:
             self.revision += 1
 
     @property
+    def infos(self) -> dict[str, StockInfo]:
+        return self._infos
+
+    @property
+    def shares(self) -> dict[str, int]:
+        return self._shares
+
+    @property
     def snapshot_json(self) -> bytes:
         return self._snapshot_json
 

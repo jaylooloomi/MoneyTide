@@ -43,7 +43,7 @@ def setup(tmp_path):
     static = tmp_path / "static"
     static.mkdir()
     (static / "index.html").write_text("<h1>hi</h1>", encoding="utf-8")
-    app = create_app(AppConfig(data_dir=tmp_path), poller=poller, start_polling=False, static_dir=static)
+    app = create_app(AppConfig(data_dir=tmp_path), poller=poller, start_polling=False, start_history=False, static_dir=static)
     with TestClient(app, base_url="http://127.0.0.1") as client:
         yield client, poller, clock
 
@@ -109,3 +109,31 @@ def test_watchlist_crud(setup):
 def test_static_index(setup):
     client, _, _ = setup
     assert "hi" in client.get("/").text
+
+
+def test_history_endpoints(setup, tmp_path):
+    from datetime import date, datetime
+
+    from openmarket.config import TAIPEI
+    from openmarket.history.ingest import build_rows
+    from openmarket.sources.official import DailyRow
+
+    client, _, _ = setup
+    store = client.app.state.history
+    infos = {"2330": StockInfo("2330", "台積電", "半導體業", "上市", "stock")}
+    for d, close in ((date(2026, 10, 20), 100), (date(2026, 10, 21), 110)):
+        store.save_day(d, build_rows([DailyRow("2330", "台積電", "上市", close, 10, close, close, close, 1000, 1e8)], infos, {"2330": 1}),
+                       datetime(2026, 10, 21, 16, tzinfo=TAIPEI))
+    days = client.get("/api/history/days").json()
+    assert days["days"][0] == {"date": "2026-10-21", "status": "ok"} and days["backfill"]["running"] is False
+    assert client.get("/api/history/day/2026-10-21").json()["stocks"][0]["price"] == 110
+    assert client.get("/api/history/day/2026-10-18").status_code == 404
+    assert client.get("/api/history/day/bad").status_code == 422
+    g = client.get("/api/history/groups", params={"date": "2026-10-21", "threshold": 5}).json()
+    assert g["groups"][0]["name"] == "半導體業" and g["groups"][0]["strong_ratio"] == 100
+    rot = client.get("/api/history/rotation", params={"days": 5, "metric": "avg_pct"}).json()
+    assert rot["dates"] == ["2026-10-20", "2026-10-21"]
+    assert client.get("/api/history/rotation", params={"metric": "x"}).status_code == 422
+    mv = client.get("/api/history/movers", params={"to": "2026-10-21", "mode": "day", "value": 5}).json()
+    assert mv["groups"][0]["stocks"][0]["code"] == "2330"
+    assert client.get("/api/history/movers", params={"to": "2026-10-21", "mode": "nope"}).status_code == 422

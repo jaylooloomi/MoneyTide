@@ -14,9 +14,13 @@ from starlette.middleware.trustedhost import TrustedHostMiddleware
 from pydantic import BaseModel
 
 from .config import STATIC_DIR, AppConfig
+from .history.api import create_history_router
+from .history.ingest import HistoryCollector
+from .history.store import HistoryStore
 from .poller import Poller, RefreshTooSoon
 from .sources.histock import fetch_quotes
 from .sources.http import make_client
+from .sources.official import fetch_tpex_day, fetch_twse_day
 from .sources.shares import fetch_shares
 from .sources.twse_isin import fetch_isin
 from .storage import JsonCache, SettingsStore, Watchlist
@@ -42,6 +46,8 @@ def create_app(
     *,
     poller: Poller | None = None,
     start_polling: bool = True,
+    history_store: HistoryStore | None = None,
+    start_history: bool = True,
     static_dir: Path = STATIC_DIR,
     allowed_hosts: tuple[str, ...] = ("127.0.0.1", "localhost"),
 ) -> FastAPI:
@@ -55,11 +61,24 @@ def create_app(
         if app.state.poller is None:
             client = make_client()
             app.state.poller = build_poller(client, config.data_dir, settings)
-        task = asyncio.create_task(app.state.poller.run()) if start_polling else None
+        tasks = []
+        if start_polling:
+            tasks.append(asyncio.create_task(app.state.poller.run()))
+        if start_history:
+            if client is None:
+                client = make_client()
+            p = app.state.poller
+            app.state.collector = HistoryCollector(
+                store=app.state.history,
+                fetch_twse=lambda d: fetch_twse_day(client, d),
+                fetch_tpex=lambda d: fetch_tpex_day(client, d),
+                reference=lambda: (p.infos, p.shares),
+            )
+            tasks.append(asyncio.create_task(app.state.collector.run()))
         try:
             yield
         finally:
-            if task is not None:
+            for task in tasks:
                 task.cancel()
                 with contextlib.suppress(asyncio.CancelledError, Exception):
                     await task
@@ -68,6 +87,9 @@ def create_app(
 
     app = FastAPI(title="Open Market", lifespan=lifespan)
     app.state.poller = poller
+    app.state.history = history_store or HistoryStore(config.data_dir / "history.sqlite")
+    app.state.collector = None
+    app.include_router(create_history_router(lambda: app.state.history, lambda: app.state.collector))
     # Local-only app: reject other Host headers (DNS rebinding could otherwise reach the PUT routes).
     app.add_middleware(TrustedHostMiddleware, allowed_hosts=list(allowed_hosts))
 
