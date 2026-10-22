@@ -179,3 +179,10 @@
 因為原始需求是 **回溯每天的強勢族群、看輪動**，所以頂尖做法會順便做 **排名變動（名次上升代表進入領漲、下降代表失去動能）**（TradingView Sector Rotation Dashboard 以 Rank 追蹤族群升降；Crypto Sector Rotation Radar 追蹤 3／7 期名次變化；Factor Investor 報告標示族群名次變動）；目前的成果 **只有部分**——C 矩陣看得出強弱，但沒有直接的名次升降。
 - 參考：TradingView Sector Rotation Dashboard https://www.tradingview.com/script/dAOscEaH-Sector-Rotation-Dashboard-v1/ ；TradingView sector rotation scripts https://www.tradingview.com/scripts/sectorrotation/ ；Factor Investor Report https://factorinvestor.substack.com/p/factor-investor-report-april-2021
 - 範圍：/api/history/groups 多回傳前一交易日的同指標名次（依目前排序指標 strong_ratio／avg_pct，取 daily_group_avgs 快取）；B 表「名次」欄顯示 ▲n／▼n；測試。
+
+# 加分候選（第 17 輪）
+
+## AH1. 啟動後背景預熱歷史快取（每日族群平均、20 日均量、月曆）
+因為原始需求是 **回溯每一天的強勢族群**（打開歷史頁就要看），所以業界做法會順便做 **cache warming：重啟後先把可預期的熱門資料載入快取，避免第一批請求打到資料庫造成延遲尖峰**；目前的成果 **只有部分**——重啟後第一次開歷史頁的 5／20／60 日欄、E 圖、月曆要 4–7 秒（夜間實測），之後才快。
+- 參考：OneUptime「Redis cache preloading at application startup」https://oneuptime.com/blog/post/2026-03-31-redis-cache-preloading-application-startup/view ；Aerospike「Cache warming explained」https://aerospike.com/blog/cache-warming-explained ；OneUptime Cache Warming Strategies https://oneuptime.com/blog/post/2026-01-30-cache-warming-strategies/view
+- 範圍：HistoryCollector 每輪回補／累積結束後（及啟動後一次）在背景執行緒對最新 60 個交易日預先計算 industry 每日平均與 20 日均量（只算可預期的官方產業）；不改 API；測試。
