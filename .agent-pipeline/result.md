@@ -19,6 +19,7 @@
 | 05 | 全市場廣度列 | 3.3（scores-04.md） | TradingView Market breadth https://www.tradingview.com/support/solutions/43000794825/ ；Strike Money Market Breadth https://www.strike.money/stock-market/market-breadth | 4b35a2e：transform.js marketBreadth()／breadthBarHtml()；即時頁頂列與歷史 A 標題列顯示紅灰綠比例條＋上漲／平盤／下跌家數、漲停／跌停（≥9.5%）、上漲股成交值占比（隨篩選即時重算；自訂／概念分組下每檔只算一次）| `node --test "tests/js/*.test.js"` | ✅ 115 py／17 js；headless：歷史 10/22 ▲393／▼1413、即時 ▲391／▼1416 | ① 後端算好放進 snapshot：前端篩選（市場／ETF／自選）後數字會對不上；② 另開一個大面板：佔版面、資訊量不需要 |
 | 06 | 歷史頁逐日播放 | 3.0（scores-05.md） | MotiveWave Replay Mode https://www.motivewave.com/support/replay_mode.htm ；TradingView Bar Replay https://www.tradingview.com/chart/BTCUSD/qmCyeQyK-How-To-Use-The-Bar-Replay-Tool-Rewatch-Trading-History | 9c63ae9：歷史頁頂列 ▶ 旁新增「▶▶ 播放／⏸」與速度（1／2／4 秒/日）；從目前日期逐日往後切換（A–E 全部跟著換、C 欄位同步標示），在最新日時從 20 個交易日前開始；到最新日、按 ◀▶／方向鍵／日曆／點 C 格子即停止 | 在 App 瀏覽器窗格：播放→09-21→09-22→09-23→09-24，暫停有效 | ✅ 115 py／17 js；App 窗格實測通過（headless Chrome 背景分頁計時器被節流，僅驗證到開始／暫停／手動停止）| ① 用動畫內插熱力圖顏色：ECharts treemap 重建會重設，實作成本高；② 一次載入整段期間資料預先快取：記憶體與首載時間大增 |
 | 07 | 匯出 CSV（B／C／D） | 3.0（scores-05.md） | Goodinfo 資料頁匯出工具列（HTML／XLS／CSV）例 https://goodinfo.tw/tw/DayTrading.asp | bd212a7：transform.js toCsv()（RFC 4180 跳脫＋UTF-8 BOM）；歷史頁 B／C／D 標題列各一顆「CSV」，匯出畫面上的資料（B 依目前排序；檔名含日期、指標／模式、分組，例：強勢族群_2026-10-22_官方產業.csv）| `node --test "tests/js/*.test.js"` | ✅ 115 py／18 js；headless：3 檔皆產生（34／34／45 列） | ① 後端產生 XLSX：要新增套件（禁止）；② 只匯出 B：C/D 才是回溯分析最常要帶走的資料 |
+| 08 | 熱力圖標示漲停／跌停 | 2.3（scores-06.md） | 工商時報盤勢報導（強勢漲停板）https://ctee.com.tw/news/stock/409205.html ；經濟日報（盤中跌停家數）https://money.udn.com/money/amp/story/5607/9459612 | 8e071bd：transform.js limitTag()／limitStyle()；今日漲跌 ≥9.5% 的格子加黃框、≤−9.5% 加青框，標籤與 tooltip 加「漲停／跌停」（即時頁與歷史 A 共用，顏色指標選「本週」時仍依今日判斷）| `node --test "tests/js/*.test.js"` | ✅ 115 py／19 js；headless：10/22 漲停 21、跌停 19 格皆加框 | ① 另做漲停清單面板：D 已有當日漲幅清單；② 用券商漲停價判斷：HiStock 無漲停價欄位，需新資料源 |
 
 ## 判斷不值得做
 - C3 相對成交量（量能倍數）— 1.6（scores-01.md）：要新增指標並改 B/C，效益對影響範圍不划算
@@ -27,6 +28,7 @@
 - R1 即時熱力圖切換族群分類 — 1.0（scores-02.md）：要改 transform、即時頁與矩陣，影響範圍大
 - S2 族群相對輪動圖（RRG）— 1.3（scores-03.md）：計算與散點尾跡實作量大，C 矩陣已能看每日輪動
 - T2 創新高／創新低家數 — 1.0（scores-04.md）：歷史約 242 日不足 52 週，早期數值不完整
+- V1 盤中族群轉強桌面通知 — 0.4（scores-06.md）：超出「只看盤」需求、需權限與去重邏輯
 
 ## 需要你決定的事
 - 即時頁的產業指標切換（等權平均漲幅／≥5% 佔比用在即時熱力圖的哪裡）：你當時沒選套用方式就改提歷史需求，所以本夜沒做；歷史頁 B 已有這些指標。要不要做、做成哪種（產業總覽模式／只換標題排序／只加矩陣欄），請決定。
