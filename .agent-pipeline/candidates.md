@@ -164,3 +164,10 @@
 因為原始需求是 **產業熱力圖看盤＋強勢族群（含自訂、概念股）**，所以頂尖做法會順便做 **盤中就能以題材分組看熱力圖**（Finviz Themes 地圖；TradingView heatmap 可切分組）；目前的成果 **只有部分**——自訂／概念分組只在歷史頁。第 2 輪 R1（1.0）分高在 Effort／Blast；如今一檔多群組的格子 id、去重、分組 API 都已存在，改動縮小為：
 - 參考：Finviz「Themes」地圖 https://finviz.com/blog/tag/heatmaps/ ；TradingView Heatmaps https://www.tradingview.com/support/solutions/43000766446
 - 範圍：GET /api/groupings/{custom|concept}（代號→族群）；即時頁頂列加「分組」切換；app.js 在 filterStocks 後依對照把 industry 換成族群並複製多群組股票（沿用 transform 現有函式），矩陣與熱力圖自動跟著；測試。
+
+# 加分候選（第 15 輪）
+
+## AF1. 熱力圖快照（存成 PNG／複製圖片）
+因為原始需求是 **回溯每一天的強勢族群**，所以頂尖做法會順便做 **把當下的圖存成圖片留存或分享**（TradingView「Take a snapshot」：下載圖片、複製到剪貼簿；Charting Library 預設提供 Download image／Copy image）；目前的成果 **沒有**——只能自己截圖。
+- 參考：TradingView How to share a snapshot https://in.tradingview.com/support/solutions/43000482537 ；TradingView Charting Library Snapshots https://tradingview.com/charting-library-docs/v28/ui_elements/Snapshots
+- 範圍：即時與歷史 A 標題列各一顆「📷」：ECharts getDataURL 產生 PNG（檔名含日期／分組），按 Shift 時複製到剪貼簿；app.js、history.js；無後端改動。
