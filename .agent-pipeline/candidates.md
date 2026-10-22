@@ -26,3 +26,16 @@
 因為原始需求是 **看哪些股票集體上漲**，所以頂尖做法會順便做 **點擊個股即看該股細節與近期走勢**（TradingView heatmap 點擊進入個股；Finviz map 點擊開個股頁）；目前的成果 **沒有**——歷史頁 A 點個股沒有反應、D 只連到 HiStock。
 - 參考：TradingView Heatmaps 說明（click-through to symbols）https://www.tradingview.com/support/solutions/43000766446 ；Finviz heatmap blog https://finviz.com/blog/evolving-the-heatmap-dow-jones-nasdaq-100-russell-2000-and-more
 - 範圍：新 API /api/history/stock/{code}?to=&days=20；前端卡片＋ ECharts 小折線；測試。
+
+# 加分候選（第 2 輪）
+（第 1 輪剩餘 C3 1.6、C4 1.5、C2 1.4 皆 < 2，已列入 result.md「判斷不值得做」）
+
+## R1. 即時熱力圖也能切換族群分類（官方產業／自訂／概念股）
+因為原始需求是 **產業熱力圖看盤＋強勢族群**，所以頂尖做法會順便做 **以題材（theme）分組的即時熱力圖**（Finviz 新增「Themes」市場地圖；TradingView heatmap 可切換分組方式）；目前的成果 **只有部分**——自訂／概念股分組只在歷史頁，盤中即時熱力圖與產業矩陣只能看官方產業。
+- 參考：Finviz「New Stock Market Maps for Market Cap, 52-Week Highs, Lows, Themes…」https://finviz.com/blog/tag/heatmaps/ ；TradingView Heatmaps https://www.tradingview.com/support/solutions/43000766446
+- 範圍：後端 GET /api/concepts/map（code→概念）；前端即時頁加分組切換，transform 依分組重排 industry（一檔多群組複製）；矩陣同步；測試。
+
+## R2. 個股卡片顯示所屬族群（自訂＋概念股）
+因為原始需求是 **看哪些股票集體上漲、屬於哪個族群**，所以頂尖做法會順便做 **個股頁列出所屬類股／概念股**（Yahoo 股市個股頁提供「類股」「盤點概念股」入口）；目前的成果 **沒有**——即時與歷史卡片只顯示官方產業。
+- 參考：Yahoo 股市個股頁 https://tw.stock.yahoo.com/quote/6691.TW
+- 範圍：後端 GET /api/concepts/of/{code}；兩張卡片多一行「概念：…」「自訂：…」；測試。
