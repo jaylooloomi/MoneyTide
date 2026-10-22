@@ -171,3 +171,11 @@
 因為原始需求是 **回溯每一天的強勢族群**，所以頂尖做法會順便做 **把當下的圖存成圖片留存或分享**（TradingView「Take a snapshot」：下載圖片、複製到剪貼簿；Charting Library 預設提供 Download image／Copy image）；目前的成果 **沒有**——只能自己截圖。
 - 參考：TradingView How to share a snapshot https://in.tradingview.com/support/solutions/43000482537 ；TradingView Charting Library Snapshots https://tradingview.com/charting-library-docs/v28/ui_elements/Snapshots
 - 範圍：即時與歷史 A 標題列各一顆「📷」：ECharts getDataURL 產生 PNG（檔名含日期／分組），按 Shift 時複製到剪貼簿；app.js、history.js；無後端改動。
+
+# 加分候選（第 16 輪）
+（第 15 輪 TOP: none）
+
+## AG1. B 排行「名次變化」欄（與前一交易日比較 ▲▼）
+因為原始需求是 **回溯每天的強勢族群、看輪動**，所以頂尖做法會順便做 **排名變動（名次上升代表進入領漲、下降代表失去動能）**（TradingView Sector Rotation Dashboard 以 Rank 追蹤族群升降；Crypto Sector Rotation Radar 追蹤 3／7 期名次變化；Factor Investor 報告標示族群名次變動）；目前的成果 **只有部分**——C 矩陣看得出強弱，但沒有直接的名次升降。
+- 參考：TradingView Sector Rotation Dashboard https://www.tradingview.com/script/dAOscEaH-Sector-Rotation-Dashboard-v1/ ；TradingView sector rotation scripts https://www.tradingview.com/scripts/sectorrotation/ ；Factor Investor Report https://factorinvestor.substack.com/p/factor-investor-report-april-2021
+- 範圍：/api/history/groups 多回傳前一交易日的同指標名次（依目前排序指標 strong_ratio／avg_pct，取 daily_group_avgs 快取）；B 表「名次」欄顯示 ▲n／▼n；測試。
