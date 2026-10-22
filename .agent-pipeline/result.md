@@ -31,6 +31,7 @@
 | 17 | 即時熱力圖族群分類切換 | 3.9（scores-14.md） | Finviz Themes 地圖 https://finviz.com/blog/tag/heatmaps/ ；TradingView Heatmaps https://www.tradingview.com/support/solutions/43000766446 | f0d4a06：GET /api/groupings/{custom|concept}；transform regroupStocks()；即時頁頂列新增「官方產業／自訂族群／概念股」切換（記住選擇），熱力圖與產業矩陣依分組重排（一檔多群組各出現一次），廣度列仍以不重複股票計；概念股未就緒時提示並退回官方產業；自訂族群編輯後即時更新 | `uv run pytest -q tests/test_api.py` ＋ `node --test "tests/js/*.test.js"` | ✅ 123 py／22 js；headless：概念股 101 族群／2,627 格、矩陣與放大正常、主控台無錯誤 | ① 後端產生分組後的快照：每次輪詢要算三份、浪費；② 只做概念股：自訂族群同樣需要 |
 | 18 | B 排行名次變化（▲▼） | 3.3（scores-16.md） | TradingView Sector Rotation Dashboard https://www.tradingview.com/script/dAOscEaH-Sector-Rotation-Dashboard-v1/ ；Factor Investor Report（名次變動）https://factorinvestor.substack.com/p/factor-investor-report-april-2021 | 06603f6：metrics.group_rank_change()（依等權平均漲幅排名、與前一交易日比，沿用每日快取）；/api/history/groups 每族群附 rank／rank_change；B 表在族群名後新增「名次」欄（今日名次＋▲n／▼n，可依變化排序） | `uv run pytest -q tests/test_history.py` | ✅ 124 py／22 js；headless：10/22 名次上升最多 貿易百貨 ▲28 | ① 依 B 目前排序欄位動態算名次：每次排序都要回 server、口徑不固定；② 用強勢佔比排名：小族群常 0% 同名次、變動無意義 |
 | 19 | 啟動後背景預熱歷史快取 | 2.2（scores-17.md） | OneUptime cache preloading at startup https://oneuptime.com/blog/post/2026-03-31-redis-cache-preloading-application-startup/view ；Aerospike Cache warming explained https://aerospike.com/blog/cache-warming-explained | d640416：ingest.warm_history_cache()——每輪回補／累積結束（含啟動後第一輪）在背景執行緒預先算好最新 60 個交易日的官方產業每日平均與 20 日均量；不改 API | `uv run pytest -q tests/test_history.py` | ✅ 126 py／22 js；重啟後首次請求：periods 6.8 s → 7 ms、index → 7 ms、turnover-avg → 6 ms | ① 把快取寫進 SQLite 持久化：要改 schema（屬 migration，夜班禁改）；② 預熱所有分組：自訂／概念股成員會變、白算 |
+| 20 | B 排行族群名稱篩選 | 6.0（scores-18.md） | MarketInOut Industry Growth https://www.marketinout.com/stock-screener/report/industry-growth | 3f1c512：B 標題列新增「篩選族群名稱…」輸入框，依名稱子字串即時過濾（不分大小寫，換日／換分組保留，Esc 清除）；無後端改動 | headless：概念股 101 列 → 輸入 AI 剩 3 列、換日仍 3 列、Esc 回 101 | ✅ 126 py／22 js | ① 下拉選單選族群：101 個選項不好找；② 拼音／模糊搜尋：需新套件 |
 
 ## 夜間程式碼審查修正
 獨立審查代理分兩輪檢查程式變更（XSS、監聽器重複、非同步競態、多族群重複計數、API 邊界、主控台錯誤）：第一輪 6 項＋1 小項、第二輪 3 項、第三輪 3 項、第四輪 3 項，另有夜間實測發現的換日延遲，全部已修：
@@ -60,6 +61,7 @@
 - V1 盤中族群轉強桌面通知 — 0.4（scores-06.md）：超出「只看盤」需求、需權限與去重邏輯
 - 第 9 輪 TOP: none — Y1 個股同步股（相關性）1.9（scores-09.md）：加分性質、需新指標／API／卡片
 - 第 15 輪 TOP: none — AF1 熱力圖 PNG 快照 1.5（scores-15.md）：OS 截圖可替代、非需求核心
+- AI1 HiStock 失效改用證交所 MIS 備援 — 0.2（scores-18.md）：單次輪詢需 40+ 批請求、超過 60 秒預設頻率，且目前無失效證據
 - Z2 即時卡片 20 日小圖 — 1.5（scores-10.md）：引用來源不支持、即時卡片顯示歷史資料易混淆
 
 ## 需要你決定的事
