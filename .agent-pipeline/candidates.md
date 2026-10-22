@@ -212,3 +212,15 @@
 因為原始需求是 **用熱力圖看哪些股票集體上漲**（全市場約 2,400 格，冷門小型股雜訊多），所以頂尖做法會順便做 **熱力圖篩選條件**（TradingView heatmap 提供數十種篩選；Finviz 熱力圖可搭配篩選器）；目前的成果 **只有部分**——只能篩市場、ETF、自選。
 - 參考：Liberated Stock Trader「Stock heat map」評測（TradingView heatmap filters）https://www.liberatedstocktrader.com/stock-heat-map/ ；TradeAlgo Best Heat Map Tools 2026 https://www.tradealgo.com/trading-guides/tools/best-heat-map-tools-for-stocks-options-and-crypto-in-2026 ；TradingView Heatmaps https://www.tradingview.com/support/solutions/43000766446
 - 範圍：transform filterStocks 增加 minTurnover／minCap（純函式＋測試）；即時頂列與歷史 A 標題列各一個下拉（不限／成交值 ≥1 億／≥5 億、市值 ≥100 億）；app.js、history.js。
+
+# 加分候選（第 21 輪）
+
+## AL1. 即時熱力圖「找股票」搜尋框（代號／名稱 → 放大該產業並開啟資訊卡）
+因為原始需求是 **在約 2,400 格的產業熱力圖上看盤、點個股開資訊卡**，所以頂尖做法會順便做 **快速定位特定個股**（Finviz／TradingView 熱力圖以滑鼠懸停查看個股；評測文章把定位速度列為重點）；目前的成果 **沒有**——即時頁只能在小格子裡用眼睛找，歷史頁 B 才有名稱篩選。
+- 參考：Liberated Stock Trader Stock heat map 評測 https://www.liberatedstocktrader.com/stock-heat-map/ ；Finviz Matrix https://finviz.com/blog/the-finviz-matrix-market-breadth-visualized/ ；AAII StockMapper https://www.aaii.com/journal/article/stockmappercom
+- 範圍：transform 加 findStock(stocks, query)（代號完全符合優先，其次名稱子字串；純函式＋測試）；app.js 頂列一個輸入框＋datalist，Enter 後放大該產業並開啟資訊卡；無後端改動。
+
+## AL2. B 排行名次變化擴充為 1／5／20 日前（週、月）
+因為原始需求是 **回溯強勢族群與輪動**，所以頂尖做法會順便做 **多期間名次變化**（Stage Analysis 的 IBD 族群表列出 1、2、4 週前的名次變動）；目前的成果 **只有部分**——bonus-18 只比較前一交易日。
+- 參考：Stage Analysis IBD Industry Groups Bell Curve https://stageanalysis.net/blog/517246/ibd-industry-groups-bell-curve-bullish-percent
+- 範圍：metrics.group_rank_change 加 lag 參數；api 回傳 5／20 日前名次；B 表名次欄 tooltip 或切換；屬 bonus-18 續做。
