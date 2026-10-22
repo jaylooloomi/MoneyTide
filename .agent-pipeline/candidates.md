@@ -52,3 +52,16 @@
 因為原始需求是 **看族群輪動、找強勢族群**，所以頂尖做法會順便做 **相對輪動圖**（JdK RS-Ratio／RS-Momentum 四象限：領先、轉弱、落後、改善，族群順時針輪動）；目前的成果 **沒有**。
 - 參考：StockCharts RRG https://articles.stockcharts.com/article/articles-rrg-2020-08-sector-rotation-from-materials-756/ ；State Street Sector Momentum Map https://www.ssga.com/uk/en_gb/intermediary/insights/guide-to-sector-momentum-map ；LuxAlgo RRG 概念 https://www.luxalgo.com/library/concept/relative-rotation-graphs.md
 - 範圍：metrics.rrg（族群相對全市場的比值平滑、動能）；API；新區塊 ECharts 散點＋尾跡；測試。
+
+# 加分候選（第 4 輪）
+（S2 1.3 < 2，列入「判斷不值得做」）
+
+## T1. 全市場廣度列（上漲／下跌／平盤家數、漲停／跌停、上漲成交值占比）
+因為原始需求是 **看盤時用熱力圖判斷強弱、哪些股票集體上漲**，所以頂尖做法會順便做 **市場廣度（advancing vs declining、漲跌成交量）總覽**（TradingView「Market breadth: Advancing and declining」；廣度常用指標包含漲跌家數與漲跌成交量）；目前的成果 **只有部分**——產業矩陣有各產業漲/跌，沒有全市場一眼看得到的總覽。
+- 參考：TradingView Market breadth https://www.tradingview.com/support/solutions/43000794825/ ；Strike Money Market Breadth https://www.strike.money/stock-market/market-breadth
+- 範圍：transform.js 新增 marketBreadth()（純函式，有測試）；即時頁頂部狀態列旁顯示一條比例長條＋數字；歷史頁 A 標題列同樣顯示當日數字。
+
+## T2. 族群「創新高／創新低」家數（52 週或期間）
+因為原始需求是 **回溯強勢族群**，所以頂尖做法會順便做 **新高 vs 新低家數**（廣度指標：每日創 52 週新高與新低的家數，新高激增代表樂觀）；目前的成果 **沒有**——已有約一年歷史可計算。
+- 參考：Strike Money（52-week highs vs lows）https://www.strike.money/stock-market/market-breadth ；StockCharts 廣度文章 https://stockcharts.com/articles/dancing/2017/05/you-need-to-understand-what-market-breadth-offers.html ；Fidelity Market Breadth PDF https://fidelity.com/bin-public/060_www_fidelity_com/documents/MarketBreadth_01_2010_V2.pdf
+- 範圍：metrics 計算每檔截至該日 N 日最高／最低收盤；group_stats 加 new_high／new_low；B 表多兩欄；測試。
