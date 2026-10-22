@@ -26,7 +26,7 @@ def test_group_crud_and_mapping(tmp_path):
 
 def test_group_validation(tmp_path):
     g = GroupStore(tmp_path / "g.json")
-    for bad in ("", "  ", "a/b", "x" * 31, "<b>"):
+    for bad in ("", "  ", "a/b", "x" * 31, "<b>", ".", "..", "...", "A,B"):
         with pytest.raises(ValueError):
             g.create(bad)
     g.create("A")

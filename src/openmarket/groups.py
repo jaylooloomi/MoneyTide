@@ -15,7 +15,9 @@ MAX_NAME_LEN = 30
 
 def _check_name(name: str) -> str:
     name = name.strip()
-    if not name or len(name) > MAX_NAME_LEN or any(c in name for c in "/\\<>\"'"):
+    # "," separates names in /api/history/index?groups=; "." / ".." are normalised away in URL paths
+    if (not name or len(name) > MAX_NAME_LEN or any(c in name for c in "/\\<>\"',")
+            or set(name) <= {"."}):
         raise ValueError(f"invalid group name: {name!r}")
     return name
 
