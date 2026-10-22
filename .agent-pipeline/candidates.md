@@ -236,3 +236,10 @@
 因為原始需求是 **找出集體上漲的股票**（量增價漲才是真的集體行動），所以頂尖做法會順便做 **以相對成交量著色**（LuxAlgo Heatmap Volume 以均量與標準差分級異常量）；目前的成果 **只有部分**——bonus-16 只有族群層級的量能欄。
 - 參考：LuxAlgo Heatmap Volume https://www.luxalgo.com/library/indicator/unWex8N4-heatmap-volume ；TradingView Intraday Volume Spikes Heatmap https://de.tradingview.com/script/l4nZQnW2-Intraday-Volume-Spikes-Heatmap-everget/
 - 範圍：新 API 回傳各股 20 日均成交值（store 查詢）；即時顏色多一個「量比」；transform 色階；後端＋前端約 5 檔。
+
+# 加分候選（第 23 輪）
+
+## AN1. 歷史 D「量增上漲」模式（當日漲幅 ≥ X% 且成交值 ≥ 前 20 日均值 2 倍）
+因為原始需求是 **回溯每一天哪些股票集體上漲**，所以頂尖做法會順便做 **價量同步的篩選（相對成交量 > 1～2 且上漲）**（Finviz 篩選器以 Relative Volume 搭配 Change 篩選；交易教學建議以相對量 > 1 為起點）；目前的成果 **只有部分**——D 只有當日漲幅／區間累計／連續上漲三種模式，看不出是否有量。
+- 參考：Daytradingz「How to Use Finviz」https://daytradingz.com/how-to-use-finviz/ ；TradingView VB Finviz-style MTF Screener https://it.tradingview.com/script/FygpRrxA-VB-Finviz-style-MTF-Screener
+- 範圍：metrics.movers 加 mode=volume（以 store 前 20 個交易日成交值平均為基準，漲幅門檻沿用 value）；history.js D 多一顆「量增上漲」並在列中顯示倍數；pytest＋前端無新純函式；約 3–4 檔。
