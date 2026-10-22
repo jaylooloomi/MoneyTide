@@ -328,3 +328,25 @@ def group_periods(store: HistoryStore, up_to: date, grouping: Grouping = industr
             perf[f"perf_{p}"] = round((level - 1) * 100, 4)
         out[g] = perf
     return out
+
+
+# ---- bonus-18: rank change vs the previous trading day -----------------------------------
+
+def group_rank_change(store: HistoryStore, day: date, grouping: Grouping = industry_grouping) -> dict[str, dict]:
+    """{group: {"rank": n, "rank_change": +up / -down / None}} ranking groups by equal-weight average
+    change; rank 1 = strongest. rank_change is None for the first stored day or a new group."""
+    dates = sorted(store.trading_dates(up_to=day, limit=2))
+    if not dates or dates[-1] != day:
+        return {}
+    per_day = daily_group_avgs(store, dates, grouping)
+
+    def ranks(avgs: dict) -> dict[str, int]:
+        ordered = sorted(avgs.items(), key=lambda kv: kv[1], reverse=True)
+        return {name: i + 1 for i, (name, _) in enumerate(ordered)}
+
+    today = ranks(per_day[-1][0])
+    prev = ranks(per_day[0][0]) if len(dates) == 2 else {}
+    return {
+        g: {"rank": r, "rank_change": prev[g] - r if g in prev else None}
+        for g, r in today.items()
+    }

@@ -6,7 +6,7 @@ from datetime import date
 from fastapi import APIRouter, HTTPException, Query
 
 from .ingest import HistoryCollector
-from .metrics import METRICS, Grouping, day_stocks, group_stats, industry_grouping, movers, rotation, stock_history, group_index, group_periods
+from .metrics import METRICS, Grouping, day_stocks, group_stats, industry_grouping, movers, rotation, stock_history, group_index, group_periods, group_rank_change
 from .store import HistoryStore
 
 
@@ -60,7 +60,11 @@ def create_history_router(
         rows = get_store().day_rows(d)
         if not rows:
             raise HTTPException(404, f"no data for {day}")
-        return {"date": d.isoformat(), "threshold": threshold, "groups": group_stats(rows, threshold, g)}
+        stats = group_stats(rows, threshold, g)
+        ranks = group_rank_change(get_store(), d, g)  # bonus-18
+        for st in stats:
+            st.update(ranks.get(st["name"], {"rank": None, "rank_change": None}))
+        return {"date": d.isoformat(), "threshold": threshold, "groups": stats}
 
     @r.get("/rotation")
     def rotation_(

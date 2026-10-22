@@ -229,6 +229,7 @@ function renderGroups() {
     .map(
       (g) => `<tr data-group="${escapeHtml(g.name)}"${g.name === st.zoom ? ' class="hl"' : ''}>
         <td class="l">${escapeHtml(g.name)}</td>
+        ${rankCell(g)}
         ${pct(g.avg_pct, 3)}
         ${pct(g.cap_pct, 3)}
         ${periodCells(g)}
@@ -1091,3 +1092,11 @@ document.addEventListener('click', (e) => {
   renderMembers();
 }, true); // capture: the B handler re-renders the rows, detaching the clicked one
 
+
+// ---- bonus-18: rank change vs the previous trading day -----------------------------
+function rankCell(g) {
+  if (g.rank == null) return '<td class="muted">—</td>';
+  const ch = g.rank_change;
+  const delta = ch == null ? '' : ch > 0 ? ` <span class="up">▲${ch}</span>` : ch < 0 ? ` <span class="down">▼${-ch}</span>` : ' <span class="muted">–</span>';
+  return `<td title="今日名次 ${g.rank}">${g.rank}${delta}</td>`;
+}

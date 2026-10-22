@@ -305,3 +305,15 @@ def test_daily_group_avgs_survives_concurrent_clear(store, monkeypatch):
     monkeypatch.setattr(store, "change_rows", clearing)
     out = daily_group_avgs(store, days, industry_grouping)
     assert len(out) == len(days)
+
+
+def test_group_rank_change(store):
+    from openmarket.history.metrics import group_rank_change
+
+    rc = group_rank_change(store, date(2026, 10, 21))
+    # 10/20: 航運 avg (10/130*100+0)/2≈3.85 > 半導體 avg (0 + -1/97*100)/2≈-0.52 → same order on 10/21
+    assert rc["航運業"] == {"rank": 1, "rank_change": 0}
+    assert rc["半導體業"] == {"rank": 2, "rank_change": 0}
+    first = group_rank_change(store, date(2026, 10, 14))
+    assert first["航運業"]["rank_change"] is None  # no previous day
+    assert group_rank_change(store, date(2026, 10, 18)) == {}  # not a trading day
