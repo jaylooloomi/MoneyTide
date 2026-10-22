@@ -182,3 +182,14 @@ def test_custom_grouping_multi_membership_and_any_kind(store):
         ("0050", "我的觀察"), ("2603", "我的觀察"), ("2603", "貨櫃"), ("2609", "貨櫃")]
     mv = movers(store, date(2026, 10, 21), "day", 5, grouping=grouping)
     assert {g["name"] for g in mv["groups"]} == {"貨櫃", "我的觀察"}
+
+
+def test_stock_history(store):
+    from openmarket.history.metrics import stock_history
+
+    h = stock_history(store, "2603", date(2026, 10, 21), days=3)
+    assert [p["date"] for p in h["series"]] == ["2026-10-19", "2026-10-20", "2026-10-21"]
+    assert h["close"] == 150 and h["period_pct"] == pytest.approx((150 / 130 - 1) * 100)
+    assert h["industry"] == "航運業" and h["turnover_100m"] == 1
+    assert stock_history(store, "2603", date(2026, 10, 18)) is None  # not a stored day for that date
+    assert stock_history(store, "9999", date(2026, 10, 21)) is None

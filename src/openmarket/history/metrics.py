@@ -180,3 +180,31 @@ def movers(
     out = [{"name": n, "stocks": sorted(s, key=lambda x: -x["value"])} for n, s in groups.items()]
     out.sort(key=lambda g: (-len(g["stocks"]), -max(x["value"] for x in g["stocks"])))
     return {"mode": mode, "label": label, "groups": out}
+
+
+# ---- bonus-02: single-stock history for the history-page info card ----
+
+def stock_history(store: HistoryStore, code: str, to: date, days: int = 20) -> dict | None:
+    """The stock's row on `to` plus its closes over the last `days` trading days (oldest first)."""
+    rows = store.stock_rows(code, to, days)
+    if not rows or rows[-1]["date"] != to.isoformat():
+        return None
+    last = rows[-1]
+    first_close = next((r["close"] for r in rows if r["close"]), None)
+    return {
+        "code": code,
+        "name": last["name"],
+        "industry": last["industry"],
+        "market": last["market"],
+        "date": last["date"],
+        "close": last["close"],
+        "change": last["change"],
+        "change_pct": last["change_pct"],
+        "high": last["high"],
+        "low": last["low"],
+        "volume_lots": last["volume_shares"] / 1000 if last["volume_shares"] is not None else None,
+        "turnover_100m": last["turnover_yuan"] / 1e8 if last["turnover_yuan"] is not None else None,
+        "market_cap": last["market_cap"],
+        "period_pct": (last["close"] / first_close - 1) * 100 if last["close"] and first_close else None,
+        "series": [{"date": r["date"], "close": r["close"], "change_pct": r["change_pct"]} for r in rows],
+    }

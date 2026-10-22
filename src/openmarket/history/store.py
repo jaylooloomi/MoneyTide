@@ -108,3 +108,12 @@ class HistoryStore:
 
     def day_rows(self, day: date) -> list[dict]:
         return self.rows([day])[day]
+
+    def stock_rows(self, code: str, up_to: date, limit: int) -> list[dict]:
+        """One stock's last `limit` stored days up to `up_to`, oldest first."""
+        with self._conn() as c:
+            rows = c.execute(
+                "SELECT * FROM daily_quote WHERE code = ? AND date <= ? ORDER BY date DESC LIMIT ?",
+                (code, up_to.isoformat(), limit),
+            ).fetchall()
+        return [dict(r) for r in reversed(rows)]

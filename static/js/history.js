@@ -6,7 +6,12 @@ import {
   buildTreemapOption,
   colorFor,
   escapeHtml,
+  fmtCap,
+  fmtChange,
+  fmtNum,
   fmtPct,
+  fmtPrice,
+  fmtTurnover,
   sortRows,
 } from './transform.js';
 import { getGroups, loadGroups, onGroupsChange, openGroupPanel, setStockNames } from './groups.js';
@@ -291,7 +296,7 @@ async function loadMovers() {
           <div class="tags">${g.stocks
             .map((s) => {
               const shown = mode === 'streak' ? `${s.value} 天` : `${s.value >= 0 ? '+' : ''}${s.value.toFixed(1)}%`;
-              return `<a class="tag" href="https://histock.tw/stock/${encodeURIComponent(s.code)}" target="_blank" rel="noopener noreferrer"
+              return `<a class="tag" data-code="${escapeHtml(s.code)}" href="https://histock.tw/stock/${encodeURIComponent(s.code)}" target="_blank" rel="noopener noreferrer"
                  style="background:${colorFor(s.change_pct, 7)}" title="${escapeHtml(s.code)} 當日 ${fmtPct(s.change_pct)}">${escapeHtml(s.name)}<small>${shown}</small></a>`;
             })
             .join('')}</div></div>`,
@@ -460,7 +465,14 @@ export async function showHistory() {
     loadGroups().catch(() => {});
     chart = echarts.init($('#hChart'));
     chart.on('click', (p) => {
-      if (p.data?.industry) zoomTo(p.data.name);
+      if (p.data?.stock) openHistCard(p.data.code);
+      else if (p.data?.industry) zoomTo(p.data.name);
+    });
+    $('#hMovers').addEventListener('click', (e) => {
+      const tag = e.target.closest('a.tag[data-code]');
+      if (!tag || e.ctrlKey || e.metaKey) return; // ctrl/cmd-click still opens HiStock
+      e.preventDefault();
+      openHistCard(tag.dataset.code);
     });
     new ResizeObserver(() => chart.resize()).observe($('#hChart'));
     bind();
@@ -474,3 +486,78 @@ export async function showHistory() {
   await loadDays();
   loadRotation();
 }
+
+// ---- bonus-02: stock card with a short price history ----------------------------
+
+const CARD_DAYS = 20;
+let cardChart = null;
+let cardCode = null;
+
+function cardEl() {
+  let el = $('#hCard');
+  if (!el) {
+    el = document.createElement('aside');
+    el.id = 'hCard';
+    el.className = 'card';
+    el.hidden = true;
+    $('#historyView .hA .chart-wrap').appendChild(el);
+  }
+  return el;
+}
+
+function closeHistCard() {
+  cardCode = null;
+  cardEl().hidden = true;
+  if (cardChart) {
+    cardChart.dispose();
+    cardChart = null;
+  }
+}
+
+async function openHistCard(code) {
+  cardCode = code;
+  let d;
+  try {
+    d = await getJson(`/api/history/stock/${encodeURIComponent(code)}?to=${st.date}&days=${CARD_DAYS}`);
+  } catch {
+    return;
+  }
+  if (cardCode !== code) return; // a newer click won
+  const el = cardEl();
+  const dir = d.change > 0 ? 'up' : d.change < 0 ? 'down' : '';
+  el.innerHTML = `
+    <h3>${escapeHtml(d.code)} ${escapeHtml(d.name)} <span class="sub">${escapeHtml(d.industry)} · ${escapeHtml(d.market)} · ${escapeHtml(d.date)}</span></h3>
+    <div class="px"><b class="${dir}">${fmtPrice(d.close)}</b><span class="${dir}">${fmtChange(d.change)}（${fmtPct(d.change_pct)}）</span></div>
+    <div id="hCardSpark" style="height:90px"></div>
+    <table>
+      <tr><td>近 ${d.series.length} 日</td><td>${fmtPct(d.period_pct)}</td><td>成交值</td><td>${fmtTurnover(d.turnover_100m)}</td></tr>
+      <tr><td>最高</td><td>${fmtPrice(d.high)}</td><td>最低</td><td>${fmtPrice(d.low)}</td></tr>
+      <tr><td>成交量</td><td>${fmtNum(d.volume_lots, 0)} 張</td><td>市值</td><td>${fmtCap(d.market_cap)}</td></tr>
+    </table>
+    <div class="btns">
+      <a href="https://histock.tw/stock/${encodeURIComponent(d.code)}" target="_blank" rel="noopener noreferrer">HiStock ↗</a>
+      <button type="button" id="hCardClose" aria-label="關閉">✕</button>
+    </div>`;
+  el.hidden = false;
+  $('#hCardClose').addEventListener('click', closeHistCard);
+  if (cardChart) cardChart.dispose();
+  cardChart = echarts.init($('#hCardSpark'));
+  const up = (d.period_pct ?? 0) >= 0;
+  cardChart.setOption({
+    animation: false,
+    grid: { left: 2, right: 2, top: 6, bottom: 2 },
+    xAxis: { type: 'category', show: false, data: d.series.map((p) => p.date) },
+    yAxis: { type: 'value', show: false, scale: true },
+    tooltip: { trigger: 'axis', confine: true, formatter: (ps) => `${ps[0].name}<br>${fmtPrice(ps[0].value)}` },
+    series: [{
+      type: 'line', data: d.series.map((p) => p.close), symbol: 'none', smooth: false,
+      lineStyle: { color: up ? '#ff5c5c' : '#3fcf6f', width: 1.5 },
+      areaStyle: { color: up ? 'rgba(255,92,92,.15)' : 'rgba(63,207,111,.15)' },
+      markPoint: { symbol: 'circle', symbolSize: 6, data: [{ coord: [d.series.length - 1, d.close] }], itemStyle: { color: '#fff' }, label: { show: false } },
+    }],
+  });
+}
+
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && cardCode && !$('#historyView').hidden) closeHistCard();
+});

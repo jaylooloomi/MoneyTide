@@ -6,7 +6,7 @@ from datetime import date
 from fastapi import APIRouter, HTTPException, Query
 
 from .ingest import HistoryCollector
-from .metrics import METRICS, Grouping, day_stocks, group_stats, industry_grouping, movers, rotation
+from .metrics import METRICS, Grouping, day_stocks, group_stats, industry_grouping, movers, rotation, stock_history
 from .store import HistoryStore
 
 
@@ -88,5 +88,13 @@ def create_history_router(
             return movers(get_store(), _date(to), mode, value, start=_date(start) if start else None, grouping=g)
         except ValueError as exc:
             raise HTTPException(422, str(exc)) from exc
+
+    # bonus-02: one stock's card data with a short price history
+    @r.get("/stock/{code}")
+    def stock(code: str, to: str, days: int = Query(20, ge=2, le=250)) -> dict:
+        data = stock_history(get_store(), code, _date(to), days)
+        if data is None:
+            raise HTTPException(404, f"no data for {code} on {to}")
+        return data
 
     return r
