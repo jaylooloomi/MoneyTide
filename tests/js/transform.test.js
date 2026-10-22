@@ -200,3 +200,13 @@ test('buildTreemapOption: fixed series config', () => {
   const emph = s.levels[1].emphasis;
   assert.notEqual(emph.upperLabel.color, emph.itemStyle.borderColor);
 });
+
+test('breadth share and colour', async () => {
+  const { breadthShare, breadthColor, colorFor } = await import('../../static/js/transform.js');
+  assert.equal(breadthShare(3, 1), 75);
+  assert.equal(breadthShare(0, 0), null);
+  assert.equal(breadthColor(5, 0), colorFor(50, 50)); // all up → full red
+  assert.equal(breadthColor(0, 5), colorFor(-50, 50)); // all down → full green
+  assert.equal(breadthColor(4, 4), colorFor(0, 50)); // even → grey
+  assert.equal(breadthColor(0, 0), '#2e2e2e');
+});

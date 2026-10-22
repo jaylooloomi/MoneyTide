@@ -309,3 +309,17 @@ export function buildTreemapOption(treeData) {
     ],
   };
 }
+
+// ---- breadth (漲/跌家數) ---------------------------------------------------
+
+/** Share of advancers among advancers + decliners, in %. null when nothing moved. */
+export function breadthShare(up, down) {
+  const n = (up || 0) + (down || 0);
+  return n > 0 ? (up / n) * 100 : null;
+}
+
+/** 100% up → full red, 50/50 → grey, 100% down → full green. */
+export function breadthColor(up, down) {
+  const share = breadthShare(up, down);
+  return share === null ? NO_DATA_COLOR : colorFor(share - 50, 50);
+}

@@ -2,6 +2,8 @@
 import {
   ROOT_ID,
   aggregateIndustries,
+  breadthColor,
+  breadthShare,
   buildTreemapData,
   buildTreemapOption,
   colorFor,
@@ -305,6 +307,12 @@ function pctCell(v, limit) {
   return `<td class="c" style="background:${colorFor(v, limit)}">${fmtPct(v)}</td>`;
 }
 
+function breadthCell(up, down) {
+  const share = breadthShare(up, down);
+  const title = share === null ? '' : `上漲家數佔 ${share.toFixed(0)}%`;
+  return `<td class="c" style="background:${breadthColor(up, down)}" title="${title}">${up}/${down}</td>`;
+}
+
 function renderMatrix(rows) {
   const table = $('#matrix');
   const sort = state.sort.industry;
@@ -318,7 +326,7 @@ function renderMatrix(rows) {
         ${pctCell(r.week_pct, colorLimit('week'))}
         <td>${r.amplitude_pct === null ? '—' : r.amplitude_pct.toFixed(2) + '%'}</td>
         <td>${r.turnover_share === null ? '—' : r.turnover_share.toFixed(1) + '%'}</td>
-        <td class="muted"><span class="up">${r.up_count}</span>/<span class="down">${r.down_count}</span></td>
+        ${breadthCell(r.up_count, r.down_count)}
       </tr>`,
     )
     .join('');
