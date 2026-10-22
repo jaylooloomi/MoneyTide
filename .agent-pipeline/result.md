@@ -26,6 +26,7 @@
 | 12 | 網址保存檢視狀態（可書籤） | 2.0（scores-08.md） | Finviz 嵌入地圖（保存市場、期間選擇）https://finviz.com/blog/you-can-now-embed-finviz-maps-on-your-website-blog-or-app/ ；Finviz 熱力圖網址參數 map.ashx?t=sec https://forum.optuma.com/t/heat-map/4074 | edad79e：網址同步 `#live` 或 `#history/日期/分組`（replaceState，不產生瀏覽紀錄）；開書籤直接進到該日該分組（第一次選日就用書籤日期，不會被晚到的載入覆蓋）；手動改網址（hashchange）即套用 | headless：開 #history/2026-10-16/concept → 10-16 概念股；◀ → 10-15；改成 #history/2026-10-01/industry → 套用；即時↔歷史切換網址正確 | ✅ 117 py／19 js | ① 用 query string：重新整理會打 server 新路徑、與靜態檔混用；② localStorage 記住上次日期：無法書籤或分享特定一天 |
 | 13 | 歷史熱力圖顏色期間（1／5／20 日） | 2.2（scores-10.md） | Finviz 地圖期間選擇 https://finviz.com/blog/you-can-now-embed-finviz-maps-on-your-website-blog-or-app/ ；Finviz 資料 App 期間選項 https://apptopia.com/google-play/app/com.cousinHub.HeatMap/about | ff15c8e：day_stocks 多回傳 period_20（收盤對 20 個交易日前收盤）；transform 支援 colorBy 'p20'（色階 ±25%）並彙總到產業標題；歷史 A 標題列新增「顏色：1日／5日／20日」切換（記住選擇）| `uv run pytest -q tests/test_history.py` ＋ `node --test "tests/js/*.test.js"` | ✅ 118 py／20 js；headless：2330 20 日 −3.83%（與獨立計算一致） | ① 期間改用等權日報酬連乘：個股層級應看實際價格漲幅；② 直接加 60 日：一年資料下 60 日色階仍可，但 A 標題列空間有限，先做 20 日 |
 | 14 | 每日市場廣度月曆 | 2.4（scores-11.md） | TradingView Seasonality Heatmap https://www.tradingview.com/script/Bfz2VMKL-Seasonality-Heatmap-QuantAlgo/ ；thetrading.tools Market Heatmap（% closed higher）https://www.thetrading.tools/market-heatmap ；Strike Advance-Decline https://www.strike.money/?p=12411 | 75525de：store.daily_breadth()（單一 SQL 彙總每日漲跌家數與平均漲幅，0.6 s）；GET /api/history/calendar；歷史頁新增「F · 每日廣度月曆」：每列一個月、每格一個交易日、顏色＝上漲家數佔比，tooltip 顯示家數與平均漲幅，點格子切換日期（停止播放、同步網址），目前日期加白框 | `uv run pytest -q tests/test_history.py` | ✅ 119 py／20 js；headless：242 格、13 個月，點 2025-11-04 → 日期與網址切換 | ① 依星期對齊的 GitHub 式日曆：一年 52 欄太寬、交易日不連續留白多；② 顏色用指數漲幅：本專案無指數資料，廣度更貼近「集體上漲」 |
+| 15 | 族群成分股清單 | 3.3（scores-12.md） | MarketInOut Industry Growth（點產業看成分股）https://www.marketinout.com/stock-screener/report/industry-growth ；Barchart Top Performing Stocks https://www.barchart.com/ca/investing-ideas/top-performing-stocks | 50dc299：點 B 表任一族群，B 區塊下方展開該族群成分股表（代號、名稱、漲幅、5日、20日、成交值，可排序、漲停標示，點列開個股卡片，✕ 關閉；換日自動更新）；資料取自已載入的 A，無後端改動 | `node --test "tests/js/*.test.js"` | ✅ 120 py／21 js；headless：航運業 34 檔、20 日排序、點列開卡、◀ 後更新為 10-21 | ① 新 API 取成分股：A 已有同一份資料，多一次請求；② 用彈出視窗：會擋住 A 熱力圖的對照 |
 
 ## 夜間程式碼審查修正
 獨立審查代理分兩輪檢查程式變更（XSS、監聽器重複、非同步競態、多族群重複計數、API 邊界、主控台錯誤）：第一輪 6 項＋1 小項、第二輪 3 項，全部已修：
@@ -40,6 +41,7 @@
 | 第二輪審查（bonus-11–14）：每次載入主控台 ReferenceError（livePeriods 宣告順序） | 97913af |
 | 第二輪審查：已開啟的分頁貼上書籤網址（#history/… 或 #live）不會切換模式 | 97913af |
 | 第二輪審查：較慢且失敗的舊請求會清空已載入的新資料（A／B） | 97913af |
+| 夜間實測：換日要 7–23 秒（5／20／60 日欄與 E 圖的重運算搶 GIL，拖慢當日面板）→ 每日族群平均值依分組快取、期間欄延後載入，降到約 0.65 秒 | ced1df6 |
 
 ## 判斷不值得做
 - C3 相對成交量（量能倍數）— 1.6（scores-01.md）：要新增指標並改 B/C，效益對影響範圍不划算
