@@ -322,3 +322,19 @@ test('findStock matches code, name, prefix, substring', async () => {
   assert.equal(findStock(list, ''), null);
   assert.equal(findStock(list, '9999'), null);
 });
+
+test('relative volume colour mode', async () => {
+  const { withRelVolume, buildTreemapData, fmtRvol, colorFor, COLOR_LIMITS } = await import('../../static/js/transform.js');
+  const s = (code, turnover_100m) => ({ code, name: code, industry: 'X', kind: 'stock', turnover_100m, market_cap: 10, change_pct: 0 });
+  const out = withRelVolume([s('a', 4), s('b', 1), s('c', 3), s('d', 0)], { a: 2e8, b: 4e8, d: 6e8 });
+  assert.equal(out[0].rvol, 2);
+  assert.equal(out[0].rvol_pct, 100);
+  assert.equal(out[1].rvol_pct, -200);
+  assert.equal(out[2].rvol, null);
+  assert.equal(colorFor(out[1].rvol_pct, COLOR_LIMITS.rvol), colorFor(-100, COLOR_LIMITS.rvol));
+  const tree = buildTreemapData(out, { sizeBy: 'cap', colorBy: 'rvol' });
+  const g = tree.data[0];
+  assert.equal(g.rvolText, fmtRvol(5 / 12)); // (4 + 1 + 0) / (2 + 4 + 6)
+  assert.deepEqual(g.children.map((c) => c.rvolText), ['2.0x', '0.3x', '—', '0.0x']);
+  assert.equal(fmtRvol(12.4), '12x');
+});

@@ -1,7 +1,7 @@
 // Pure functions: snapshot + UI state → filtered stocks, industry aggregates, ECharts option.
 // No DOM and no global `echarts` here, so everything is testable with `node --test`.
 
-export const COLOR_LIMITS = { today: 7, week: 15, p20: 25 };
+export const COLOR_LIMITS = { today: 7, week: 15, p20: 25, rvol: 100 }; // rvol: log2 ratio × 100 (bonus-24)
 export const LABEL_MIN_WIDTH = 44;
 export const LABEL_MIN_HEIGHT = 26;
 export const ROOT_ID = '全市場';
@@ -25,9 +25,10 @@ export function colorFor(pct, limit) {
 }
 
 // colorBy: 'today' | 'week' (5 trading days) | 'p20' (20 trading days, history only — bonus-13)
-export const pctField = (colorBy) => (colorBy === 'p20' ? 'period_20' : colorBy === 'week' ? 'week_pct' : 'change_pct');
+export const pctField = (colorBy) =>
+  colorBy === 'rvol' ? 'rvol_pct' : colorBy === 'p20' ? 'period_20' : colorBy === 'week' ? 'week_pct' : 'change_pct';
 export const colorLimit = (colorBy) =>
-  colorBy === 'p20' ? COLOR_LIMITS.p20 : colorBy === 'week' ? COLOR_LIMITS.week : COLOR_LIMITS.today;
+  colorBy === 'rvol' ? COLOR_LIMITS.rvol : colorBy === 'p20' ? COLOR_LIMITS.p20 : colorBy === 'week' ? COLOR_LIMITS.week : COLOR_LIMITS.today;
 
 // ---- formatting ----------------------------------------------------------
 
@@ -212,6 +213,7 @@ export function buildTreemapData(stocks, view) {
       value: size,
       code: s.code,
       pct: s[field],
+      rvolText: field === 'rvol_pct' ? fmtRvol(s.rvol) : undefined, // bonus-24
       stock: { ...s },
       itemStyle: limitStyle(s.change_pct, colorFor(s[field], limit)), // bonus-08: limit-up/down border
       limit: limitTag(s.change_pct),
@@ -224,6 +226,7 @@ export function buildTreemapData(stocks, view) {
       name,
       industry: { ...industries.get(name) },
       pct: industries.get(name)?.[field] ?? null,
+      rvolText: field === 'rvol_pct' ? fmtRvol(groupRvol(children)) : undefined, // bonus-24
       children,
       itemStyle: { color: INDUSTRY_BG },
     });
@@ -237,6 +240,7 @@ function leafTooltip(s) {
     ['漲跌', `${fmtChange(s.change)}（${fmtPct(s.change_pct)}）${limitTag(s.change_pct) ? ' ' + limitTag(s.change_pct) : ''}`],
     ['本週', fmtPct(s.week_pct)],
     ['成交值', fmtTurnover(s.turnover_100m)],
+    ...(s.rvol !== undefined ? [['量比', `${fmtRvol(s.rvol)}（對 20 日均量）`]] : []), // bonus-24
     ['市值', fmtCap(s.market_cap)],
   ];
   return (
@@ -267,12 +271,12 @@ export function tooltipFormatter(params) {
 
 export function leafLabelFormatter(params) {
   const d = params.data || {};
-  return d.stock ? `${d.name}\n${fmtPct(d.pct)}${d.limit ? ' ' + d.limit : ''}` : '';
+  return d.stock ? `${d.name}\n${d.rvolText ?? fmtPct(d.pct)}${d.limit ? ' ' + d.limit : ''}` : '';
 }
 
 export function upperLabelFormatter(params) {
   const d = params.data || {};
-  return d.industry ? `${d.name} ${fmtPct(d.pct)}` : params.name;
+  return d.industry ? `${d.name} ${d.rvolText ?? fmtPct(d.pct)}` : params.name;
 }
 
 export function labelLayout(params) {
@@ -445,4 +449,31 @@ export function findStock(stocks, query) {
     stocks.find((s) => (s.name || '').toLowerCase().includes(lower)) ||
     null
   );
+}
+
+// ---- bonus-24: relative volume (today's turnover ÷ 20-day average) ----------------------
+export const fmtRvol = (r) => (r === null || r === undefined || !Number.isFinite(r) ? '—' : `${r.toFixed(r >= 10 ? 0 : 1)}x`);
+
+/** Copies of `stocks` with rvol (ratio, null without a baseline) and rvol_pct = log2(ratio) × 100,
+ *  so 2× is full red, ½× full green and 1× neutral on a ±100 colour scale. */
+export function withRelVolume(stocks, avgByCode) {
+  return stocks.map((s) => {
+    const base = avgByCode?.[s.code];
+    const now = (s.turnover_100m || 0) * 1e8;
+    const rvol = base > 0 ? now / base : null;
+    const rvol_pct = rvol === null ? null : rvol > 0 ? Math.log2(rvol) * 100 : -COLOR_LIMITS.rvol;
+    return { ...s, rvol, rvol_pct, rvol_base: base > 0 ? base : null };
+  });
+}
+
+/** A group's ratio = summed turnover ÷ summed baselines of members that have one. */
+function groupRvol(children) {
+  let now = 0;
+  let base = 0;
+  for (const c of children) {
+    if (!(c.stock.rvol_base > 0)) continue;
+    now += (c.stock.turnover_100m || 0) * 1e8;
+    base += c.stock.rvol_base;
+  }
+  return base > 0 ? now / base : null;
 }

@@ -339,3 +339,13 @@ def test_warm_on_empty_store_is_noop(tmp_path):
     s = HistoryStore(tmp_path / "e.sqlite")
     warm_history_cache(s)
     assert s.derived_cache == {}
+
+
+def test_stock_turnover_avg_excludes_the_day_itself(store):
+    from openmarket.history.api import stock_turnover_avg
+
+    out = stock_turnover_avg(store, 3, before=date(2026, 10, 21))
+    assert out["as_of"] == "2026-10-20" and out["days"] == 3
+    assert out["avg"]["2330"] == 1e8 and "0050" in out["avg"]
+    assert stock_turnover_avg(store, 3, before=date(2026, 10, 21)) is out  # cached
+    assert stock_turnover_avg(store, 3, before=date(2026, 10, 14))["avg"] == {}

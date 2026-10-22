@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from datetime import date
+from datetime import date, datetime, timedelta
 
 from fastapi import APIRouter, HTTPException, Query
+
+from ..config import TAIPEI
 
 from .ingest import HistoryCollector
 from .metrics import METRICS, Grouping, day_stocks, group_stats, industry_grouping, movers, rotation, stock_history, group_index, group_periods, group_rank_change
@@ -130,4 +132,39 @@ def create_history_router(
     def turnover_avg(days: int = Query(20, ge=1, le=120)) -> dict:
         return get_store().group_turnover_avg(days)
 
+    # bonus-24: per-stock 20-day average turnover before today (for the live 量比 colour)
+    @r.get("/stock-turnover-avg")
+    def stock_turnover(days: int = Query(20, ge=1, le=60)) -> dict:
+        return stock_turnover_avg(get_store(), days, before=datetime.now(TAIPEI).date())
+
     return r
+
+
+# ---- bonus-24: per-stock average turnover --------------------------------------------
+
+
+def stock_turnover_avg(store: HistoryStore, days: int, before: date) -> dict:
+    """Average daily turnover (元) per code over the latest `days` stored trading days strictly
+    before `before` (so today's own volume never dilutes its baseline). Codes need a value on at
+    least half of those days. {"as_of": date, "days": n, "avg": {code: 元}}; cached per day set."""
+    dates = store.trading_dates(up_to=before - timedelta(days=1), limit=days)
+    if not dates:
+        return {"as_of": None, "days": 0, "avg": {}}
+    key = ("stock_turnover_avg", dates[0], days)
+    cached = store.derived_cache.get(key)
+    if cached is not None:
+        return cached
+    sums: dict[str, float] = {}
+    counts: dict[str, int] = {}
+    for rows in store.rows(dates).values():
+        for r in rows:
+            t = r.get("turnover_yuan")
+            if t is None:
+                continue
+            sums[r["code"]] = sums.get(r["code"], 0.0) + t
+            counts[r["code"]] = counts.get(r["code"], 0) + 1
+    need = (len(dates) + 1) // 2
+    avg = {c: round(sums[c] / n) for c, n in counts.items() if n >= need and sums[c] > 0}
+    result = {"as_of": dates[0].isoformat(), "days": len(dates), "avg": avg}
+    store.derived_cache[key] = result
+    return result

@@ -20,7 +20,7 @@ import {
   watchRows,
 } from './transform.js';
 import { showHistory } from './history.js';
-import { MIN_FILTERS, breadthBarHtml, findStock, marketBreadth, regroupStocks } from './transform.js';
+import { MIN_FILTERS, breadthBarHtml, findStock, marketBreadth, regroupStocks, withRelVolume } from './transform.js';
 import { addToGroup, getGroups, loadGroups, onGroupsChange, openGroupPanel, setStockNames } from './groups.js';
 
 const SNAPSHOT_POLL_MS = 10_000;
@@ -28,6 +28,8 @@ const SNAPSHOT_POLL_MS = 10_000;
 const livePeriods = { date: null, byGroup: {}, loading: false };
 // bonus-17: live grouping switch state (declared before main() runs)
 const liveGrouping = { by: 'industry', maps: {}, loading: {} };
+// bonus-24: relative-volume baseline (declared before main() runs)
+const liveRvol = { avg: null, day: null, loading: false };
 // bonus-23: declared up here because main() renders before the module finishes evaluating
 const liveSearch = { shown: [], listFor: null };
 try {
@@ -219,7 +221,7 @@ function render() {
   $('#watchCount').textContent = `(${state.watchCodes.length})`;
   renderLiveMinSelect(); // bonus-22
   const filtered = snap ? filterStocks(snap.stocks, state.filters, state.watchCodes) : [];
-  const stocks = applyLiveGrouping(filtered); // bonus-17: custom / concept regrouping
+  const stocks = applyLiveGrouping(applyRelVolume(filtered)); // bonus-17: custom / concept regrouping; bonus-24
 
   renderChart(stocks);
   const empty = emptyMessage(snap, stocks);
@@ -315,8 +317,9 @@ function renderNote() {
 
 function renderLegend() {
   const limit = colorLimit(state.view.colorBy);
-  $('#legendMin').textContent = `-${limit}%`;
-  $('#legendMax').textContent = `+${limit}%`;
+  const rvol = state.view.colorBy === 'rvol'; // bonus-24: log2 scale, ±100 = ½x … 2x
+  $('#legendMin').textContent = rvol ? '½x' : `-${limit}%`;
+  $('#legendMax').textContent = rvol ? '2x' : `+${limit}%`;
 }
 
 function setSortHeaders(table, sort) {
@@ -916,4 +919,43 @@ function goToStock(query) {
   openCard(hit.code);
   $('#liveFind').value = '';
   $('#liveFind').blur();
+}
+
+// ---- bonus-24: 量比 colour mode (today's turnover ÷ 20-day average turnover) ----------------
+function applyRelVolume(stocks) {
+  renderRvolButton();
+  if (state.view.colorBy !== 'rvol') return stocks;
+  const today = new Date().toLocaleDateString('sv', { timeZone: 'Asia/Taipei' });
+  if (liveRvol.day !== today) loadRelVolume(today);
+  return withRelVolume(stocks, liveRvol.avg || {});
+}
+
+async function loadRelVolume(today) {
+  if (liveRvol.loading) return;
+  liveRvol.loading = true;
+  try {
+    const resp = await fetch('/api/history/stock-turnover-avg?days=20', { cache: 'no-store' });
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const body = await resp.json();
+    if (!body.days) throw new Error('歷史資料尚未回補');
+    liveRvol.avg = body.avg;
+    liveRvol.day = today; // only after success, so a failure is retried on the next render
+    render();
+  } catch (err) {
+    toast(`量比需要歷史成交值：${err.message}`);
+    liveRvol.day = today; // do not hammer the server on every snapshot; retried tomorrow or on reload
+  } finally {
+    liveRvol.loading = false;
+  }
+}
+
+function renderRvolButton() {
+  const seg = $('#liveControls .seg[data-group="colorBy"]');
+  if (seg && !seg.querySelector('[data-value="rvol"]')) {
+    const b = document.createElement('button');
+    b.dataset.value = 'rvol';
+    b.textContent = '量比';
+    b.title = '今日成交值 ÷ 前 20 個交易日平均成交值（紅＝放量、綠＝縮量；2 倍以上全紅）';
+    seg.append(b);
+  }
 }
