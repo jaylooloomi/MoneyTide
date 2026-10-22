@@ -141,6 +141,7 @@ class HistoryCollector:
             self.state.done += 1
             await self._sleep(self._delay)
         self.state.running = False
+        await asyncio.to_thread(warm_history_cache, self.store)  # bonus-19
 
     async def run(self) -> None:
         while True:
@@ -152,3 +153,23 @@ class HistoryCollector:
                 log.exception("history collector error")
             infos, _ = self._reference()
             await self._sleep(60 if not infos else RETRY_INTERVAL.total_seconds())
+
+
+# ---- bonus-19: warm the derived-results cache so the first history visit is fast ----
+
+WARM_DAYS = 60  # the longest window the history page asks for by default (5/20/60-day columns)
+
+
+def warm_history_cache(store: HistoryStore) -> None:
+    """Precompute what the history page predictably needs right after a (re)start: per-day
+    official-industry averages for the latest WARM_DAYS trading days and the 20-day turnover
+    averages. Cheap when already cached; errors are logged, never raised."""
+    from .metrics import daily_group_avgs, industry_grouping  # local: metrics imports store too
+
+    try:
+        dates = sorted(store.trading_dates(limit=WARM_DAYS))
+        if dates:
+            daily_group_avgs(store, dates, industry_grouping)
+            store.group_turnover_avg(20)
+    except Exception:
+        log.exception("history cache warm-up failed")

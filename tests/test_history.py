@@ -317,3 +317,25 @@ def test_group_rank_change(store):
     first = group_rank_change(store, date(2026, 10, 14))
     assert first["航運業"]["rank_change"] is None  # no previous day
     assert group_rank_change(store, date(2026, 10, 18)) == {}  # not a trading day
+
+
+def test_collector_warms_cache(tmp_path):
+    from openmarket.history.ingest import warm_history_cache
+
+    c = collector(tmp_path, FakeFetch({}), FakeFetch({}))
+    for i, d in enumerate([date(2026, 10, 20), date(2026, 10, 21)]):
+        c.store.save_day(d, build_rows([row("2330", 100 + i, 1)], INFOS, {}), NOW)
+    assert c.store.derived_cache == {}
+    warm_history_cache(c.store)
+    assert ("industry", date(2026, 10, 21)) in c.store.derived_cache
+    assert ("turnover_avg", date(2026, 10, 21), 20) in c.store.derived_cache
+    asyncio.run(c.run_once())  # a collector pass ends with a warm-up too (and must not raise)
+    assert ("industry", date(2026, 10, 20)) in c.store.derived_cache
+
+
+def test_warm_on_empty_store_is_noop(tmp_path):
+    from openmarket.history.ingest import warm_history_cache
+
+    s = HistoryStore(tmp_path / "e.sqlite")
+    warm_history_cache(s)
+    assert s.derived_cache == {}
