@@ -20,7 +20,7 @@ import {
   watchRows,
 } from './transform.js';
 import { showHistory } from './history.js';
-import { breadthBarHtml, marketBreadth, regroupStocks } from './transform.js';
+import { MIN_FILTERS, breadthBarHtml, marketBreadth, regroupStocks } from './transform.js';
 import { addToGroup, getGroups, loadGroups, onGroupsChange, openGroupPanel, setStockNames } from './groups.js';
 
 const SNAPSHOT_POLL_MS = 10_000;
@@ -215,6 +215,7 @@ function render() {
   renderControls();
   renderStatus();
   $('#watchCount').textContent = `(${state.watchCodes.length})`;
+  renderLiveMinSelect(); // bonus-22
   const filtered = snap ? filterStocks(snap.stocks, state.filters, state.watchCodes) : [];
   const stocks = applyLiveGrouping(filtered); // bonus-17: custom / concept regrouping
 
@@ -844,3 +845,22 @@ function renderLiveGroupingSeg() {
   b.addEventListener('click', () => (document.fullscreenElement ? document.exitFullscreen() : wrap.requestFullscreen()));
   wrap.appendChild(b);
 })();
+
+// ---- bonus-22: minimum turnover / market-cap filter (live) ----------------------------
+function renderLiveMinSelect() {
+  let sel = $('#liveMin');
+  if (!sel) {
+    sel = document.createElement('select');
+    sel.id = 'liveMin';
+    sel.className = 'field';
+    sel.title = '只顯示成交值或市值達門檻的股票（熱力圖與產業矩陣）';
+    sel.innerHTML = Object.entries(MIN_FILTERS).map(([k, f]) => `<option value="${k}">${f.label}</option>`).join('');
+    $('#includeEtf').closest('.chk').after(sel);
+    sel.addEventListener('change', () => {
+      state.filters.min = sel.value;
+      savePrefs();
+      render();
+    });
+  }
+  sel.value = state.filters.min || '';
+}

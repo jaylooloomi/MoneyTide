@@ -81,6 +81,7 @@ export function filterStocks(stocks, filters, watchCodes) {
   const watch = new Set(watchCodes || []);
   return stocks.filter((s) => {
     if (filters.market !== 'all' && s.market !== filters.market) return false;
+    if (filters.min && !passesMin(s, filters.min)) return false; // bonus-22
     if (filters.watchOnly) return watch.has(s.code);
     if (s.kind === 'other') return false;
     if (s.kind === 'etf' && !filters.includeEtf) return false;
@@ -411,4 +412,22 @@ export function regroupStocks(stocks, mapping) {
     for (const g of mapping[s.code] || []) out.push({ ...s, industry: g });
   }
   return out;
+}
+
+// ---- bonus-22: minimum turnover / market-cap filter --------------------------------------
+
+export const MIN_FILTERS = {
+  '': { label: '門檻：不限' },
+  t1: { label: '成交值 ≥ 1 億', turnover: 1 },
+  t5: { label: '成交值 ≥ 5 億', turnover: 5 },
+  c100: { label: '市值 ≥ 100 億', cap: 100e8 },
+};
+
+/** True when the stock meets the selected minimum (unknown keys and '' let everything through). */
+export function passesMin(s, key) {
+  const f = MIN_FILTERS[key];
+  if (!f) return true;
+  if (f.turnover !== undefined && !((s.turnover_100m || 0) >= f.turnover)) return false;
+  if (f.cap !== undefined && !((s.market_cap || 0) >= f.cap)) return false;
+  return true;
 }

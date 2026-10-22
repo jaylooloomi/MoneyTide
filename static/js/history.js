@@ -14,7 +14,7 @@ import {
   fmtTurnover,
   sortRows,
 } from './transform.js';
-import { groupMembers, limitTag, toCsv } from './transform.js';
+import { MIN_FILTERS, groupMembers, limitTag, passesMin, toCsv } from './transform.js';
 import { breadthBarHtml, breadthShare, marketBreadth } from './transform.js';
 import { getGroups, loadGroups, onGroupsChange, openGroupPanel, setStockNames } from './groups.js';
 
@@ -164,7 +164,9 @@ async function loadDay() {
 
 function renderChart() {
   if (!chart) return;
-  const tree = buildTreemapData(st.stocks, { sizeBy: st.sizeBy, colorBy: histColor.by }); // bonus-13
+  renderHistMinSelect(); // bonus-22
+  const shown = histMin.key ? st.stocks.filter((s) => passesMin(s, histMin.key)) : st.stocks;
+  const tree = buildTreemapData(shown, { sizeBy: st.sizeBy, colorBy: histColor.by }); // bonus-13
   chart.setOption(buildTreemapOption(tree), { notMerge: true });
   $('#hEmpty').hidden = tree.data.length > 0;
   if (!tree.data.length) {
@@ -1147,3 +1149,34 @@ function ensureGroupFilterBox() {
   b.addEventListener('click', () => (document.fullscreenElement ? document.exitFullscreen() : wrap.requestFullscreen()));
   wrap.appendChild(b);
 })();
+
+// ---- bonus-22: minimum turnover / market-cap filter (history heatmap A only) ------------
+const histMin = { key: '' };
+try {
+  const saved = JSON.parse(localStorage.getItem('openmarket.history.min') || '""');
+  if (saved in MIN_FILTERS) histMin.key = saved;
+} catch {
+  /* default */
+}
+
+function renderHistMinSelect() {
+  let sel = $('#hMinSel');
+  if (!sel) {
+    sel = document.createElement('select');
+    sel.id = 'hMinSel';
+    sel.className = 'field';
+    sel.title = '熱力圖只顯示成交值或市值達門檻的股票（B／D 統計不受影響）';
+    sel.innerHTML = Object.entries(MIN_FILTERS).map(([k, f]) => `<option value="${k}">${f.label}</option>`).join('');
+    document.querySelector('#historyView .hA .seg[data-hgroup="sizeBy"]').before(sel);
+    sel.addEventListener('change', () => {
+      histMin.key = sel.value;
+      try {
+        localStorage.setItem('openmarket.history.min', JSON.stringify(histMin.key));
+      } catch {
+        /* ignore */
+      }
+      renderChart();
+    });
+  }
+  sel.value = histMin.key;
+}

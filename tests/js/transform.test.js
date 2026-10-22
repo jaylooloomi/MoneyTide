@@ -294,3 +294,15 @@ test('regroupStocks copies per group and drops ungrouped', async () => {
   const ids = buildTreemapData(out, { sizeBy: 'cap', colorBy: 'today' }).data.flatMap((g) => g.children.map((c) => c.id));
   assert.equal(new Set(ids).size, 3);
 });
+
+test('minimum turnover / cap filter', async () => {
+  const { passesMin, filterStocks } = await import('../../static/js/transform.js');
+  const s = (code, turnover_100m, market_cap) => ({ code, turnover_100m, market_cap, market: '上市', kind: 'stock' });
+  assert.equal(passesMin(s('a', 0.5, 1e9), 't1'), false);
+  assert.equal(passesMin(s('a', 1, 1e9), 't1'), true);
+  assert.equal(passesMin(s('a', 10, 50e8), 'c100'), false);
+  assert.equal(passesMin(s('a', null, null), ''), true);
+  assert.equal(passesMin(s('a', null, null), 'bogus'), true);
+  const codes = filterStocks([s('A', 6, 200e8), s('B', 2, 20e8), s('C', 0, null)], { market: 'all', includeEtf: false, watchOnly: false, min: 't5' }, []).map((x) => x.code);
+  assert.deepEqual(codes, ['A']);
+});
