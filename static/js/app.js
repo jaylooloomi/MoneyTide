@@ -603,7 +603,10 @@ function setMode(mode) {
     b.classList.toggle('on', b.dataset.mode === mode);
     b.setAttribute('aria-pressed', String(b.dataset.mode === mode));
   }
-  if (live) chart.resize();
+  if (live) {
+    chart.resize();
+    if (location.hash !== '#live') history.replaceState(null, '', '#live'); // bonus-12
+  }
   else showHistory();
 }
 
@@ -625,6 +628,8 @@ async function main() {
     if (b) setMode(b.dataset.mode);
   });
   render();
+  if (location.hash.startsWith('#history')) state.mode = 'history'; // bonus-12: bookmarked view
+  else if (location.hash === '#live') state.mode = 'live';
   setMode(state.mode);
   try {
     const [{ body: settings }] = await Promise.all([api('/api/settings'), loadWatchlist()]);

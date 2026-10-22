@@ -83,7 +83,7 @@ async function loadDays() {
     st.backfill = { error: err.message };
   }
   renderStatus();
-  if (!st.date && st.days.length) await selectDate(st.days[0]);
+  if (!st.date && st.days.length) await selectDate(hashWanted?.date || st.days[0]); // bonus-12: bookmarked day first
   else if (!st.days.length) showEmpty();
   // keep polling while the backfill is running (new days appear)
   clearTimeout(daysTimer);
@@ -127,6 +127,7 @@ function snap(date) {
 async function selectDate(date) {
   if (!st.days.length) return;
   st.date = snap(date);
+  writeHash(); // bonus-12: synchronously, so the hash never lags behind overlapping loads
   $('#hDate').value = st.date;
   const i = st.days.indexOf(st.date);
   $('#hPrev').disabled = i >= st.days.length - 1;
@@ -377,6 +378,7 @@ function customEmpty() {
 
 /** Reload everything that depends on the grouping. */
 async function reloadGrouped() {
+  writeHash(); // bonus-12
   renderGrouping();
   if (customEmpty()) {
     $('#hEmpty').hidden = false;
@@ -489,6 +491,7 @@ export async function showHistory() {
   if (!started) {
     started = true;
     loadPrefs();
+    applyHashGrouping(); // bonus-12
     $('#hThreshold').value = st.threshold;
     await refreshConceptStatus();
     renderGrouping();
@@ -508,12 +511,15 @@ export async function showHistory() {
     bind();
     renderSegs();
     renderCrumb();
+    window.addEventListener('hashchange', onHashChange); // bonus-12
     await loadDays();
+    await applyHashDate(); // bonus-12
     await loadRotation();
     loadIndex(); // bonus-04
     return;
   }
   chart.resize();
+  writeHash(); // bonus-12
   await loadDays();
   loadRotation();
   loadIndex(); // bonus-04
@@ -869,3 +875,49 @@ async function loadPeriods() {
   periodState.cache.set(key, data.groups);
   if (ticket === periodState.ticket && key === `${st.date}|${st.grouping}`) apply(data.groups);
 }
+
+// ---- bonus-12: bookmarkable view state in the URL hash (#history/<date>/<grouping>) ----
+
+const GROUPINGS_OK = new Set(['industry', 'custom', 'concept']);
+
+function parseHash() {
+  const m = /^#history(?:\/(\d{4}-\d{2}-\d{2}))?(?:\/(industry|custom|concept))?$/.exec(location.hash);
+  return m ? { date: m[1] || null, grouping: m[2] || null } : null;
+}
+
+function writeHash() {
+  if ($('#historyView').hidden || !st.date) return;
+  const hash = `#history/${st.date}/${st.grouping}`;
+  if (location.hash !== hash) history.replaceState(null, '', hash);
+}
+
+let hashWanted = null; // the bookmarked view, read once before the first load rewrites the hash
+
+function applyHashGrouping() {
+  const h = (hashWanted = parseHash());
+  if (h?.grouping && GROUPINGS_OK.has(h.grouping)) st.grouping = h.grouping;
+}
+
+async function applyHashDate() {
+  hashWanted = null; // the first selectDate already used it
+  writeHash();
+}
+
+async function onHashChange() {
+  const h = parseHash();
+  if (!h || $('#historyView').hidden) return;
+  const groupingChanged = !!h.grouping && GROUPINGS_OK.has(h.grouping) && h.grouping !== st.grouping;
+  const dateChanged = !!h.date && h.date !== st.date;
+  if (groupingChanged) {
+    st.grouping = h.grouping;
+    st.zoom = null;
+    idx.picked = [];
+    savePrefs();
+    renderGrouping();
+  }
+  if (dateChanged) {
+    await selectDate(h.date); // loads A/B/D/E with the (new) grouping
+    if (groupingChanged) loadRotation();
+  } else if (groupingChanged) await reloadGrouped();
+}
+
