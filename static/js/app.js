@@ -19,6 +19,7 @@ import {
   sortRows,
   watchRows,
 } from './transform.js';
+import { showHistory } from './history.js';
 
 const SNAPSHOT_POLL_MS = 10_000;
 const PREFS_KEY = 'openmarket.prefs.v1';
@@ -34,6 +35,7 @@ const state = {
   filters: { market: 'all', includeEtf: false, watchOnly: false },
   view: { sizeBy: 'cap', colorBy: 'today' },
   tab: 'industry',
+  mode: 'live',
   sort: { industry: { key: 'change_pct', dir: 'desc' }, watch: { key: null, dir: 'desc' } },
   // transient
   zoomIndustry: null,
@@ -51,6 +53,7 @@ function loadPrefs() {
     if (p.filters) Object.assign(state.filters, p.filters);
     if (p.view) Object.assign(state.view, p.view);
     if (p.tab === 'industry' || p.tab === 'watch') state.tab = p.tab;
+    if (p.mode === 'live' || p.mode === 'history') state.mode = p.mode;
     if (p.sort) Object.assign(state.sort, p.sort);
   } catch {
     /* storage unavailable or corrupt: defaults */
@@ -59,8 +62,8 @@ function loadPrefs() {
 
 function savePrefs() {
   try {
-    const { filters, view, tab, sort } = state;
-    localStorage.setItem(PREFS_KEY, JSON.stringify({ filters, view, tab, sort }));
+    const { filters, view, tab, sort, mode } = state;
+    localStorage.setItem(PREFS_KEY, JSON.stringify({ filters, view, tab, sort, mode }));
   } catch {
     /* ignore */
   }
@@ -225,7 +228,7 @@ function emptyMessage(snap, stocks) {
 }
 
 function renderControls() {
-  for (const seg of document.querySelectorAll('.seg')) {
+  for (const seg of document.querySelectorAll('.seg[data-group]')) {
     const group = seg.dataset.group;
     const current = String(group in state.filters ? state.filters[group] : state.view[group]);
     for (const b of seg.querySelectorAll('button')) {
@@ -421,7 +424,7 @@ function toast(text) {
 // ---- events -----------------------------------------------------------------
 
 function bindEvents() {
-  for (const seg of document.querySelectorAll('.seg')) {
+  for (const seg of document.querySelectorAll('.seg[data-group]')) {
     seg.addEventListener('click', (e) => {
       const b = e.target.closest('button');
       if (!b) return;
@@ -483,7 +486,7 @@ function bindEvents() {
     if (tr && state.snapshot?.stocks.some((s) => s.code === tr.dataset.code)) openCard(tr.dataset.code);
   });
   document.addEventListener('keydown', (e) => {
-    if (e.key !== 'Escape') return;
+    if (e.key !== 'Escape' || state.mode !== 'live') return;
     if (!$('#settings').hidden) $('#settings').hidden = true;
     else if (state.cardCode) closeCard();
     else if (state.zoomIndustry) zoomOut();
@@ -548,6 +551,22 @@ function bindEvents() {
   $('#pollSeconds').addEventListener('keydown', (e) => e.key === 'Enter' && save());
 }
 
+function setMode(mode) {
+  state.mode = mode;
+  savePrefs();
+  const live = mode === 'live';
+  $('#liveView').hidden = !live;
+  $('#liveControls').hidden = !live;
+  $('#historyView').hidden = live;
+  $('#histControls').hidden = live;
+  for (const b of $('#modeSwitch').querySelectorAll('button')) {
+    b.classList.toggle('on', b.dataset.mode === mode);
+    b.setAttribute('aria-pressed', String(b.dataset.mode === mode));
+  }
+  if (live) chart.resize();
+  else showHistory();
+}
+
 // ---- boot -------------------------------------------------------------------
 
 async function main() {
@@ -559,7 +578,12 @@ async function main() {
   }
   initChart();
   bindEvents();
+  $('#modeSwitch').addEventListener('click', (e) => {
+    const b = e.target.closest('button[data-mode]');
+    if (b) setMode(b.dataset.mode);
+  });
   render();
+  setMode(state.mode);
   try {
     const [{ body: settings }] = await Promise.all([api('/api/settings'), loadWatchlist()]);
     if (settings) state.settings = settings;

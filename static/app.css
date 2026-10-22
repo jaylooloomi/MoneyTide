@@ -142,3 +142,40 @@ button { font: inherit; color: inherit; cursor: pointer; }
   .side { border-left: 0; border-top: 1px solid var(--line); }
   .card { left: 10px; right: 10px; width: auto; }
 }
+
+/* ---- mode switch & history ---- */
+.ctrls { display: contents; }
+.ctrls[hidden] { display: none !important; }
+.seg.mode button { font-weight: 600; }
+.field { background: #0f1115; color: var(--text); border: 1px solid #3a3e48; border-radius: 4px; padding: 3px 6px; font: inherit; color-scheme: dark; }
+.field.num { width: 58px; }
+.hist {
+  flex: 1; min-height: 0; overflow: auto; padding: 8px;
+  display: grid; gap: 8px;
+  grid-template-columns: minmax(0, 3fr) minmax(360px, 2fr);
+  grid-template-rows: 480px auto auto;
+  grid-template-areas: "a b" "c c" "d d";
+}
+.hA { grid-area: a; } .hB { grid-area: b; } .hC { grid-area: c; } .hD { grid-area: d; }
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; display: flex; flex-direction: column; min-height: 0; min-width: 0; }
+.panel-h { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 10px; border-bottom: 1px solid var(--line); }
+.panel-h b { color: #fff; }
+.panel-h .crumb { padding: 0; min-height: 0; }
+.hA .chart-wrap { flex: 1; min-height: 0; }
+#hChart { position: absolute; inset: 0; }
+.rot-wrap { max-height: 560px; }
+table.rot { border-collapse: separate; border-spacing: 2px; font-size: 11px; font-variant-numeric: tabular-nums; }
+table.rot th { position: sticky; top: 0; background: var(--panel); color: var(--muted); font-weight: 500; padding: 3px 2px; white-space: nowrap; cursor: pointer; z-index: 1; }
+table.rot th.sel { color: #fff; box-shadow: inset 0 -2px var(--accent); }
+table.rot td { min-width: 34px; height: 22px; text-align: center; color: #fff; cursor: pointer; border-radius: 2px; }
+table.rot td.name { position: sticky; left: 0; background: var(--panel); text-align: left; color: var(--text); padding-right: 8px; white-space: nowrap; z-index: 1; cursor: default; }
+table.rot td.sel { outline: 1px solid #fff; }
+.movers { padding: 8px 10px; display: flex; flex-direction: column; gap: 10px; }
+.mgroup b { color: #fff; }
+.mgroup .count { color: var(--muted); margin-left: 6px; }
+.tags { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+.tag { padding: 2px 7px; border-radius: 3px; color: #fff; font-size: 12px; text-decoration: none; white-space: nowrap; }
+.tag small { opacity: .85; margin-left: 4px; }
+@media (max-width: 1100px) {
+  .hist { grid-template-columns: 1fr; grid-template-rows: 420px 420px auto auto; grid-template-areas: "a" "b" "c" "d"; }
+}

@@ -13,6 +13,10 @@
 <body>
   <header class="top">
     <span class="logo">Open Market</span>
+    <div class="seg mode" id="modeSwitch" role="group" aria-label="模式">
+      <button data-mode="live">即時</button><button data-mode="history">歷史</button>
+    </div>
+    <div class="ctrls" id="liveControls">
     <div class="seg" data-group="market" role="group" aria-label="市場">
       <button data-value="all">全部</button><button data-value="上市">上市</button><button data-value="上櫃">上櫃</button>
     </div>
@@ -39,9 +43,21 @@
       <div class="row"><button id="settingsSave" class="primary">儲存</button><button id="settingsCancel">取消</button></div>
       <p class="err" id="settingsErr"></p>
     </div>
+    </div>
+    <div class="ctrls" id="histControls" hidden>
+      <button class="icon" id="hPrev" title="前一個交易日" aria-label="前一個交易日">◀</button>
+      <input type="date" id="hDate" class="field" aria-label="日期">
+      <button class="icon" id="hNext" title="下一個交易日" aria-label="下一個交易日">▶</button>
+      <div class="seg" role="group" aria-label="族群分類">
+        <button class="on" aria-pressed="true" title="自訂族群、概念股族群之後加入">官方產業</button>
+      </div>
+      <label class="chk">強勢門檻 <input type="number" id="hThreshold" class="field num" min="1" max="10" step="0.5"> %</label>
+      <span class="spacer"></span>
+      <span class="status" id="hStatus"><i class="dot"></i><span id="hStatusText">載入中…</span></span>
+    </div>
   </header>
 
-  <main class="body">
+  <main class="body" id="liveView">
     <section class="main">
       <nav class="crumb" id="crumb" aria-label="目前範圍"></nav>
       <div class="chart-wrap">
@@ -87,6 +103,52 @@
         <p id="watchEmpty" class="hint" hidden>尚無自選股。點熱力圖上的個股，在資訊卡中按「加入自選」。</p>
       </div>
     </aside>
+  </main>
+
+  <main class="hist" id="historyView" hidden>
+    <section class="panel hA">
+      <div class="panel-h"><b>A · 當日熱力圖</b><span class="crumb" id="hCrumb"></span>
+        <span class="spacer"></span>
+        <div class="seg" data-hgroup="sizeBy"><button data-value="cap">市值</button><button data-value="turnover">成交值</button></div>
+      </div>
+      <div class="chart-wrap"><div id="hChart"></div><div id="hEmpty" class="empty" hidden></div></div>
+    </section>
+    <section class="panel hB">
+      <div class="panel-h"><b>B · 強勢族群排行</b><span class="muted" id="hBDate"></span></div>
+      <div class="table-wrap">
+        <table id="hGroups" class="grid">
+          <thead><tr>
+            <th data-sort="name" class="l">族群</th>
+            <th data-sort="avg_pct" title="等權平均漲幅">平均漲幅</th>
+            <th data-sort="cap_pct" title="昨收市值加權">市值加權</th>
+            <th data-sort="strong_ratio" id="hStrongTh">≥5%佔比</th>
+            <th data-sort="limit_up">漲停</th>
+            <th data-sort="breadth" title="上漲家數 / 下跌家數">漲/跌</th>
+            <th data-sort="count">家數</th>
+          </tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+    <section class="panel hC">
+      <div class="panel-h"><b>C · 族群輪動</b>
+        <div class="seg" data-hgroup="rotDays"><button data-value="10">10 日</button><button data-value="20">20 日</button><button data-value="60">60 日</button></div>
+        <div class="seg" data-hgroup="rotMetric">
+          <button data-value="strong_ratio">強勢佔比</button><button data-value="avg_pct">平均漲幅</button><button data-value="breadth">上漲家數比</button><button data-value="limit_up">漲停數</button>
+        </div>
+        <span class="muted">點格子切換日期</span>
+      </div>
+      <div class="table-wrap rot-wrap"><table id="hRotation" class="rot"></table></div>
+    </section>
+    <section class="panel hD">
+      <div class="panel-h"><b>D · 集體上漲</b>
+        <div class="seg" data-hgroup="moverMode"><button data-value="day">當日漲幅</button><button data-value="range">區間累計</button><button data-value="streak">連續上漲</button></div>
+        <label class="chk" id="hFromWrap">從 <input type="date" id="hFrom" class="field"></label>
+        <label class="chk">≥ <input type="number" id="hMoverValue" class="field num" min="1" step="1"> <span id="hMoverUnit">%</span></label>
+        <span class="muted" id="hMoverSummary"></span>
+      </div>
+      <div class="movers" id="hMovers"></div>
+    </section>
   </main>
   <div id="toast" class="toast" hidden></div>
 </body>

@@ -144,7 +144,8 @@ export const SORT_KEYS = {
   week_pct: (r) => r.week_pct,
   amplitude_pct: (r) => r.amplitude_pct,
   turnover_share: (r) => r.turnover_share,
-  breadth: (r) => r.up_count - r.down_count,
+  // live rows: advancers minus decliners; history group rows: advancer share
+  breadth: (r) => (r.up_count !== undefined ? r.up_count - r.down_count : r.breadth),
   // watchlist columns
   code: (r) => r.code,
   price: (r) => r.price,
