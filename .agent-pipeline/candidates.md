@@ -135,3 +135,11 @@
 因為原始需求是 **盤中看哪些股票上漲**，所以頂尖做法會順便做 **點個股即看近期走勢**（TradingView／Finviz 熱力圖點擊進入個股走勢）；目前的成果 **只有部分**——歷史卡片有 20 日小圖，即時卡片沒有。
 - 參考：TradingView Heatmaps https://www.tradingview.com/support/solutions/43000766446 ；Finviz heatmap https://finviz.com/blog/evolving-the-heatmap-dow-jones-nasdaq-100-russell-2000-and-more
 - 範圍：即時卡片呼叫既有 /api/history/stock/{code}（最新存檔日）畫迷你走勢；app.js；無後端改動。
+
+# 加分候選（第 11 輪）
+（Z2 1.5 < 2，列入「判斷不值得做」）
+
+## AA1. 每日市場廣度月曆（一年每個交易日一格，點擊跳到該日）
+因為原始需求是 **回溯每一天的強勢族群**，所以頂尖做法會順便做 **以日曆熱力圖呈現每天的漲跌廣度／報酬，快速找出值得回看的日子**（TradingView Seasonality Heatmap 以月／星期格子顯示報酬；thetrading.tools Market Heatmap 每日報告「多少檔收漲（% green）」；Strike Advance-Decline Heatmap 顯示漲跌家數）；目前的成果 **沒有**——要用 ◀▶ 一天天找哪天全面大漲。
+- 參考：TradingView Seasonality Heatmap https://www.tradingview.com/script/Bfz2VMKL-Seasonality-Heatmap-QuantAlgo/ ；thetrading.tools Market Heatmap https://www.thetrading.tools/market-heatmap ；Strike Advance-Decline https://www.strike.money/?p=12411
+- 範圍：store 一次 SQL 彙總每日上漲／下跌家數與等權平均漲幅；GET /api/history/calendar；歷史頁新增「F · 每日廣度月曆」（每列一個月、格子顏色＝上漲家數佔比，點擊切換日期，標示目前日期）；測試。
