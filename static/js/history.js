@@ -172,7 +172,9 @@ function renderChart() {
   if (!tree.data.length) {
     $('#hEmpty').textContent = customEmpty()
       ? '還沒有自訂族群（或族群內沒有股票）。按上方「管理族群」建立。'
-      : '這一天沒有資料。';
+      : histMin.key && st.stocks.length // bonus-22
+        ? `${MIN_FILTERS[histMin.key].label} 的條件下沒有股票。`
+        : '這一天沒有資料。';
   }
   if (st.zoom && tree.data.some((d) => d.name === st.zoom)) {
     chart.dispatchAction({ type: 'treemapRootToNode', seriesId: 'map', targetNodeId: 'ind:' + st.zoom });

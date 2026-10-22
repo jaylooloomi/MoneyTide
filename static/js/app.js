@@ -29,7 +29,8 @@ const livePeriods = { date: null, byGroup: {}, loading: false };
 // bonus-17: live grouping switch state (declared before main() runs)
 const liveGrouping = { by: 'industry', maps: {}, loading: {} };
 // bonus-24: relative-volume baseline (declared before main() runs)
-const liveRvol = { avg: null, day: null, loading: false };
+const liveRvol = { avg: null, day: null, loading: false, failedAt: 0 };
+const RVOL_RETRY_MS = 5 * 60_000;
 // bonus-23: declared up here because main() renders before the module finishes evaluating
 const liveSearch = { shown: [], listFor: null };
 try {
@@ -216,6 +217,7 @@ function renderChart(stocks) {
 
 function render() {
   const snap = state.snapshot;
+  renderRvolButton(); // bonus-24: before renderControls() so a saved 量比 is highlighted
   renderControls();
   renderStatus();
   $('#watchCount').textContent = `(${state.watchCodes.length})`;
@@ -242,6 +244,7 @@ function emptyMessage(snap, stocks) {
   if (!snap.stocks.length) return `目前沒有資料：${snap.message || '報價抓取失敗'}`;
   if (!stocks.length) {
     if (liveGrouping.by === 'custom') return '還沒有自訂族群（或族群內沒有符合篩選的股票）。到「歷史」頁按「管理族群」建立，或在個股資訊卡加入。'; // bonus-17
+    if (state.filters.min && MIN_FILTERS[state.filters.min]) return `目前篩選條件（${MIN_FILTERS[state.filters.min].label}）下沒有股票。`; // bonus-22
     if (state.filters.watchOnly) return '自選清單是空的（或不在目前的市場篩選中）。點個股資訊卡的「加入自選」來新增。';
     return '目前篩選條件下沒有股票。';
   }
@@ -860,7 +863,7 @@ function renderLiveMinSelect() {
     sel = document.createElement('select');
     sel.id = 'liveMin';
     sel.className = 'field';
-    sel.title = '只顯示成交值或市值達門檻的股票（熱力圖與產業矩陣）';
+    sel.title = '只顯示成交值或市值達門檻的股票（熱力圖、產業矩陣與漲跌家數列）';
     sel.innerHTML = Object.entries(MIN_FILTERS).map(([k, f]) => `<option value="${k}">${f.label}</option>`).join('');
     $('#includeEtf').closest('.chk').after(sel);
     sel.addEventListener('change', () => {
@@ -889,6 +892,7 @@ function renderLiveSearch(snap, shown) {
     list.id = 'liveFindList';
     $('#liveControls').append(input, list);
     input.addEventListener('keydown', (e) => {
+      if (e.isComposing || e.keyCode === 229) return; // Zhuyin / Cangjie candidate selection
       if (e.key === 'Enter') goToStock(input.value);
       else if (e.key === 'Escape') input.blur();
       e.stopPropagation(); // keep the page's Esc / shortcut handlers out of typing
@@ -926,8 +930,11 @@ function goToStock(query) {
 function applyRelVolume(stocks) {
   renderRvolButton();
   if (state.view.colorBy !== 'rvol') return stocks;
-  const today = new Date().toLocaleDateString('sv', { timeZone: 'Asia/Taipei' });
-  if (liveRvol.day !== today) loadRelVolume(today);
+  // the server's cut-off moves at 09:00 (pre-open quotes are the last session's), so key on both
+  const now = new Date();
+  const hour = Number(now.toLocaleTimeString('en-GB', { timeZone: 'Asia/Taipei', hour: '2-digit', hour12: false }));
+  const key = `${now.toLocaleDateString('sv', { timeZone: 'Asia/Taipei' })}|${hour >= 9}`;
+  if (liveRvol.day !== key && Date.now() - liveRvol.failedAt > RVOL_RETRY_MS) loadRelVolume(key);
   return withRelVolume(stocks, liveRvol.avg || {}, sessionFraction()); // same intraday rule as 量能 (bonus-16)
 }
 
@@ -940,11 +947,12 @@ async function loadRelVolume(today) {
     const body = await resp.json();
     if (!body.days) throw new Error('歷史資料尚未回補');
     liveRvol.avg = body.avg;
-    liveRvol.day = today; // only after success, so a failure is retried on the next render
+    liveRvol.day = today; // only after success
+    liveRvol.failedAt = 0;
     render();
   } catch (err) {
     toast(`量比需要歷史成交值：${err.message}`);
-    liveRvol.day = today; // do not hammer the server on every snapshot; retried tomorrow or on reload
+    liveRvol.failedAt = Date.now(); // retried after RVOL_RETRY_MS (e.g. once the backfill has run)
   } finally {
     liveRvol.loading = false;
   }

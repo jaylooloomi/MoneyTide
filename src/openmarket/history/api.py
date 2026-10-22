@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, time, timedelta
 
 from fastapi import APIRouter, HTTPException, Query
 
@@ -135,12 +135,22 @@ def create_history_router(
     # bonus-24: per-stock 20-day average turnover before today (for the live 量比 colour)
     @r.get("/stock-turnover-avg")
     def stock_turnover(days: int = Query(20, ge=1, le=60)) -> dict:
-        return stock_turnover_avg(get_store(), days, before=datetime.now(TAIPEI).date())
+        return stock_turnover_avg(get_store(), days, before=live_quote_day(get_store(), datetime.now(TAIPEI)))
 
     return r
 
 
 # ---- bonus-24: per-stock average turnover --------------------------------------------
+
+
+def live_quote_day(store: HistoryStore, now: datetime) -> date:
+    """The trading day the live snapshot shows: today from 09:00 on a weekday; before the open and
+    at weekends the quotes are still the last session's, i.e. the latest stored trading day."""
+    local = now.astimezone(TAIPEI)
+    if local.weekday() < 5 and local.time() >= time(9, 0):
+        return local.date()
+    latest = store.trading_dates(up_to=local.date(), limit=1)
+    return latest[0] if latest else local.date()
 
 
 def stock_turnover_avg(store: HistoryStore, days: int, before: date) -> dict:

@@ -349,3 +349,11 @@ def test_stock_turnover_avg_excludes_the_day_itself(store):
     assert out["avg"]["2330"] == 1e8 and "0050" in out["avg"]
     assert stock_turnover_avg(store, 3, before=date(2026, 10, 21)) is out  # cached
     assert stock_turnover_avg(store, 3, before=date(2026, 10, 14))["avg"] == {}
+
+
+def test_live_quote_day_before_open_is_the_last_session(store):
+    from openmarket.history.api import live_quote_day
+
+    assert live_quote_day(store, datetime(2026, 10, 22, 10, 0, tzinfo=TAIPEI)) == date(2026, 10, 22)
+    assert live_quote_day(store, datetime(2026, 10, 22, 8, 30, tzinfo=TAIPEI)) == date(2026, 10, 21)
+    assert live_quote_day(store, datetime(2026, 10, 25, 12, 0, tzinfo=TAIPEI)) == date(2026, 10, 21)  # Sunday
