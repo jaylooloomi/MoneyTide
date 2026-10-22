@@ -265,3 +265,14 @@ test('limit-up/down tiles get a border and a tag', async () => {
   assert.equal(n.itemStyle.borderColor, undefined);
   assert.match(leafLabelFormatter({ data: u }), /漲停$/); // tag follows today's move even when colouring by week
 });
+
+test('colour by 20-day period', async () => {
+  const { pctField, colorLimit, buildTreemapData } = await import('../../static/js/transform.js');
+  assert.equal(pctField('p20'), 'period_20');
+  assert.equal(colorLimit('p20'), 25);
+  const s = { code: 'A', name: 'A', price: 1, change: 1, change_pct: 1, week_pct: 2, period_20: 25, prev_close: 1, kind: 'stock', industry: 'X', market_cap: 1 };
+  const leaf = buildTreemapData([s], { sizeBy: 'cap', colorBy: 'p20' }).data[0].children[0];
+  assert.equal(leaf.pct, 25);
+  assert.equal(leaf.itemStyle.color, '#e0262c');
+  assert.equal(buildTreemapData([s], { sizeBy: 'cap', colorBy: 'p20' }).data[0].pct, 25); // industry header
+});

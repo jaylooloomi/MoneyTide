@@ -1,7 +1,7 @@
 // Pure functions: snapshot + UI state → filtered stocks, industry aggregates, ECharts option.
 // No DOM and no global `echarts` here, so everything is testable with `node --test`.
 
-export const COLOR_LIMITS = { today: 7, week: 15 };
+export const COLOR_LIMITS = { today: 7, week: 15, p20: 25 };
 export const LABEL_MIN_WIDTH = 44;
 export const LABEL_MIN_HEIGHT = 26;
 export const ROOT_ID = '全市場';
@@ -24,8 +24,10 @@ export function colorFor(pct, limit) {
   return hex(NEUTRAL.map((c, i) => c + (end[i] - c) * t));
 }
 
-export const pctField = (colorBy) => (colorBy === 'week' ? 'week_pct' : 'change_pct');
-export const colorLimit = (colorBy) => (colorBy === 'week' ? COLOR_LIMITS.week : COLOR_LIMITS.today);
+// colorBy: 'today' | 'week' (5 trading days) | 'p20' (20 trading days, history only — bonus-13)
+export const pctField = (colorBy) => (colorBy === 'p20' ? 'period_20' : colorBy === 'week' ? 'week_pct' : 'change_pct');
+export const colorLimit = (colorBy) =>
+  colorBy === 'p20' ? COLOR_LIMITS.p20 : colorBy === 'week' ? COLOR_LIMITS.week : COLOR_LIMITS.today;
 
 // ---- formatting ----------------------------------------------------------
 
@@ -126,6 +128,7 @@ export function aggregateIndustries(stocks) {
       name,
       change_pct: industryAverage(members, 'change_pct'),
       week_pct: industryAverage(members, 'week_pct'),
+      period_20: industryAverage(members, 'period_20'), // bonus-13 (history only; null live)
       amplitude_pct: amps.length ? amps.reduce((a, v) => a + v, 0) / amps.length : null,
       turnover_100m: turnover,
       turnover_share: totalTurnover > 0 ? (turnover / totalTurnover) * 100 : null,

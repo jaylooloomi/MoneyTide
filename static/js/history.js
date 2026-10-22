@@ -160,7 +160,7 @@ async function loadDay() {
 
 function renderChart() {
   if (!chart) return;
-  const tree = buildTreemapData(st.stocks, { sizeBy: st.sizeBy, colorBy: 'today' });
+  const tree = buildTreemapData(st.stocks, { sizeBy: st.sizeBy, colorBy: histColor.by }); // bonus-13
   chart.setOption(buildTreemapOption(tree), { notMerge: true });
   $('#hEmpty').hidden = tree.data.length > 0;
   if (!tree.data.length) {
@@ -173,6 +173,7 @@ function renderChart() {
   } else st.zoom = null;
   renderCrumb();
   renderHistBreadth(); // bonus-05
+  renderHistColorSeg(); // bonus-13
 }
 
 function zoomTo(name) {
@@ -921,3 +922,37 @@ async function onHashChange() {
   } else if (groupingChanged) await reloadGrouped();
 }
 
+
+// ---- bonus-13: colour the history heatmap by 1 / 5 / 20-day returns ---------------------
+
+const histColor = { by: 'today' };
+try {
+  const saved = JSON.parse(localStorage.getItem('openmarket.history.color') || '""');
+  if (['today', 'week', 'p20'].includes(saved)) histColor.by = saved;
+} catch {
+  /* default */
+}
+
+function renderHistColorSeg() {
+  let seg = $('#hColorSeg');
+  if (!seg) {
+    seg = document.createElement('div');
+    seg.className = 'seg';
+    seg.id = 'hColorSeg';
+    seg.title = '格子顏色依 1 日／5 日／20 日漲幅（收盤對 N 個交易日前收盤）';
+    seg.innerHTML = '<button data-value="today">顏色：1日</button><button data-value="week">5日</button><button data-value="p20">20日</button>';
+    document.querySelector('#historyView .hA .seg[data-hgroup="sizeBy"]').before(seg);
+    seg.addEventListener('click', (e) => {
+      const b = e.target.closest('button[data-value]');
+      if (!b || b.dataset.value === histColor.by) return;
+      histColor.by = b.dataset.value;
+      try {
+        localStorage.setItem('openmarket.history.color', JSON.stringify(histColor.by));
+      } catch {
+        /* ignore */
+      }
+      renderChart();
+    });
+  }
+  for (const b of seg.querySelectorAll('button')) b.classList.toggle('on', b.dataset.value === histColor.by);
+}

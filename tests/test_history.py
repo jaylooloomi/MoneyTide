@@ -230,3 +230,24 @@ def test_group_periods(store):
     assert ship["perf_3"] == pytest.approx((level - 1) * 100, rel=1e-4)
     assert ship["perf_6"] is not None and ship["perf_10"] is None  # only 6 stored days
     assert "ETF" not in p and "" not in p
+
+
+def test_day_stocks_period_20(tmp_path):
+    from datetime import timedelta
+
+    s = HistoryStore(tmp_path / "p.sqlite")
+    d0 = date(2026, 9, 1)
+    days = []
+    d = d0
+    while len(days) < 22:
+        if d.weekday() < 5:
+            days.append(d)
+        d += timedelta(days=1)
+    for i, day in enumerate(days):
+        s.save_day(day, build_rows([row("2330", 100 + i, 1)], INFOS, {}), NOW)
+    out = {x["code"]: x for x in day_stocks(s, days[-1])}
+    # 21 stored days before the last one; 20 trading days back = days[-21] (close 101)
+    assert out["2330"]["period_20"] == pytest.approx((121 / 101 - 1) * 100)
+    assert out["2330"]["week_pct"] == pytest.approx((121 / 116 - 1) * 100)
+    early = {x["code"]: x for x in day_stocks(s, days[10])}
+    assert early["2330"]["period_20"] is None

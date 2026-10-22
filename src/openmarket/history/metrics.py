@@ -10,6 +10,7 @@ from .store import HistoryStore
 
 LIMIT_PCT = 9.5  # 台股漲跌幅限制 10%，≥9.5% 視為漲停（價格跳動造成的誤差）
 WEEK_DAYS = 5
+PERIOD_20 = 20  # bonus-13: 20-trading-day colour option for the history heatmap
 
 Grouping = Callable[[dict], Iterable[str]]
 METRICS = ("avg_pct", "cap_pct", "strong_ratio", "breadth", "limit_up")
@@ -98,11 +99,14 @@ def day_stocks(store: HistoryStore, day: date, grouping: Grouping | None = None)
 
     With a grouping, `industry` is replaced by the group name and a stock that belongs to
     several groups appears once per group; stocks in no group are left out."""
-    dates = store.trading_dates(up_to=day, limit=WEEK_DAYS + 1)
+    dates = store.trading_dates(up_to=day, limit=PERIOD_20 + 1)
     if not dates or dates[0] != day:
         return []
-    rows = store.rows([day] + ([dates[-1]] if len(dates) > WEEK_DAYS else []))
-    week_ago = {r["code"]: r["close"] for r in rows.get(dates[-1], [])} if len(dates) > WEEK_DAYS else {}
+    week_day = dates[WEEK_DAYS] if len(dates) > WEEK_DAYS else None
+    p20_day = dates[PERIOD_20] if len(dates) > PERIOD_20 else None  # bonus-13
+    rows = store.rows([d for d in (day, week_day, p20_day) if d is not None])
+    week_ago = {r["code"]: r["close"] for r in rows.get(week_day, [])} if week_day else {}
+    p20_ago = {r["code"]: r["close"] for r in rows.get(p20_day, [])} if p20_day else {}
     out = []
     for r in rows[day]:
         names = grouping(r) if grouping else [r["industry"]]
@@ -114,6 +118,7 @@ def day_stocks(store: HistoryStore, day: date, grouping: Grouping | None = None)
             "code": r["code"], "name": r["name"], "market": r["market"], "industry": r["industry"],
             "kind": r["kind"], "price": close, "change": r["change"], "change_pct": r["change_pct"],
             "week_pct": (close / base - 1) * 100 if close and base else None,
+            "period_20": (close / p20_ago[r["code"]] - 1) * 100 if close and p20_ago.get(r["code"]) else None,
             "amplitude_pct": (r["high"] - r["low"]) / prev * 100 if r["high"] and r["low"] and prev else None,
             "open": r["open"], "high": r["high"], "low": r["low"], "prev_close": prev,
             "volume_lots": r["volume_shares"] / 1000 if r["volume_shares"] is not None else None,
