@@ -21,6 +21,41 @@ def industry_grouping(row: dict) -> list[str]:
     return [row["industry"]] if row.get("industry") and row.get("kind") == "stock" else []
 
 
+industry_grouping.cache_key = "industry"  # groupings with a cache_key may reuse per-day results
+
+
+def daily_group_avgs(store: HistoryStore, dates: list[date], grouping: Grouping) -> list[tuple[dict, float | None]]:
+    """Per day: ({group: equal-weight avg change_pct}, market avg over common stocks).
+
+    Past days never change, so results are cached on the store per (grouping.cache_key, day);
+    the cache is cleared whenever a day is (re)written. Groupings without cache_key are not cached."""
+    key = getattr(grouping, "cache_key", None)
+    cache = store.derived_cache
+    missing = [d for d in dates if key is None or (key, d) not in cache]
+    computed: dict[date, tuple[dict, float | None]] = {}
+    if missing:
+        rows = store.change_rows(missing)
+        for d in missing:
+            sums: dict[str, list[float]] = defaultdict(lambda: [0.0, 0])
+            msum, mcount = 0.0, 0
+            for r in rows[d]:
+                pct = r["change_pct"]
+                if pct is None:
+                    continue
+                if r.get("kind") == "stock":
+                    msum += pct
+                    mcount += 1
+                for g in grouping(r):
+                    acc = sums[g]
+                    acc[0] += pct
+                    acc[1] += 1
+            value = ({g: t / n for g, (t, n) in sums.items()}, msum / mcount if mcount else None)
+            computed[d] = value
+            if key is not None:
+                cache[(key, d)] = value
+    return [computed[d] if d in computed else cache[(key, d)] for d in dates]
+
+
 def mapping_grouping(code_to_groups: dict[str, list[str]]) -> Grouping:
     """Grouping from a code → [group names] map (custom / concept groups; any security kind)."""
     return lambda row: code_to_groups.get(row["code"], [])
@@ -238,27 +273,13 @@ def group_index(
 
     `names` picks the groups; otherwise the `top` groups by period return are returned."""
     dates = sorted(store.trading_dates(up_to=up_to, limit=days))
-    by_day = store.rows(dates)
-    # one pass per day: equal-weight average change of each group and of the whole market
+    per_day = daily_group_avgs(store, dates, grouping)
     daily: dict[str, list] = defaultdict(lambda: [None] * len(dates))
     market_daily: list = [None] * len(dates)
-    for i, d in enumerate(dates):
-        sums: dict[str, list[float]] = defaultdict(lambda: [0.0, 0])
-        msum, mcount = 0.0, 0
-        for r in by_day[d]:
-            pct = r.get("change_pct")
-            if pct is None:
-                continue
-            if r.get("kind") == "stock":
-                msum += pct
-                mcount += 1
-            for g in grouping(r):
-                acc = sums[g]
-                acc[0] += pct
-                acc[1] += 1
-        for g, (total, n) in sums.items():
-            daily[g][i] = total / n
-        market_daily[i] = msum / mcount if mcount else None
+    for i, (avgs, market) in enumerate(per_day):
+        for g, v in avgs.items():
+            daily[g][i] = v
+        market_daily[i] = market
 
     def compound(values: list) -> list:
         level, out = 1.0, []
@@ -287,18 +308,10 @@ def group_periods(store: HistoryStore, up_to: date, grouping: Grouping = industr
     """{group: {"perf_5": %, "perf_20": %, "perf_60": %}} — equal-weight daily returns compounded
     over the last N trading days up to `up_to` (same basis as the E chart). None if fewer days exist."""
     dates = sorted(store.trading_dates(up_to=up_to, limit=max(periods)))
-    rows = store.change_rows(dates)
     daily: dict[str, list] = defaultdict(lambda: [None] * len(dates))
-    for i, d in enumerate(dates):
-        sums: dict[str, list[float]] = defaultdict(lambda: [0.0, 0])
-        for r in rows[d]:
-            if r["change_pct"] is None:
-                continue
-            for g in grouping(r):
-                sums[g][0] += r["change_pct"]
-                sums[g][1] += 1
-        for g, (total, n) in sums.items():
-            daily[g][i] = total / n
+    for i, (avgs, _market) in enumerate(daily_group_avgs(store, dates, grouping)):
+        for g, v in avgs.items():
+            daily[g][i] = v
     out: dict[str, dict] = {}
     for g, values in daily.items():
         perf = {}

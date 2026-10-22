@@ -260,3 +260,23 @@ def test_daily_breadth(store):
     # stocks only (0050 ETF excluded): 2330 flat, 2454 down, 2603 up, 2609 up
     assert (last["up"], last["down"], last["count"]) == (2, 1, 4)
     assert last["avg_pct"] == pytest.approx((0 + (-1 / 96 * 100) + (10 / 140 * 100) + 10) / 4, rel=1e-4)
+
+
+def test_daily_group_avgs_cache_and_invalidation(store):
+    from openmarket.history.metrics import daily_group_avgs, group_periods, industry_grouping
+
+    days = sorted(store.trading_dates())
+    first = daily_group_avgs(store, days, industry_grouping)
+    assert ("industry", days[-1]) in store.derived_cache
+    again = daily_group_avgs(store, days, industry_grouping)
+    assert again == first
+    before = group_periods(store, days[-1], periods=(3,))["航運業"]["perf_3"]
+    # rewriting a day clears derived results, so new numbers are picked up
+    store.save_day(days[-1], build_rows([row("2603", 200, 50), row("2609", 100, 0)], INFOS, {}), NOW)
+    assert store.derived_cache == {}
+    after = group_periods(store, days[-1], periods=(3,))["航運業"]["perf_3"]
+    assert after != before
+
+    uncached = lambda r: ["X"] if r.get("kind") == "stock" else []  # no cache_key → not cached
+    daily_group_avgs(store, days, uncached)
+    assert not any(k[0] is None for k in store.derived_cache)

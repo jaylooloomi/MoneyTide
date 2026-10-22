@@ -36,6 +36,8 @@ class HistoryStore:
     def __init__(self, path: Path) -> None:
         self.path = path
         self._lock = threading.Lock()
+        # results derived from immutable past days (e.g. per-day group averages); cleared on writes
+        self.derived_cache: dict = {}
         path.parent.mkdir(parents=True, exist_ok=True)
         with self._conn() as c:
             c.executescript(SCHEMA)
@@ -55,6 +57,7 @@ class HistoryStore:
 
     def save_day(self, day: date, rows: list[dict], fetched_at: datetime) -> None:
         placeholders = ", ".join("?" for _ in range(len(COLUMNS) + 1))
+        self.derived_cache.clear()
         with self._lock, self._conn() as c:
             c.execute("DELETE FROM daily_quote WHERE date = ?", (day.isoformat(),))
             c.executemany(

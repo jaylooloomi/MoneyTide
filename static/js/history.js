@@ -136,6 +136,8 @@ async function selectDate(date) {
   $('#hFrom').value = st.from;
   $('#hBDate').textContent = st.date;
   await Promise.all([loadDay(), loadGroups_(), loadMovers()]);
+  // heavy multi-day computations start only after the day's panels are in (they compete for the server)
+  loadPeriods(); // bonus-10
   loadIndex(); // bonus-04
   renderRotationSelection();
   markCalendar(); // bonus-14
@@ -206,7 +208,7 @@ async function loadGroups_() {
     const data = await getJson(`/api/history/groups?date=${st.date}&threshold=${st.threshold}&grouping=${st.grouping}`);
     if (t !== tickets.groups) return;
     st.groups = data.groups.map((g) => ({ ...g, leader_pct: g.leader?.change_pct ?? null })); // bonus-09
-    loadPeriods(); // bonus-10
+    loadPeriods({ cachedOnly: true }); // bonus-10: fetch is deferred until A/B/D have loaded
   } catch {
     if (t !== tickets.groups) return;
     st.groups = [];
@@ -390,6 +392,7 @@ async function reloadGrouped() {
   }
   if (!st.date) return;
   await Promise.all([loadDay(), loadGroups_(), loadMovers()]);
+  loadPeriods(); // bonus-10
   loadRotation();
   loadIndex(); // bonus-04
 }
@@ -866,13 +869,14 @@ function periodCells(g) {
   return cell(g.perf_5, 8) + cell(g.perf_20, 15) + cell(g.perf_60, 25);
 }
 
-async function loadPeriods() {
+async function loadPeriods({ cachedOnly = false } = {}) {
   const key = `${st.date}|${st.grouping}`;
   const apply = (map) => {
     st.groups = st.groups.map((g) => ({ ...g, ...(map[g.name] || { perf_5: null, perf_20: null, perf_60: null }) }));
     renderGroups();
   };
   if (periodState.cache.has(key)) return apply(periodState.cache.get(key));
+  if (cachedOnly) return;
   const ticket = ++periodState.ticket;
   let data;
   try {

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import json
 import mimetypes
 from collections.abc import AsyncIterator
 from pathlib import Path
@@ -70,10 +71,17 @@ def create_app(
         if name == "industry":
             return industry_grouping
         if name == "custom":
-            return mapping_grouping(groups.mapping())
+            mapping = groups.mapping()
+            g = mapping_grouping(mapping)
+            g.cache_key = "custom:" + json.dumps(mapping, sort_keys=True, ensure_ascii=False)
+            return g
         if name == "concept":
             loader = app.state.concepts
-            return mapping_grouping(loader.mapping) if loader is not None and loader.mapping else None
+            if loader is None or not loader.mapping:
+                return None
+            g = mapping_grouping(loader.mapping)
+            g.cache_key = f"concept:{loader.saved_at.isoformat() if loader.saved_at else ''}"
+            return g
         return None
 
     @contextlib.asynccontextmanager
