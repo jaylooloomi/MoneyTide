@@ -372,6 +372,7 @@ function openCard(code) {
 }
 
 function closeCard() {
+  delete $('#card').dataset.actionsSig;
   state.cardCode = null;
   state.cardLast = null;
   renderCard();
@@ -404,7 +405,7 @@ function renderCard() {
   }
   const watched = state.watchCodes.includes(s.code);
   const dir = s.change > 0 ? 'up' : s.change < 0 ? 'down' : '';
-  el.innerHTML = `
+  const dataHtml = `
     <h3>${escapeHtml(s.code)} ${escapeHtml(s.name)} <span class="sub">${escapeHtml(s.industry)} · ${escapeHtml(s.market)}</span></h3>
     <div class="px"><b class="${dir}">${fmtPrice(s.price)}</b><span class="${dir}">${fmtChange(s.change)}（${fmtPct(s.change_pct)}）</span></div>
     <table>
@@ -414,7 +415,13 @@ function renderCard() {
       <tr><td>成交量</td><td>${fmtNum(s.volume_lots, 0)} 張</td><td>成交值</td><td>${fmtTurnover(s.turnover_100m)}</td></tr>
       <tr><td>市值</td><td colspan="3" style="text-align:right">${fmtCap(s.market_cap)}</td></tr>
     </table>
-    ${fresh ? '' : '<div class="stale-note">資料未更新（此代號不在最新報價中）</div>'}
+    ${fresh ? '' : '<div class="stale-note">資料未更新（此代號不在最新報價中）</div>'}`;
+  // The action part (buttons, group dropdown, membership line) is rebuilt only when it changes,
+  // so a snapshot poll does not close an open dropdown or re-fetch the membership line.
+  const actionsSig = JSON.stringify([s.code, watched, getGroups()]);
+  if (el.dataset.actionsSig !== actionsSig || !$('#cardData')) {
+    el.dataset.actionsSig = actionsSig;
+    el.innerHTML = `<div id="cardData"></div>
     <div class="btns">
       <button type="button" class="${watched ? '' : 'primary'}" id="cardWatch">${watched ? '★ 移除自選' : '☆ 加入自選'}</button>
       <a href="https://histock.tw/stock/${encodeURIComponent(s.code)}" target="_blank" rel="noopener noreferrer">HiStock ↗</a>
@@ -422,22 +429,24 @@ function renderCard() {
     </div>
     ${groupSelect(s.code)}
     <div class="memb" data-memb="${escapeHtml(s.code)}"></div>`;
+    $('#cardWatch').addEventListener('click', () => setWatched(s.code, !watched));
+    $('#cardClose').addEventListener('click', closeCard);
+    fillMembership(el);
+    $('#cardGroup').addEventListener('change', async (e) => {
+      const value = e.target.value;
+      e.target.value = '';
+      if (value === '__manage') return openGroupPanel();
+      if (!value) return;
+      try {
+        await addToGroup(value, s.code);
+        toast(`已加入族群「${value}」`);
+      } catch (err) {
+        toast(`加入失敗：${err.message}`);
+      }
+    });
+  }
+  $('#cardData').innerHTML = dataHtml;
   el.hidden = false;
-  $('#cardWatch').addEventListener('click', () => setWatched(s.code, !watched));
-  $('#cardClose').addEventListener('click', closeCard);
-  fillMembership(el);
-  $('#cardGroup').addEventListener('change', async (e) => {
-    const value = e.target.value;
-    e.target.value = '';
-    if (value === '__manage') return openGroupPanel();
-    if (!value) return;
-    try {
-      await addToGroup(value, s.code);
-      toast(`已加入族群「${value}」`);
-    } catch (err) {
-      toast(`加入失敗：${err.message}`);
-    }
-  });
 }
 
 // ---- toast ------------------------------------------------------------------
