@@ -90,3 +90,16 @@
 因為原始需求是 **看哪些股票集體上漲**，所以頂尖做法會順便做 **突顯漲停板個股**（台股盤勢報導普遍以漲停／跌停家數與強勢漲停股描述族群強弱）；目前的成果 **只有部分**——漲停只是顏色最深，與 +7% 以上無法區分。
 - 參考：工商時報盤勢報導（強勢漲停板）https://ctee.com.tw/news/stock/409205.html ；經濟日報（盤中跌停家數）https://money.udn.com/money/amp/story/5607/9459612
 - 範圍：transform.js 葉節點在 ≥9.5%／≤−9.5% 時加亮色邊框，標籤加「漲停／跌停」，tooltip 註明；即時與歷史 A 共用；測試。
+
+# 加分候選（第 7 輪）
+（V1 0.4 < 2，列入「判斷不值得做」）
+
+## W1. B 排行加入多期間族群報酬欄（近 5／20／60 日）
+因為原始需求是 **回溯強勢族群**，所以頂尖做法會順便做 **族群績效表同時列出 1 日／1 週／1 月／1 季報酬**（Finviz Groups「Performance」視圖：perf 1D/1W/1M/3M/6M；OpenBB CompareGroups 資料模型同樣欄位）；目前的成果 **只有部分**——B 只有當日，E 圖要另外選族群才看得到期間表現。
+- 參考：OpenBB Compare Groups https://docs.openbb.co/platform/data_models/CompareGroups ；finvizfinance group performance https://finvizfinance.readthedocs.io/en/latest/group.html
+- 範圍：metrics 以等權日報酬連乘算 5/20/60 日（沿用 group_index 的單次掃描邏輯）；/api/history/groups 附 perf_5/perf_20/perf_60；B 表多三欄可排序；測試。
+
+## W2. B 排行加「領漲股」欄
+因為原始需求是 **看哪些股票集體上漲、由誰帶動**，所以頂尖做法會順便做 **列出族群內漲幅最大的領漲股**（盤後報導普遍以「某族群由 X 領漲／強勢出擊」描述）；目前的成果 **沒有**——要點進 D 或放大 A 才知道。
+- 參考：Yahoo 股市盤後新聞（族群強勢出擊）https://tw.stock.yahoo.com/news/%E5%85%A9%E8%90%AC%E9%BB%9E%E5%9B%9E%E4%BE%86%E5%95%A6-%E5%8F%B0%E7%A9%8D%E9%9B%BB%E4%B8%8A%E6%8F%9A%E6%8B%89%E6%8A%AC%E5%8F%B0%E8%82%A1%E6%94%B6%E6%BC%B2161-68%E9%BB%9E-%E5%B1%85%E5%AE%B6%E7%94%9F%E6%B4%BB%E6%97%8F%E7%BE%A4%E5%BC%B7%E5%8B%A2%E5%87%BA%E6%93%8A-071100849.html ；鉅亨網盤後 https://www.nstock.tw/news/article_c?id=307347
+- 範圍：group_stats 加 leader（名稱、代號、漲幅）；B 表多一欄，點擊開 bonus-02 個股卡片；測試。
