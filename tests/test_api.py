@@ -43,7 +43,7 @@ def setup(tmp_path):
     static = tmp_path / "static"
     static.mkdir()
     (static / "index.html").write_text("<h1>hi</h1>", encoding="utf-8")
-    app = create_app(AppConfig(data_dir=tmp_path), poller=poller, start_polling=False, start_history=False, static_dir=static)
+    app = create_app(AppConfig(data_dir=tmp_path), poller=poller, start_polling=False, start_history=False, start_concepts=False, static_dir=static)
     with TestClient(app, base_url="http://127.0.0.1") as client:
         yield client, poller, clock
 
@@ -166,3 +166,28 @@ def test_groups_api_and_custom_history(setup):
     assert client.get("/api/history/rotation", params={"grouping": "custom"}).status_code == 200
     assert client.delete("/api/groups/散熱模組/2330").json()["groups"][0]["codes"] == []
     assert client.delete("/api/groups/散熱模組").json() == {"groups": []}
+
+
+def test_concept_grouping(tmp_path):
+    from datetime import date, datetime
+
+    from openmarket.concepts import ConceptLoader
+    from openmarket.history.ingest import build_rows
+    from openmarket.sources.official import DailyRow
+
+    async def fetch(progress):
+        return {}
+
+    loader = ConceptLoader(cache=JsonCache(tmp_path / "c.json"), fetch=fetch)
+    app = create_app(AppConfig(data_dir=tmp_path), start_polling=False, start_history=False, concepts=loader,
+                     start_concepts=False, static_dir=tmp_path / "nostatic")
+    with TestClient(app, base_url="http://127.0.0.1") as client:
+        infos = {"2330": StockInfo("2330", "台積電", "半導體業", "上市", "stock")}
+        client.app.state.history.save_day(date(2026, 10, 21), build_rows(
+            [DailyRow("2330", "台積電", "上市", 110, 10, 110, 110, 110, 1000, 1e8)], infos, {}), datetime(2026, 10, 21, 16, tzinfo=TAIPEI))
+        assert client.get("/api/concepts/status").json()["ready"] is False
+        assert client.get("/api/history/groups", params={"date": "2026-10-21", "grouping": "concept"}).status_code == 422
+        loader._set({"CoWoS": ["2330"], "AI": ["2330"]}, datetime(2026, 10, 21, tzinfo=TAIPEI))
+        g = client.get("/api/history/groups", params={"date": "2026-10-21", "grouping": "concept"}).json()
+        assert sorted(x["name"] for x in g["groups"]) == ["AI", "CoWoS"]
+        assert client.get("/api/concepts/status").json()["count"] == 2

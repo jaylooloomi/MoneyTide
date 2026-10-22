@@ -319,6 +319,32 @@ function renderGrouping() {
   }
 }
 
+let conceptTimer = null;
+async function refreshConceptStatus() {
+  let status;
+  try {
+    status = await getJson('/api/concepts/status');
+  } catch {
+    return;
+  }
+  const btn = $('#hGrouping [data-value=concept]');
+  btn.disabled = !status.ready;
+  btn.title = status.ready
+    ? `Yahoo 股市概念股分類：${status.count} 個族群（更新於 ${status.saved_at?.slice(0, 10)}）`
+    : status.running
+      ? `概念股分類下載中 ${status.done}/${status.total}…`
+      : `概念股分類尚未載入${status.error ? '：' + status.error : ''}`;
+  clearTimeout(conceptTimer);
+  if (!status.ready) {
+    conceptTimer = setTimeout(refreshConceptStatus, 10000);
+    if (st.grouping === 'concept') {
+      st.grouping = 'industry';
+      if (st.date) reloadGrouped();
+      else renderGrouping();
+    }
+  }
+}
+
 function customEmpty() {
   return st.grouping === 'custom' && !getGroups().some((g) => g.codes.length);
 }
@@ -429,7 +455,7 @@ export async function showHistory() {
     started = true;
     loadPrefs();
     $('#hThreshold').value = st.threshold;
-    if (st.grouping === 'concept') st.grouping = 'industry'; // not available yet
+    await refreshConceptStatus();
     renderGrouping();
     loadGroups().catch(() => {});
     chart = echarts.init($('#hChart'));

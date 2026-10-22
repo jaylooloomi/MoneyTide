@@ -14,6 +14,7 @@ from starlette.middleware.trustedhost import TrustedHostMiddleware
 from pydantic import BaseModel
 
 from .config import STATIC_DIR, AppConfig
+from .concepts import ConceptLoader
 from .groups import GroupStore
 from .history.api import create_history_router
 from .history.metrics import industry_grouping, mapping_grouping
@@ -23,6 +24,7 @@ from .poller import Poller, RefreshTooSoon
 from .sources.histock import fetch_quotes
 from .sources.http import make_client
 from .sources.official import fetch_tpex_day, fetch_twse_day
+from .sources.yahoo_concepts import fetch_concepts
 from .sources.shares import fetch_shares
 from .sources.twse_isin import fetch_isin
 from .storage import JsonCache, SettingsStore, Watchlist
@@ -54,6 +56,8 @@ def create_app(
     start_polling: bool = True,
     history_store: HistoryStore | None = None,
     start_history: bool = True,
+    concepts: ConceptLoader | None = None,
+    start_concepts: bool = True,
     static_dir: Path = STATIC_DIR,
     allowed_hosts: tuple[str, ...] = ("127.0.0.1", "localhost"),
 ) -> FastAPI:
@@ -67,6 +71,9 @@ def create_app(
             return industry_grouping
         if name == "custom":
             return mapping_grouping(groups.mapping())
+        if name == "concept":
+            loader = app.state.concepts
+            return mapping_grouping(loader.mapping) if loader is not None and loader.mapping else None
         return None
 
     @contextlib.asynccontextmanager
@@ -89,6 +96,15 @@ def create_app(
                 reference=lambda: (p.infos, p.shares),
             )
             tasks.append(asyncio.create_task(app.state.collector.run()))
+        if start_concepts and app.state.concepts is None:
+            if client is None:
+                client = make_client()
+            app.state.concepts = ConceptLoader(
+                cache=JsonCache(config.data_dir / "concepts_cache.json"),
+                fetch=lambda progress: fetch_concepts(client, progress=progress),
+            )
+        if start_concepts and app.state.concepts is not None:
+            tasks.append(asyncio.create_task(app.state.concepts.run()))
         try:
             yield
         finally:
@@ -103,6 +119,7 @@ def create_app(
     app.state.poller = poller
     app.state.history = history_store or HistoryStore(config.data_dir / "history.sqlite")
     app.state.collector = None
+    app.state.concepts = concepts
     app.include_router(create_history_router(lambda: app.state.history, lambda: app.state.collector, get_grouping))
     # Local-only app: reject other Host headers (DNS rebinding could otherwise reach the PUT routes).
     app.add_middleware(TrustedHostMiddleware, allowed_hosts=list(allowed_hosts))
@@ -172,6 +189,11 @@ def create_app(
             raise HTTPException(422, str(exc)) from exc
         except KeyError as exc:
             raise HTTPException(404, f"group not found: {exc.args[0]}") from exc
+
+    @app.get("/api/concepts/status")
+    def concepts_status() -> dict:
+        loader = app.state.concepts
+        return loader.status() if loader is not None else {"ready": False, "count": 0, "running": False, "done": 0, "total": 0, "error": "", "saved_at": None}
 
     @app.get("/api/groups")
     def list_groups() -> dict:
