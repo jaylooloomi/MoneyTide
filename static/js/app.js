@@ -928,7 +928,7 @@ function applyRelVolume(stocks) {
   if (state.view.colorBy !== 'rvol') return stocks;
   const today = new Date().toLocaleDateString('sv', { timeZone: 'Asia/Taipei' });
   if (liveRvol.day !== today) loadRelVolume(today);
-  return withRelVolume(stocks, liveRvol.avg || {});
+  return withRelVolume(stocks, liveRvol.avg || {}, sessionFraction()); // same intraday rule as 量能 (bonus-16)
 }
 
 async function loadRelVolume(today) {
@@ -956,7 +956,7 @@ function renderRvolButton() {
     const b = document.createElement('button');
     b.dataset.value = 'rvol';
     b.textContent = '量比';
-    b.title = '今日成交值 ÷ 前 20 個交易日平均成交值（紅＝放量、綠＝縮量；2 倍以上全紅）';
+    b.title = '今日成交值 ÷ 前 20 個交易日平均成交值（盤中依已交易時間比例換算；紅＝放量、綠＝縮量；2 倍以上全紅）';
     seg.append(b);
   }
 }

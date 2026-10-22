@@ -350,3 +350,10 @@ test('daily colour scale override', async () => {
   const tree = buildTreemapData([s], { sizeBy: 'cap', colorBy: 'today', scale: 3 });
   assert.equal(tree.data[0].children[0].itemStyle.color, colorFor(3, 3));
 });
+
+test('relative volume baseline scales with the traded share of the session', async () => {
+  const { withRelVolume } = await import('../../static/js/transform.js');
+  const [s] = withRelVolume([{ code: 'a', turnover_100m: 1 }], { a: 2e8 }, 0.5);
+  assert.equal(s.rvol, 1);
+  assert.equal(s.rvol_base, 1e8);
+});

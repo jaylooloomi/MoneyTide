@@ -457,10 +457,11 @@ export function findStock(stocks, query) {
 export const fmtRvol = (r) => (r === null || r === undefined || !Number.isFinite(r) ? '—' : `${r.toFixed(r >= 10 ? 0 : 1)}x`);
 
 /** Copies of `stocks` with rvol (ratio, null without a baseline) and rvol_pct = log2(ratio) × 100,
- *  so 2× is full red, ½× full green and 1× neutral on a ±100 colour scale. */
-export function withRelVolume(stocks, avgByCode) {
+ *  so 2× is full red, ½× full green and 1× neutral on a ±100 colour scale. `fraction` is the share
+ *  of the session already traded (app.js sessionFraction): intraday the baseline is scaled down to it. */
+export function withRelVolume(stocks, avgByCode, fraction = 1) {
   return stocks.map((s) => {
-    const base = avgByCode?.[s.code];
+    const base = avgByCode?.[s.code] > 0 ? avgByCode[s.code] * fraction : undefined;
     const now = (s.turnover_100m || 0) * 1e8;
     const rvol = base > 0 ? now / base : null;
     const rvol_pct = rvol === null ? null : rvol > 0 ? Math.log2(rvol) * 100 : -COLOR_LIMITS.rvol;
