@@ -217,3 +217,16 @@ def test_group_leader(store):
     stats = {g["name"]: g for g in group_stats(store.day_rows(date(2026, 10, 21)), threshold=5)}
     assert stats["航運業"]["leader"] == {"code": "2609", "name": "2609", "change_pct": 10.0}
     assert stats["半導體業"]["leader"]["code"] == "2330"  # 0% beats -1%
+
+
+def test_group_periods(store):
+    from openmarket.history.metrics import group_periods
+
+    p = group_periods(store, date(2026, 10, 21), periods=(3, 6, 10))
+    ship = p["航運業"]
+    exp, level = [], 1.0
+    for v in ((10 / 120 * 100) / 2, (10 / 130 * 100) / 2, (10 / 140 * 100 + 10) / 2):
+        level *= 1 + v / 100
+    assert ship["perf_3"] == pytest.approx((level - 1) * 100, rel=1e-4)
+    assert ship["perf_6"] is not None and ship["perf_10"] is None  # only 6 stored days
+    assert "ETF" not in p and "" not in p

@@ -6,7 +6,7 @@ from datetime import date
 from fastapi import APIRouter, HTTPException, Query
 
 from .ingest import HistoryCollector
-from .metrics import METRICS, Grouping, day_stocks, group_stats, industry_grouping, movers, rotation, stock_history, group_index
+from .metrics import METRICS, Grouping, day_stocks, group_stats, industry_grouping, movers, rotation, stock_history, group_index, group_periods
 from .store import HistoryStore
 
 
@@ -109,5 +109,11 @@ def create_history_router(
         g = grouping_of(grouping)
         names = [n for n in (groups or "").split(",") if n] or None
         return group_index(get_store(), days, up_to=_date(to) if to else None, names=names, top=top, grouping=g)
+
+    # bonus-10: 5/20/60-day group returns (loaded separately so the ranking renders first)
+    @r.get("/periods")
+    def periods(day: str = Query(..., alias="date"), grouping: str = "industry") -> dict:
+        g = grouping_of(grouping)
+        return {"date": day, "groups": group_periods(get_store(), _date(day), grouping=g)}
 
     return r

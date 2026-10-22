@@ -270,3 +270,41 @@ def group_index(
     else:
         series = sorted(series, key=lambda x: x["values"][-1] if x["values"] else 0, reverse=True)[:top]
     return {"dates": [d.isoformat() for d in dates], "series": series, "market": compound(market_daily)}
+
+
+# ---- bonus-10: multi-period group returns for the ranking table ----
+
+PERIODS = (5, 20, 60)
+
+
+def group_periods(store: HistoryStore, up_to: date, grouping: Grouping = industry_grouping,
+                  periods: tuple[int, ...] = PERIODS) -> dict:
+    """{group: {"perf_5": %, "perf_20": %, "perf_60": %}} — equal-weight daily returns compounded
+    over the last N trading days up to `up_to` (same basis as the E chart). None if fewer days exist."""
+    dates = sorted(store.trading_dates(up_to=up_to, limit=max(periods)))
+    rows = store.change_rows(dates)
+    daily: dict[str, list] = defaultdict(lambda: [None] * len(dates))
+    for i, d in enumerate(dates):
+        sums: dict[str, list[float]] = defaultdict(lambda: [0.0, 0])
+        for r in rows[d]:
+            if r["change_pct"] is None:
+                continue
+            for g in grouping(r):
+                sums[g][0] += r["change_pct"]
+                sums[g][1] += 1
+        for g, (total, n) in sums.items():
+            daily[g][i] = total / n
+    out: dict[str, dict] = {}
+    for g, values in daily.items():
+        perf = {}
+        for p in periods:
+            if len(values) < p:
+                perf[f"perf_{p}"] = None
+                continue
+            level = 1.0
+            for v in values[-p:]:
+                if v is not None:
+                    level *= 1 + v / 100
+            perf[f"perf_{p}"] = round((level - 1) * 100, 4)
+        out[g] = perf
+    return out

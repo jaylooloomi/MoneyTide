@@ -117,3 +117,17 @@ class HistoryStore:
                 (code, up_to.isoformat(), limit),
             ).fetchall()
         return [dict(r) for r in reversed(rows)]
+
+    def change_rows(self, days: list[date]) -> dict[date, list[dict]]:
+        """Lean variant of rows(): only the fields needed for group return calculations."""
+        if not days:
+            return {}
+        out: dict[date, list[dict]] = {d: [] for d in days}
+        marks = ", ".join("?" for _ in days)
+        with self._conn() as c:
+            for d, code, kind, industry, pct in c.execute(
+                f"SELECT date, code, kind, industry, change_pct FROM daily_quote WHERE date IN ({marks})",
+                [d.isoformat() for d in days],
+            ):
+                out[date.fromisoformat(d)].append({"code": code, "kind": kind, "industry": industry, "change_pct": pct})
+        return out

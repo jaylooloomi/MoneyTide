@@ -195,6 +195,7 @@ async function loadGroups_() {
   try {
     const data = await getJson(`/api/history/groups?date=${st.date}&threshold=${st.threshold}&grouping=${st.grouping}`);
     st.groups = data.groups.map((g) => ({ ...g, leader_pct: g.leader?.change_pct ?? null })); // bonus-09
+    loadPeriods(); // bonus-10
   } catch {
     st.groups = [];
   }
@@ -215,6 +216,7 @@ function renderGroups() {
         <td class="l">${escapeHtml(g.name)}</td>
         ${pct(g.avg_pct, 3)}
         ${pct(g.cap_pct, 3)}
+        ${periodCells(g)}
         <td class="c" style="background:${colorFor(g.strong_ratio, 30)}">${g.strong_ratio === null ? '—' : g.strong_ratio.toFixed(0) + '%'}<small class="muted"> ${g.strong_count}</small></td>
         <td>${g.limit_up || ''}</td>
         <td class="c" style="background:${breadthColor(g.up, g.down)}">${g.up}/${g.down}</td>
@@ -827,3 +829,30 @@ function addCsvButtons() {
 
 if (document.readyState !== 'loading') addCsvButtons();
 else document.addEventListener('DOMContentLoaded', addCsvButtons);
+
+// ---- bonus-10: 5/20/60-day group returns in the ranking (filled in asynchronously) ----
+
+const periodState = { ticket: 0, cache: new Map() }; // key: date|grouping → {group: perf}
+
+function periodCells(g) {
+  const cell = (v, limit) => (v === undefined ? '<td class="muted">…</td>' : `<td class="c" style="background:${colorFor(v, limit)}">${fmtPct(v)}</td>`);
+  return cell(g.perf_5, 8) + cell(g.perf_20, 15) + cell(g.perf_60, 25);
+}
+
+async function loadPeriods() {
+  const key = `${st.date}|${st.grouping}`;
+  const apply = (map) => {
+    st.groups = st.groups.map((g) => ({ ...g, ...(map[g.name] || { perf_5: null, perf_20: null, perf_60: null }) }));
+    renderGroups();
+  };
+  if (periodState.cache.has(key)) return apply(periodState.cache.get(key));
+  const ticket = ++periodState.ticket;
+  let data;
+  try {
+    data = await getJson(`/api/history/periods?date=${st.date}&grouping=${st.grouping}`);
+  } catch {
+    return;
+  }
+  periodState.cache.set(key, data.groups);
+  if (ticket === periodState.ticket && key === `${st.date}|${st.grouping}`) apply(data.groups);
+}
