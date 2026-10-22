@@ -250,3 +250,18 @@ test('toCsv quoting, numbers, BOM', async () => {
   assert.ok(csv.startsWith('\ufeff'));
   assert.equal(csv.slice(1), '名稱,值\r\n"a,b",1.2346\r\n"say ""hi""",\r\n"line\nbreak",\r\n');
 });
+
+test('limit-up/down tiles get a border and a tag', async () => {
+  const { buildTreemapData, leafLabelFormatter, limitTag } = await import('../../static/js/transform.js');
+  assert.equal(limitTag(9.96), '漲停');
+  assert.equal(limitTag(-10), '跌停');
+  assert.equal(limitTag(9.4), '');
+  assert.equal(limitTag(null), '');
+  const base = { price: 1, change: 1, week_pct: 0, prev_close: 1, kind: 'stock', industry: 'X', market_cap: 5, turnover_100m: 1 };
+  const tree = buildTreemapData([{ ...base, code: 'U', name: 'U', change_pct: 9.9 }, { ...base, code: 'N', name: 'N', change_pct: 3 }], { sizeBy: 'cap', colorBy: 'week' });
+  const [u, n] = tree.data[0].children;
+  assert.equal(u.itemStyle.borderColor, '#ffd400');
+  assert.equal(u.itemStyle.borderWidth, 2);
+  assert.equal(n.itemStyle.borderColor, undefined);
+  assert.match(leafLabelFormatter({ data: u }), /漲停$/); // tag follows today's move even when colouring by week
+});

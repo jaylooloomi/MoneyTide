@@ -209,7 +209,8 @@ export function buildTreemapData(stocks, view) {
       code: s.code,
       pct: s[field],
       stock: { ...s },
-      itemStyle: { color: colorFor(s[field], limit) },
+      itemStyle: limitStyle(s.change_pct, colorFor(s[field], limit)), // bonus-08: limit-up/down border
+      limit: limitTag(s.change_pct),
     });
   }
   const data = [];
@@ -229,7 +230,7 @@ export function buildTreemapData(stocks, view) {
 function leafTooltip(s) {
   const rows = [
     ['價格', fmtPrice(s.price)],
-    ['漲跌', `${fmtChange(s.change)}（${fmtPct(s.change_pct)}）`],
+    ['漲跌', `${fmtChange(s.change)}（${fmtPct(s.change_pct)}）${limitTag(s.change_pct) ? ' ' + limitTag(s.change_pct) : ''}`],
     ['本週', fmtPct(s.week_pct)],
     ['成交值', fmtTurnover(s.turnover_100m)],
     ['市值', fmtCap(s.market_cap)],
@@ -262,7 +263,7 @@ export function tooltipFormatter(params) {
 
 export function leafLabelFormatter(params) {
   const d = params.data || {};
-  return d.stock ? `${d.name}\n${fmtPct(d.pct)}` : '';
+  return d.stock ? `${d.name}\n${fmtPct(d.pct)}${d.limit ? ' ' + d.limit : ''}` : '';
 }
 
 export function upperLabelFormatter(params) {
@@ -372,4 +373,20 @@ export function toCsv(header, rows) {
     return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
   };
   return '\ufeff' + [header, ...rows].map((r) => r.map(cell).join(',')).join('\r\n') + '\r\n';
+}
+
+// ---- bonus-08: limit-up / limit-down tiles --------------------------------------------
+
+const LIMIT_TILE_PCT = 9.5; // 台股漲跌幅 10%；≥9.5% 視為漲停（與歷史指標同一規則）
+
+export function limitTag(pct) {
+  if (pct === null || pct === undefined || !Number.isFinite(pct)) return '';
+  return pct >= LIMIT_TILE_PCT ? '漲停' : pct <= -LIMIT_TILE_PCT ? '跌停' : '';
+}
+
+/** Fill colour plus a bright border on limit moves (so they stand out from merely +7% tiles). */
+export function limitStyle(pct, color) {
+  const tag = limitTag(pct);
+  if (!tag) return { color };
+  return { color, borderColor: tag === '漲停' ? '#ffd400' : '#3de0ff', borderWidth: 2 };
 }
