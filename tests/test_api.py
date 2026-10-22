@@ -191,3 +191,22 @@ def test_concept_grouping(tmp_path):
         g = client.get("/api/history/groups", params={"date": "2026-10-21", "grouping": "concept"}).json()
         assert sorted(x["name"] for x in g["groups"]) == ["AI", "CoWoS"]
         assert client.get("/api/concepts/status").json()["count"] == 2
+
+
+def test_membership(tmp_path):
+    from datetime import datetime
+
+    from openmarket.concepts import ConceptLoader
+
+    async def fetch(progress):
+        return {}
+
+    loader = ConceptLoader(cache=JsonCache(tmp_path / "c.json"), fetch=fetch)
+    loader._set({"CoWoS": ["2330"], "AI": ["2330", "3017"]}, datetime(2026, 10, 21, tzinfo=TAIPEI))
+    app = create_app(AppConfig(data_dir=tmp_path), start_polling=False, start_history=False, concepts=loader,
+                     start_concepts=False, static_dir=tmp_path / "nostatic")
+    with TestClient(app, base_url="http://127.0.0.1") as client:
+        client.put("/api/groups/我的")
+        client.put("/api/groups/我的/2330")
+        assert client.get("/api/membership/2330").json() == {"code": "2330", "concepts": ["CoWoS", "AI"], "custom": ["我的"]}
+        assert client.get("/api/membership/9999").json() == {"code": "9999", "concepts": [], "custom": []}

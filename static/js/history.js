@@ -534,12 +534,14 @@ async function openHistCard(code) {
       <tr><td>最高</td><td>${fmtPrice(d.high)}</td><td>最低</td><td>${fmtPrice(d.low)}</td></tr>
       <tr><td>成交量</td><td>${fmtNum(d.volume_lots, 0)} 張</td><td>市值</td><td>${fmtCap(d.market_cap)}</td></tr>
     </table>
+    <div class="memb" data-memb="${escapeHtml(d.code)}"></div>
     <div class="btns">
       <a href="https://histock.tw/stock/${encodeURIComponent(d.code)}" target="_blank" rel="noopener noreferrer">HiStock ↗</a>
       <button type="button" id="hCardClose" aria-label="關閉">✕</button>
     </div>`;
   el.hidden = false;
   $('#hCardClose').addEventListener('click', closeHistCard);
+  fillMembership(el);
   if (cardChart) cardChart.dispose();
   cardChart = echarts.init($('#hCardSpark'));
   const up = (d.period_pct ?? 0) >= 0;
@@ -561,3 +563,27 @@ async function openHistCard(code) {
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape' && cardCode && !$('#historyView').hidden) closeHistCard();
 });
+
+// ---- bonus-03: concept / custom group membership line on the card ----
+async function fillMembership(card) {
+  const slot = card.querySelector('[data-memb]');
+  if (!slot) return;
+  const code = slot.dataset.memb;
+  let m;
+  try {
+    const resp = await fetch(`/api/membership/${encodeURIComponent(code)}`, { cache: 'no-store' });
+    if (!resp.ok) return;
+    m = await resp.json();
+  } catch {
+    return;
+  }
+  if (slot.dataset.memb !== code || !slot.isConnected) return;
+  const MAX = 8;
+  const line = (label, names) => {
+    if (!names.length) return '';
+    const shown = names.slice(0, MAX).map((n) => escapeHtml(n)).join('、');
+    const more = names.length > MAX ? ` <span class="muted">等 ${names.length} 個</span>` : '';
+    return `<div title="${escapeHtml(names.join('、'))}"><span class="muted">${label}</span> ${shown}${more}</div>`;
+  };
+  slot.innerHTML = line('概念：', m.concepts) + line('自訂：', m.custom);
+}

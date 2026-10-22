@@ -195,6 +195,13 @@ def create_app(
         loader = app.state.concepts
         return loader.status() if loader is not None else {"ready": False, "count": 0, "running": False, "done": 0, "total": 0, "error": "", "saved_at": None}
 
+    # bonus-03: which concept / custom groups a stock belongs to (for the info cards)
+    @app.get("/api/membership/{code}")
+    def membership(code: str) -> dict:
+        loader = app.state.concepts
+        concepts = loader.mapping.get(code, []) if loader is not None else []
+        return {"code": code, "concepts": concepts, "custom": groups.mapping().get(code, [])}
+
     @app.get("/api/groups")
     def list_groups() -> dict:
         return {"groups": groups.all()}

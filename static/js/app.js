@@ -418,10 +418,12 @@ function renderCard() {
       <a href="https://histock.tw/stock/${encodeURIComponent(s.code)}" target="_blank" rel="noopener noreferrer">HiStock ↗</a>
       <button type="button" id="cardClose" aria-label="關閉">✕</button>
     </div>
-    ${groupSelect(s.code)}`;
+    ${groupSelect(s.code)}
+    <div class="memb" data-memb="${escapeHtml(s.code)}"></div>`;
   el.hidden = false;
   $('#cardWatch').addEventListener('click', () => setWatched(s.code, !watched));
   $('#cardClose').addEventListener('click', closeCard);
+  fillMembership(el);
   $('#cardGroup').addEventListener('change', async (e) => {
     const value = e.target.value;
     e.target.value = '';
@@ -623,3 +625,27 @@ async function main() {
 }
 
 main();
+
+// ---- bonus-03: concept / custom group membership line on the card ----
+async function fillMembership(card) {
+  const slot = card.querySelector('[data-memb]');
+  if (!slot) return;
+  const code = slot.dataset.memb;
+  let m;
+  try {
+    const resp = await fetch(`/api/membership/${encodeURIComponent(code)}`, { cache: 'no-store' });
+    if (!resp.ok) return;
+    m = await resp.json();
+  } catch {
+    return;
+  }
+  if (slot.dataset.memb !== code || !slot.isConnected) return;
+  const MAX = 8;
+  const line = (label, names) => {
+    if (!names.length) return '';
+    const shown = names.slice(0, MAX).map((n) => escapeHtml(n)).join('、');
+    const more = names.length > MAX ? ` <span class="muted">等 ${names.length} 個</span>` : '';
+    return `<div title="${escapeHtml(names.join('、'))}"><span class="muted">${label}</span> ${shown}${more}</div>`;
+  };
+  slot.innerHTML = line('概念：', m.concepts) + line('自訂：', m.custom);
+}

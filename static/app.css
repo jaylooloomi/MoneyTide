@@ -206,3 +206,5 @@ table.rot td.sel { outline: 1px solid #fff; }
 
 .seg button:disabled { opacity: .4; cursor: default; }
 .seg button:disabled:hover { background: none; color: var(--muted); }
+
+.card .memb { font-size: 12px; margin-top: 6px; line-height: 1.5; }
