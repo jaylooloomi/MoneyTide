@@ -24,6 +24,7 @@
 | 10 | B 排行多期間報酬（5／20／60 日） | 2.5（scores-07.md） | OpenBB Compare Groups（perf 1D/1W/1M/3M）https://docs.openbb.co/platform/data_models/CompareGroups ；finvizfinance group performance https://finvizfinance.readthedocs.io/en/latest/group.html | 33ec487：store.change_rows()（精簡欄位查詢）＋metrics.group_periods()（一次掃 60 日，等權日報酬連乘取 5／20／60 日）；GET /api/history/periods；B 表在平均／市值加權後新增「5日／20日／60日」三欄（上色、可排序），B 先顯示、期間欄非同步補上並依日期＋分組快取 | `uv run pytest -q tests/test_history.py` | ✅ 117 py／19 js；headless：20 日排序前三 鋼鐵 +6.92%（與 E 圖一致）；端點冷啟 6.8 s／熱 0.69 s | ① 併入 /groups 同步回傳：每次換日 B 都要等 60 日運算；② 用收盤價直接算個股區間報酬再平均：與 E 圖、C 矩陣的等權日報酬口徑不一致 |
 | 11 | 即時產業矩陣「20日」欄 | 2.0（scores-08.md） | OpenBB Compare Groups https://docs.openbb.co/platform/data_models/CompareGroups ；finvizfinance group performance https://finvizfinance.readthedocs.io/en/latest/group.html | 2220fe6：即時產業矩陣在「本週」後新增「20日」欄（最新已存交易日的 20 日等權報酬，上色、可排序；每 10 分鐘最多檢查一次是否有新交易日）；無後端改動 | App 窗格：欄位與歷史 B 一致（鋼鐵 +6.92%）、排序正常 | ✅ 117 py／19 js | ① 也加 5／60 日：即時矩陣寬度有限，5 日與 HiStock 週漲跌重複；② 盤中把今日漲幅併入 20 日：與歷史口徑不同，易混淆 |
 | 12 | 網址保存檢視狀態（可書籤） | 2.0（scores-08.md） | Finviz 嵌入地圖（保存市場、期間選擇）https://finviz.com/blog/you-can-now-embed-finviz-maps-on-your-website-blog-or-app/ ；Finviz 熱力圖網址參數 map.ashx?t=sec https://forum.optuma.com/t/heat-map/4074 | edad79e：網址同步 `#live` 或 `#history/日期/分組`（replaceState，不產生瀏覽紀錄）；開書籤直接進到該日該分組（第一次選日就用書籤日期，不會被晚到的載入覆蓋）；手動改網址（hashchange）即套用 | headless：開 #history/2026-10-16/concept → 10-16 概念股；◀ → 10-15；改成 #history/2026-10-01/industry → 套用；即時↔歷史切換網址正確 | ✅ 117 py／19 js | ① 用 query string：重新整理會打 server 新路徑、與靜態檔混用；② localStorage 記住上次日期：無法書籤或分享特定一天 |
+| 13 | 歷史熱力圖顏色期間（1／5／20 日） | 2.2（scores-10.md） | Finviz 地圖期間選擇 https://finviz.com/blog/you-can-now-embed-finviz-maps-on-your-website-blog-or-app/ ；Finviz 資料 App 期間選項 https://apptopia.com/google-play/app/com.cousinHub.HeatMap/about | ff15c8e：day_stocks 多回傳 period_20（收盤對 20 個交易日前收盤）；transform 支援 colorBy 'p20'（色階 ±25%）並彙總到產業標題；歷史 A 標題列新增「顏色：1日／5日／20日」切換（記住選擇）| `uv run pytest -q tests/test_history.py` ＋ `node --test "tests/js/*.test.js"` | ✅ 118 py／20 js；headless：2330 20 日 −3.83%（與獨立計算一致） | ① 期間改用等權日報酬連乘：個股層級應看實際價格漲幅；② 直接加 60 日：一年資料下 60 日色階仍可，但 A 標題列空間有限，先做 20 日 |
 
 ## 夜間程式碼審查修正
 獨立審查代理檢查 main..HEAD 全部程式變更（XSS、監聽器重複、非同步競態、多族群重複計數、API 邊界），回報 6 項＋1 小項，全部已修：
@@ -45,6 +46,7 @@
 - T2 創新高／創新低家數 — 1.0（scores-04.md）：歷史約 242 日不足 52 週，早期數值不完整
 - V1 盤中族群轉強桌面通知 — 0.4（scores-06.md）：超出「只看盤」需求、需權限與去重邏輯
 - 第 9 輪 TOP: none — Y1 個股同步股（相關性）1.9（scores-09.md）：加分性質、需新指標／API／卡片
+- Z2 即時卡片 20 日小圖 — 1.5（scores-10.md）：引用來源不支持、即時卡片顯示歷史資料易混淆
 
 ## 需要你決定的事
 - 即時頁的產業指標切換（等權平均漲幅／≥5% 佔比用在即時熱力圖的哪裡）：你當時沒選套用方式就改提歷史需求，所以本夜沒做；歷史頁 B 已有這些指標。要不要做、做成哪種（產業總覽模式／只換標題排序／只加矩陣欄），請決定。
