@@ -65,3 +65,16 @@
 因為原始需求是 **回溯強勢族群**，所以頂尖做法會順便做 **新高 vs 新低家數**（廣度指標：每日創 52 週新高與新低的家數，新高激增代表樂觀）；目前的成果 **沒有**——已有約一年歷史可計算。
 - 參考：Strike Money（52-week highs vs lows）https://www.strike.money/stock-market/market-breadth ；StockCharts 廣度文章 https://stockcharts.com/articles/dancing/2017/05/you-need-to-understand-what-market-breadth-offers.html ；Fidelity Market Breadth PDF https://fidelity.com/bin-public/060_www_fidelity_com/documents/MarketBreadth_01_2010_V2.pdf
 - 範圍：metrics 計算每檔截至該日 N 日最高／最低收盤；group_stats 加 new_high／new_low；B 表多兩欄；測試。
+
+# 加分候選（第 5 輪）
+（T2 1.0 < 2，列入「判斷不值得做」）
+
+## U1. 歷史頁逐日「播放」（回放）
+因為原始需求是 **回溯每一天的強勢族群**，所以頂尖做法會順便做 **從任一過去日期開始逐日播放、可暫停與調速**（MotiveWave Replay Mode：start at any past day and play back, speed up/slow down/pause；TradingView Bar Replay：選起點並調整播放速度）；目前的成果 **只有部分**——只能按 ◀▶ 一天一天手動切。
+- 參考：MotiveWave Replay Mode https://www.motivewave.com/support/replay_mode.htm ；TradingView Bar Replay https://www.tradingview.com/chart/BTCUSD/qmCyeQyK-How-To-Use-The-Bar-Replay-Tool-Rewatch-Trading-History
+- 範圍：history.js 頂列加 ▶播放／⏸、速度（1／2／4 秒）；從目前日期往後逐日 selectDate，到最新日自動停止；app.css 少量；不改後端。
+
+## U2. 匯出 CSV（B 排行、C 輪動、D 集體上漲）
+因為原始需求是 **回溯強勢族群、哪些股票集體上漲**，所以頂尖做法會順便做 **資料表匯出（XLS／CSV）供自行分析**（Goodinfo 各資料頁工具列提供 HTML／XLS／CSV／複製）；目前的成果 **沒有**。
+- 參考：Goodinfo 匯出工具列（例：https://goodinfo.tw/tw/StockCashFlow.asp 、https://goodinfo.tw/tw/DayTrading.asp）
+- 範圍：前端以目前資料組 CSV（UTF-8 BOM，Excel 可開）並觸發下載；三個區塊各一顆「CSV」；transform 純函式 toCsv 加測試。
