@@ -401,3 +401,14 @@ export function groupMembers(stocks, group) {
   const seen = new Set();
   return stocks.filter((s) => s.industry === group && !seen.has(s.code) && seen.add(s.code));
 }
+
+// ---- bonus-17: regroup live stocks by custom / concept groups ---------------------------
+
+/** One copy of each stock per group it belongs to (industry := group name); ungrouped stocks drop out. */
+export function regroupStocks(stocks, mapping) {
+  const out = [];
+  for (const s of stocks) {
+    for (const g of mapping[s.code] || []) out.push({ ...s, industry: g });
+  }
+  return out;
+}

@@ -210,6 +210,18 @@ def create_app(
         concepts = loader.mapping.get(code, []) if loader is not None else []
         return {"code": code, "concepts": concepts, "custom": groups.mapping().get(code, [])}
 
+    # bonus-17: code → group names, for regrouping the live heatmap in the browser
+    @app.get("/api/groupings/{name}")
+    def grouping_map(name: str) -> dict:
+        if name == "custom":
+            return {"name": name, "mapping": groups.mapping()}
+        if name == "concept":
+            loader = app.state.concepts
+            if loader is None or not loader.mapping:
+                raise HTTPException(404, "concept groups not loaded yet")
+            return {"name": name, "mapping": loader.mapping}
+        raise HTTPException(422, "grouping must be custom or concept")
+
     @app.get("/api/groups")
     def list_groups() -> dict:
         return {"groups": groups.all()}

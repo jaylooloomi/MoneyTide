@@ -20,12 +20,20 @@ import {
   watchRows,
 } from './transform.js';
 import { showHistory } from './history.js';
-import { breadthBarHtml, marketBreadth } from './transform.js';
+import { breadthBarHtml, marketBreadth, regroupStocks } from './transform.js';
 import { addToGroup, getGroups, loadGroups, onGroupsChange, openGroupPanel, setStockNames } from './groups.js';
 
 const SNAPSHOT_POLL_MS = 10_000;
 // bonus-11: 20-day industry returns for the live matrix (declared before main() runs)
 const livePeriods = { date: null, byGroup: {}, loading: false };
+// bonus-17: live grouping switch state (declared before main() runs)
+const liveGrouping = { by: 'industry', maps: {}, loading: {} };
+try {
+  const saved = JSON.parse(localStorage.getItem('openmarket.live.grouping') || '""');
+  if (['industry', 'custom', 'concept'].includes(saved)) liveGrouping.by = saved;
+} catch {
+  /* default */
+}
 const PREFS_KEY = 'openmarket.prefs.v1';
 
 const $ = (sel) => document.querySelector(sel);
@@ -207,7 +215,8 @@ function render() {
   renderControls();
   renderStatus();
   $('#watchCount').textContent = `(${state.watchCodes.length})`;
-  const stocks = snap ? filterStocks(snap.stocks, state.filters, state.watchCodes) : [];
+  const filtered = snap ? filterStocks(snap.stocks, state.filters, state.watchCodes) : [];
+  const stocks = applyLiveGrouping(filtered); // bonus-17: custom / concept regrouping
 
   renderChart(stocks);
   const empty = emptyMessage(snap, stocks);
@@ -217,7 +226,7 @@ function render() {
   renderNote();
   renderLegend();
   renderMatrix(withPeriods(aggregateIndustries(stocks))); // bonus-11: 20-day column
-  renderLiveBreadth(stocks); // bonus-05
+  renderLiveBreadth(filtered); // bonus-05 (each stock once, whatever the grouping)
   renderWatch(snap ? snap.stocks : []);
   renderCard();
 }
@@ -226,6 +235,7 @@ function emptyMessage(snap, stocks) {
   if (!snap || snap.status === 'loading') return '載入中…首次啟動需要抓取報價與產業分類資料。';
   if (!snap.stocks.length) return `目前沒有資料：${snap.message || '報價抓取失敗'}`;
   if (!stocks.length) {
+    if (liveGrouping.by === 'custom') return '還沒有自訂族群（或族群內沒有符合篩選的股票）。到「歷史」頁按「管理族群」建立，或在個股資訊卡加入。'; // bonus-17
     if (state.filters.watchOnly) return '自選清單是空的（或不在目前的市場篩選中）。點個股資訊卡的「加入自選」來新增。';
     return '目前篩選條件下沒有股票。';
   }
@@ -624,7 +634,10 @@ async function main() {
   }
   initChart();
   bindEvents();
-  onGroupsChange(() => renderCard());
+  onGroupsChange(() => {
+    renderCard();
+    if (liveGrouping.by === 'custom') loadLiveMapping('custom', true); // bonus-17
+  });
   loadGroups().catch(() => {});
   $('#modeSwitch').addEventListener('click', (e) => {
     const b = e.target.closest('button[data-mode]');
@@ -741,4 +754,68 @@ function volRatio(r) {
 function volRatioCell(v) {
   if (v === null || v === undefined || !Number.isFinite(v)) return '<td class="muted">—</td>';
   return `<td class="c" style="background:${colorFor((v - 1) * 50, 50)}">${v.toFixed(1)}x</td>`;
+}
+
+// ---- bonus-17: live heatmap grouping switch (官方產業／自訂族群／概念股) ----------------------
+
+
+function applyLiveGrouping(stocks) {
+  renderLiveGroupingSeg();
+  if (liveGrouping.by === 'industry') return stocks;
+  const map = liveGrouping.maps[liveGrouping.by];
+  if (!map) {
+    loadLiveMapping(liveGrouping.by);
+    return stocks; // official industries until the mapping arrives
+  }
+  return regroupStocks(stocks, map);
+}
+
+async function loadLiveMapping(name, force = false) {
+  if (liveGrouping.loading[name] || (liveGrouping.maps[name] && !force)) return;
+  liveGrouping.loading[name] = true;
+  try {
+    const resp = await fetch(`/api/groupings/${name}`, { cache: 'no-store' });
+    if (!resp.ok) throw new Error(resp.status === 404 ? '概念股分類尚未載入完成' : `HTTP ${resp.status}`);
+    liveGrouping.maps[name] = (await resp.json()).mapping;
+    render();
+  } catch (err) {
+    if (liveGrouping.by === name) {
+      toast(`無法使用此分組：${err.message}`);
+      setLiveGrouping('industry');
+    }
+  } finally {
+    liveGrouping.loading[name] = false;
+  }
+}
+
+function setLiveGrouping(by) {
+  liveGrouping.by = by;
+  state.zoomIndustry = null; // names differ between groupings
+  try {
+    localStorage.setItem('openmarket.live.grouping', JSON.stringify(by));
+  } catch {
+    /* ignore */
+  }
+  render();
+}
+
+function renderLiveGroupingSeg() {
+  let seg = $('#liveGrouping');
+  if (!seg) {
+    seg = document.createElement('div');
+    seg.className = 'seg';
+    seg.id = 'liveGrouping';
+    seg.setAttribute('role', 'group');
+    seg.setAttribute('aria-label', '族群分類');
+    seg.innerHTML = '<button data-value="industry">官方產業</button><button data-value="custom">自訂族群</button><button data-value="concept">概念股</button>';
+    $('#liveControls .seg[data-group="market"]').before(seg);
+    seg.addEventListener('click', (e) => {
+      const b = e.target.closest('button[data-value]');
+      if (b && b.dataset.value !== liveGrouping.by) setLiveGrouping(b.dataset.value);
+    });
+  }
+  for (const b of seg.querySelectorAll('button')) {
+    b.classList.toggle('on', b.dataset.value === liveGrouping.by);
+    b.setAttribute('aria-pressed', String(b.dataset.value === liveGrouping.by));
+  }
 }

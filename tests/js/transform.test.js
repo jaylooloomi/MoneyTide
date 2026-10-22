@@ -285,3 +285,12 @@ test('groupMembers filters by group and dedupes', async () => {
   assert.deepEqual(groupMembers(rows, 'X').map((r) => r.code), ['A', 'C']);
   assert.deepEqual(groupMembers(rows, 'Z'), []);
 });
+
+test('regroupStocks copies per group and drops ungrouped', async () => {
+  const { regroupStocks, buildTreemapData } = await import('../../static/js/transform.js');
+  const s = (code) => ({ code, name: code, industry: '半導體業', kind: 'stock', change: 1, change_pct: 1, price: 1, prev_close: 1, market_cap: 10 });
+  const out = regroupStocks([s('2330'), s('3017'), s('9999')], { 2330: ['AI', 'CoWoS'], 3017: ['AI'] });
+  assert.deepEqual(out.map((x) => `${x.code}:${x.industry}`), ['2330:AI', '2330:CoWoS', '3017:AI']);
+  const ids = buildTreemapData(out, { sizeBy: 'cap', colorBy: 'today' }).data.flatMap((g) => g.children.map((c) => c.id));
+  assert.equal(new Set(ids).size, 3);
+});
