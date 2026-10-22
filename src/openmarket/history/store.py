@@ -57,7 +57,6 @@ class HistoryStore:
 
     def save_day(self, day: date, rows: list[dict], fetched_at: datetime) -> None:
         placeholders = ", ".join("?" for _ in range(len(COLUMNS) + 1))
-        self.derived_cache.clear()
         with self._lock, self._conn() as c:
             c.execute("DELETE FROM daily_quote WHERE date = ?", (day.isoformat(),))
             c.executemany(
@@ -68,6 +67,7 @@ class HistoryStore:
                 "INSERT OR REPLACE INTO trading_day (date, status, fetched_at, rows) VALUES (?, 'ok', ?, ?)",
                 (day.isoformat(), fetched_at.isoformat(), len(rows)),
             )
+        self.derived_cache.clear()  # after commit, so no reader can re-cache pre-write rows
 
     def mark_no_data(self, day: date, fetched_at: datetime) -> None:
         with self._lock, self._conn() as c:
@@ -75,6 +75,7 @@ class HistoryStore:
                 "INSERT OR REPLACE INTO trading_day (date, status, fetched_at, rows) VALUES (?, 'no_data', ?, 0)",
                 (day.isoformat(), fetched_at.isoformat()),
             )
+        self.derived_cache.clear()
 
     # ---- reads -------------------------------------------------------------
 

@@ -31,7 +31,9 @@ def daily_group_avgs(store: HistoryStore, dates: list[date], grouping: Grouping)
     the cache is cleared whenever a day is (re)written. Groupings without cache_key are not cached."""
     key = getattr(grouping, "cache_key", None)
     cache = store.derived_cache
-    missing = [d for d in dates if key is None or (key, d) not in cache]
+    # take the cached values once: save_day may clear the shared dict from another thread
+    hits = {d: cache.get((key, d)) for d in dates} if key is not None else {}
+    missing = [d for d in dates if hits.get(d) is None]
     computed: dict[date, tuple[dict, float | None]] = {}
     if missing:
         rows = store.change_rows(missing)
@@ -53,7 +55,7 @@ def daily_group_avgs(store: HistoryStore, dates: list[date], grouping: Grouping)
             computed[d] = value
             if key is not None:
                 cache[(key, d)] = value
-    return [computed[d] if d in computed else cache[(key, d)] for d in dates]
+    return [computed[d] if d in computed else hits[d] for d in dates]
 
 
 def mapping_grouping(code_to_groups: dict[str, list[str]]) -> Grouping:

@@ -702,9 +702,10 @@ async function ensureLivePeriods() {
     const latest = days.days.find((d) => d.status === 'ok')?.date;
     if (latest && latest !== livePeriods.date) {
       const data = await fetch(`/api/history/periods?date=${latest}&grouping=industry`, { cache: 'no-store' }).then((r) => r.json());
-      livePeriods.date = latest;
+      const turnover = await fetch('/api/history/turnover-avg?days=20', { cache: 'no-store' }).then((r) => r.json()); // bonus-16
       livePeriods.byGroup = data.groups || {};
-      livePeriods.turnoverAvg = (await fetch('/api/history/turnover-avg?days=20', { cache: 'no-store' }).then((r) => r.json())).avg || {}; // bonus-16
+      livePeriods.turnoverAvg = turnover.avg || {};
+      livePeriods.date = latest; // only after both succeeded, so a failure is retried
       render();
     }
   } catch {

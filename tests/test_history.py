@@ -289,3 +289,19 @@ def test_group_turnover_avg(store):
     assert avg["avg"]["航運業"]["上市"] == pytest.approx(2e8)
     assert "ETF" not in avg["avg"] and "" not in avg["avg"]
     assert store.group_turnover_avg(days=3) is avg  # cached
+
+
+def test_daily_group_avgs_survives_concurrent_clear(store, monkeypatch):
+    from openmarket.history.metrics import daily_group_avgs, industry_grouping
+
+    days = sorted(store.trading_dates())
+    daily_group_avgs(store, days[:-1], industry_grouping)  # cache all but the last day
+    real = store.change_rows
+
+    def clearing(ds):
+        store.derived_cache.clear()  # a save_day on another thread lands mid-request
+        return real(ds)
+
+    monkeypatch.setattr(store, "change_rows", clearing)
+    out = daily_group_avgs(store, days, industry_grouping)
+    assert len(out) == len(days)

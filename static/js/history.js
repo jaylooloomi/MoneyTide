@@ -405,6 +405,7 @@ function bind() {
     st.grouping = b.dataset.value;
     st.zoom = null;
     idx.picked = []; // E: names picked under another grouping would not exist here
+    members.group = null; // bonus-15: the picked group may not exist in the new grouping
     savePrefs();
     reloadGrouped();
   });
