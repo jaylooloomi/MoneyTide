@@ -39,3 +39,16 @@
 因為原始需求是 **看哪些股票集體上漲、屬於哪個族群**，所以頂尖做法會順便做 **個股頁列出所屬類股／概念股**（Yahoo 股市個股頁提供「類股」「盤點概念股」入口）；目前的成果 **沒有**——即時與歷史卡片只顯示官方產業。
 - 參考：Yahoo 股市個股頁 https://tw.stock.yahoo.com/quote/6691.TW
 - 範圍：後端 GET /api/concepts/of/{code}；兩張卡片多一行「概念：…」「自訂：…」；測試。
+
+# 加分候選（第 3 輪）
+（R1 1.0 < 2，列入「判斷不值得做」）
+
+## S1. 族群累積報酬比較走勢（族群指數線圖）
+因為原始需求是 **回溯每天的強勢族群**，所以頂尖做法會順便做 **把幾個族群（與全市場）的累積報酬畫成走勢線比較**（TradingView「Cumulative Outperformance」以回顧期間累積報酬比較標的與基準；RRG 的出發點也是看相對表現而非單日）；目前的成果 **沒有**——C 輪動矩陣只有每日數字，看不出一段期間誰真正領先。
+- 參考：TradingView Cumulative Outperformance https://www.tradingview.com/script/3AZSiUEa-Cumulative-Outperformance-viResearch ；StockCharts RRG 族群輪動文章 https://articles.stockcharts.com/article/articles-rrg-2020-08-sector-rotation-from-materials-756/
+- 範圍：metrics.group_index（族群等權日報酬連乘，加全市場基準）；GET /api/history/index；歷史頁 C 區塊加「走勢比較」：勾選 B 表族群（預設前 5 名）畫線；測試。
+
+## S2. 族群相對輪動圖（RRG：RS-Ratio × RS-Momentum）
+因為原始需求是 **看族群輪動、找強勢族群**，所以頂尖做法會順便做 **相對輪動圖**（JdK RS-Ratio／RS-Momentum 四象限：領先、轉弱、落後、改善，族群順時針輪動）；目前的成果 **沒有**。
+- 參考：StockCharts RRG https://articles.stockcharts.com/article/articles-rrg-2020-08-sector-rotation-from-materials-756/ ；State Street Sector Momentum Map https://www.ssga.com/uk/en_gb/intermediary/insights/guide-to-sector-momentum-map ；LuxAlgo RRG 概念 https://www.luxalgo.com/library/concept/relative-rotation-graphs.md
+- 範圍：metrics.rrg（族群相對全市場的比值平滑、動能）；API；新區塊 ECharts 散點＋尾跡；測試。
