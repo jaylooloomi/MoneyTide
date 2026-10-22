@@ -150,3 +150,10 @@
 因為原始需求是 **回溯強勢族群、哪些股票集體上漲**，所以頂尖做法會順便做 **點族群即看其成分股清單與表現**（MarketInOut 產業排行：點產業看其股票、點類股看全部成分股；Barchart Top Performing 族群點開顯示前幾名）；目前的成果 **只有部分**——A 放大可看格子，但沒有可排序的成分股表（小型股格子太小看不到）。
 - 參考：MarketInOut Industry Growth https://www.marketinout.com/stock-screener/report/industry-growth ；Barchart Top Performing Stocks https://www.barchart.com/ca/investing-ideas/top-performing-stocks ；OpenBB Finviz groups https://docs.openbb.co/python/reference/equity/compare/groups
 - 範圍：前端以已載入的 A 資料（st.stocks，含 change_pct／week_pct／period_20／turnover）過濾該族群；B 表下方展開成分股表（可排序、點擊開個股卡片）；history.js；無後端改動；測試以 transform 純函式 groupMembers()。
+
+# 加分候選（第 13 輪）
+
+## AC1. 即時產業矩陣「量能倍數」欄（今日成交值 ÷ 近 20 日平均）
+因為原始需求是 **盤中用產業熱力圖找強勢族群**（使用者核准的版面草圖 C 就有「量能 1.8x」欄，當時規格因無歷史資料而延後），所以頂尖做法會順便做 **相對成交量（relative volume）**（TradingView heatmap 可依 relative volume 上色；Finviz 資料 App 提供 Relative Volume）；目前的成果 **沒有**——已有一年歷史可算 20 日平均。
+- 參考：TradingView Heatmaps（color by relative volume）https://www.tradingview.com/support/solutions/43000766446 ；Finviz 資料 App（Relative Volume）https://apptopia.com/google-play/app/com.cousinHub.HeatMap/about ；本專案設計草圖 .superpowers/brainstorm（產業 × 指標矩陣「量能」欄）
+- 範圍：store 單一 SQL 取近 20 交易日各產業成交值合計平均（依日期快取）；GET /api/history/turnover-avg；即時矩陣「量能」欄＝今日產業成交值 ÷ 20 日平均（上色、可排序）；測試。
