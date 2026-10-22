@@ -214,7 +214,7 @@ function render() {
   renderCrumb();
   renderNote();
   renderLegend();
-  renderMatrix(aggregateIndustries(stocks));
+  renderMatrix(withPeriods(aggregateIndustries(stocks))); // bonus-11: 20-day column
   renderLiveBreadth(stocks); // bonus-05
   renderWatch(snap ? snap.stocks : []);
   renderCard();
@@ -331,6 +331,7 @@ function renderMatrix(rows) {
         <td class="l">${escapeHtml(r.name)}</td>
         ${pctCell(r.change_pct, colorLimit('today'))}
         ${pctCell(r.week_pct, colorLimit('week'))}
+        ${pctCell(livePeriods.byGroup[r.name]?.perf_20 ?? null, 15)}
         <td>${r.amplitude_pct === null ? '—' : r.amplitude_pct.toFixed(2) + '%'}</td>
         <td>${r.turnover_share === null ? '—' : r.turnover_share.toFixed(1) + '%'}</td>
         ${breadthCell(r.up_count, r.down_count)}
@@ -670,4 +671,32 @@ function renderLiveBreadth(stocks) {
     $('#status').before(el);
   }
   el.innerHTML = breadthBarHtml(marketBreadth(stocks));
+}
+
+// ---- bonus-11: 20-day industry return in the live matrix (from stored history) ----
+const livePeriods = { date: null, byGroup: {}, loading: false };
+
+function withPeriods(rows) {
+  ensureLivePeriods();
+  return rows.map((r) => ({ ...r, perf_20: livePeriods.byGroup[r.name]?.perf_20 ?? null }));
+}
+
+async function ensureLivePeriods() {
+  if (livePeriods.loading || Date.now() - (livePeriods.checkedAt || 0) < 10 * 60 * 1000) return;
+  livePeriods.loading = true;
+  livePeriods.checkedAt = Date.now();
+  try {
+    const days = await fetch('/api/history/days', { cache: 'no-store' }).then((r) => r.json());
+    const latest = days.days.find((d) => d.status === 'ok')?.date;
+    if (latest && latest !== livePeriods.date) {
+      const data = await fetch(`/api/history/periods?date=${latest}&grouping=industry`, { cache: 'no-store' }).then((r) => r.json());
+      livePeriods.date = latest;
+      livePeriods.byGroup = data.groups || {};
+      render();
+    }
+  } catch {
+    /* history not available yet: column stays empty */
+  } finally {
+    livePeriods.loading = false;
+  }
 }
