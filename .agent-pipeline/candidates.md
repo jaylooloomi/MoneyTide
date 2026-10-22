@@ -115,3 +115,10 @@
 因為原始需求是 **回溯每一天的強勢族群**，所以頂尖做法會順便做 **把目前檢視編進網址，可分享／書籤**（Finviz map 以 map.ashx?t=sec 等參數指定地圖；提供嵌入產生器保存市場與期間選擇）；目前的成果 **沒有**——重新整理後回到最新日，無法把「10/16 概念股」存成書籤。
 - 參考：Finviz 嵌入地圖（選市場、期間）https://finviz.com/blog/you-can-now-embed-finviz-maps-on-your-website-blog-or-app/ ；Finviz 熱力圖網址 finviz.com/map.ashx?t=sec（Optuma 論壇引用）https://forum.optuma.com/t/heat-map/4074
 - 範圍：history.js 以 location.hash（#history/2026-10-16/concept）同步日期與分組，載入時讀取；app.js 模式切換寫入 hash；無後端改動。
+
+# 加分候選（第 9 輪）
+
+## Y1. 個股「同步股」：近 60 日日報酬相關性最高的股票
+因為原始需求是 **看哪些股票集體上漲**，所以頂尖做法會順便做 **找出與某檔股票走勢高度連動的同伴（co-movement／correlation peers）**（dqydj Stock Correlation Calculator 列出最相關的股票對；開源 stock-correlation 技能以一年日資料、相關係數門檻 0.6 排出 co-movement peers）；目前的成果 **沒有**——只能靠官方產業或概念股分組推測。
+- 參考：dqydj Stock Correlation Calculator https://dqydj.com/stock-correlation-calculator/ ；stock-correlation（co-movement discovery）https://skillselion.com/skills/himself65/finance-skills/stock-correlation ；MarketXLS Correlation Matrix guide https://marketxls.com/blog/correlation-matrix-stock-comparison-tool/
+- 範圍：metrics.comovers（以 change_rows 取近 60 日，對全部普通股算皮爾森相關，取前 8 檔、至少 40 個共同交易日）；GET /api/history/comovers/{code}；歷史個股卡片（bonus-02 續做）加一行「同步股」可點開；測試。
