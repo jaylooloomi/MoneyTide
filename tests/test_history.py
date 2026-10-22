@@ -280,3 +280,12 @@ def test_daily_group_avgs_cache_and_invalidation(store):
     uncached = lambda r: ["X"] if r.get("kind") == "stock" else []  # no cache_key → not cached
     daily_group_avgs(store, days, uncached)
     assert not any(k[0] is None for k in store.derived_cache)
+
+
+def test_group_turnover_avg(store):
+    avg = store.group_turnover_avg(days=3)
+    assert avg["as_of"] == "2026-10-21" and avg["days"] == 3
+    # every stock row has turnover 1e8 per day; 航運業 has 2 listed stocks
+    assert avg["avg"]["航運業"]["上市"] == pytest.approx(2e8)
+    assert "ETF" not in avg["avg"] and "" not in avg["avg"]
+    assert store.group_turnover_avg(days=3) is avg  # cached

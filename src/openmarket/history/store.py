@@ -153,3 +153,26 @@ class HistoryStore:
             {"date": d, "up": up, "down": down, "count": n, "avg_pct": round(avg, 4) if avg is not None else None}
             for d, up, down, n, avg in rows
         ]
+
+    def group_turnover_avg(self, days: int = 20) -> dict:
+        """bonus-16: average daily turnover (元) per (industry, market) over the latest `days` stored
+        trading days, common stocks only. {"as_of": date, "days": n, "avg": {industry: {market: 元}}}"""
+        dates = self.trading_dates(limit=days)
+        if not dates:
+            return {"as_of": None, "days": 0, "avg": {}}
+        key = ("turnover_avg", dates[0], days)
+        if key in self.derived_cache:
+            return self.derived_cache[key]
+        marks = ", ".join("?" for _ in dates)
+        with self._conn() as c:
+            rows = c.execute(
+                f"""SELECT industry, market, SUM(turnover_yuan) FROM daily_quote
+                    WHERE kind = 'stock' AND date IN ({marks}) GROUP BY industry, market""",
+                [d.isoformat() for d in dates],
+            ).fetchall()
+        avg: dict[str, dict[str, float]] = {}
+        for industry, market, total in rows:
+            avg.setdefault(industry, {})[market] = (total or 0) / len(dates)
+        result = {"as_of": dates[0].isoformat(), "days": len(dates), "avg": avg}
+        self.derived_cache[key] = result
+        return result

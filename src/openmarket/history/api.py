@@ -121,4 +121,9 @@ def create_history_router(
     def calendar() -> dict:
         return {"days": get_store().daily_breadth()}
 
+    # bonus-16: 20-day average turnover per industry and market (for the live 量能 column)
+    @r.get("/turnover-avg")
+    def turnover_avg(days: int = Query(20, ge=1, le=120)) -> dict:
+        return get_store().group_turnover_avg(days)
+
     return r

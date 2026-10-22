@@ -336,6 +336,7 @@ function renderMatrix(rows) {
         ${pctCell(livePeriods.byGroup[r.name]?.perf_20 ?? null, 15)}
         <td>${r.amplitude_pct === null ? '—' : r.amplitude_pct.toFixed(2) + '%'}</td>
         <td>${r.turnover_share === null ? '—' : r.turnover_share.toFixed(1) + '%'}</td>
+        ${volRatioCell(r.vol_ratio)}
         ${breadthCell(r.up_count, r.down_count)}
       </tr>`,
     )
@@ -689,7 +690,7 @@ function renderLiveBreadth(stocks) {
 
 function withPeriods(rows) {
   ensureLivePeriods();
-  return rows.map((r) => ({ ...r, perf_20: livePeriods.byGroup[r.name]?.perf_20 ?? null }));
+  return rows.map((r) => ({ ...r, perf_20: livePeriods.byGroup[r.name]?.perf_20 ?? null, vol_ratio: volRatio(r) }));
 }
 
 async function ensureLivePeriods() {
@@ -703,6 +704,7 @@ async function ensureLivePeriods() {
       const data = await fetch(`/api/history/periods?date=${latest}&grouping=industry`, { cache: 'no-store' }).then((r) => r.json());
       livePeriods.date = latest;
       livePeriods.byGroup = data.groups || {};
+      livePeriods.turnoverAvg = (await fetch('/api/history/turnover-avg?days=20', { cache: 'no-store' }).then((r) => r.json())).avg || {}; // bonus-16
       render();
     }
   } catch {
@@ -710,4 +712,32 @@ async function ensureLivePeriods() {
   } finally {
     livePeriods.loading = false;
   }
+}
+
+// ---- bonus-16: 量能 — today's industry turnover vs its 20-day daily average ---------------
+
+const SESSION_MINUTES = 270; // 09:00–13:30
+
+/** Share of the session elapsed at the snapshot time (1 after the close); intraday turnover is
+ * compared with the same share of a full day's average, the usual intraday relative-volume rule. */
+function sessionFraction() {
+  const snap = state.snapshot;
+  if (!snap?.market_open || !snap.as_of) return 1;
+  const t = new Date(snap.as_of);
+  const taipei = new Date(t.getTime() + (t.getTimezoneOffset() + 480) * 60000);
+  const minutes = (taipei.getHours() - 9) * 60 + taipei.getMinutes();
+  return Math.min(Math.max(minutes / SESSION_MINUTES, 0.05), 1);
+}
+
+function volRatio(r) {
+  const avg = livePeriods.turnoverAvg?.[r.name];
+  if (!avg || state.filters.watchOnly) return null;
+  const markets = state.filters.market === 'all' ? Object.keys(avg) : [state.filters.market];
+  const base = markets.reduce((a, m) => a + (avg[m] || 0), 0) * sessionFraction();
+  return base > 0 ? (r.turnover_100m * 1e8) / base : null;
+}
+
+function volRatioCell(v) {
+  if (v === null || v === undefined || !Number.isFinite(v)) return '<td class="muted">—</td>';
+  return `<td class="c" style="background:${colorFor((v - 1) * 50, 50)}">${v.toFixed(1)}x</td>`;
 }
