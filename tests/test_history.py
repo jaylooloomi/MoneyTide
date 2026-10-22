@@ -211,3 +211,9 @@ def test_group_index(store):
     assert len(idx["market"]) == 3
     picked = group_index(store, days=3, up_to=date(2026, 10, 21), names=["半導體業"])
     assert [s["name"] for s in picked["series"]] == ["半導體業"]
+
+
+def test_group_leader(store):
+    stats = {g["name"]: g for g in group_stats(store.day_rows(date(2026, 10, 21)), threshold=5)}
+    assert stats["航運業"]["leader"] == {"code": "2609", "name": "2609", "change_pct": 10.0}
+    assert stats["半導體業"]["leader"]["code"] == "2330"  # 0% beats -1%

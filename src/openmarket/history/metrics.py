@@ -32,6 +32,14 @@ def _cap_weight(r: dict) -> float:
     return cap / close * prev
 
 
+def _leader(members: list[dict]) -> dict | None:
+    """bonus-09: the member with the biggest gain that day (the stock leading the group)."""
+    best = max((r for r in members if r.get("change_pct") is not None), key=lambda r: r["change_pct"], default=None)
+    if best is None:
+        return None
+    return {"code": best["code"], "name": best["name"], "change_pct": best["change_pct"]}
+
+
 def group_stats(rows: list[dict], threshold: float, grouping: Grouping = industry_grouping) -> list[dict]:
     groups: dict[str, list[dict]] = defaultdict(list)
     for r in rows:
@@ -57,6 +65,7 @@ def group_stats(rows: list[dict], threshold: float, grouping: Grouping = industr
             "up": up,
             "down": down,
             "breadth": up / (up + down) * 100 if up + down else None,
+            "leader": _leader(members),  # bonus-09
             "turnover": sum(r.get("turnover_yuan") or 0 for r in members),
         })
     out.sort(key=lambda g: (g["strong_ratio"] is None, -(g["strong_ratio"] or 0), -(g["avg_pct"] or 0)))

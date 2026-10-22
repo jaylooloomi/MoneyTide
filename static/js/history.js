@@ -194,7 +194,7 @@ function renderCrumb() {
 async function loadGroups_() {
   try {
     const data = await getJson(`/api/history/groups?date=${st.date}&threshold=${st.threshold}&grouping=${st.grouping}`);
-    st.groups = data.groups;
+    st.groups = data.groups.map((g) => ({ ...g, leader_pct: g.leader?.change_pct ?? null })); // bonus-09
   } catch {
     st.groups = [];
   }
@@ -218,6 +218,7 @@ function renderGroups() {
         <td class="c" style="background:${colorFor(g.strong_ratio, 30)}">${g.strong_ratio === null ? '—' : g.strong_ratio.toFixed(0) + '%'}<small class="muted"> ${g.strong_count}</small></td>
         <td>${g.limit_up || ''}</td>
         <td class="c" style="background:${breadthColor(g.up, g.down)}">${g.up}/${g.down}</td>
+        <td class="l">${g.leader ? `<a href="#" class="leader" data-code="${escapeHtml(g.leader.code)}">${escapeHtml(g.leader.name)} <span class="${g.leader.change_pct > 0 ? 'up' : g.leader.change_pct < 0 ? 'down' : ''}">${fmtPct(g.leader.change_pct)}</span></a>` : '—'}</td>
         <td class="muted">${g.count}</td>
       </tr>`,
     )
@@ -445,6 +446,12 @@ function bind() {
     renderGroups();
   });
   $('#hGroups').tBodies[0].addEventListener('click', (e) => {
+    const leader = e.target.closest('a.leader[data-code]'); // bonus-09
+    if (leader) {
+      e.preventDefault();
+      openHistCard(leader.dataset.code);
+      return;
+    }
     const tr = e.target.closest('tr[data-group]');
     if (!tr) return;
     zoomTo(tr.dataset.group);
