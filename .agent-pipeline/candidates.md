@@ -157,3 +157,10 @@
 因為原始需求是 **盤中用產業熱力圖找強勢族群**（使用者核准的版面草圖 C 就有「量能 1.8x」欄，當時規格因無歷史資料而延後），所以頂尖做法會順便做 **相對成交量（relative volume）**（TradingView heatmap 可依 relative volume 上色；Finviz 資料 App 提供 Relative Volume）；目前的成果 **沒有**——已有一年歷史可算 20 日平均。
 - 參考：TradingView Heatmaps（color by relative volume）https://www.tradingview.com/support/solutions/43000766446 ；Finviz 資料 App（Relative Volume）https://apptopia.com/google-play/app/com.cousinHub.HeatMap/about ；本專案設計草圖 .superpowers/brainstorm（產業 × 指標矩陣「量能」欄）
 - 範圍：store 單一 SQL 取近 20 交易日各產業成交值合計平均（依日期快取）；GET /api/history/turnover-avg；即時矩陣「量能」欄＝今日產業成交值 ÷ 20 日平均（上色、可排序）；測試。
+
+# 加分候選（第 14 輪）
+
+## AD1. 即時熱力圖的族群分類切換（官方產業／自訂／概念股）— 第 2 輪 R1 縮小重提
+因為原始需求是 **產業熱力圖看盤＋強勢族群（含自訂、概念股）**，所以頂尖做法會順便做 **盤中就能以題材分組看熱力圖**（Finviz Themes 地圖；TradingView heatmap 可切分組）；目前的成果 **只有部分**——自訂／概念分組只在歷史頁。第 2 輪 R1（1.0）分高在 Effort／Blast；如今一檔多群組的格子 id、去重、分組 API 都已存在，改動縮小為：
+- 參考：Finviz「Themes」地圖 https://finviz.com/blog/tag/heatmaps/ ；TradingView Heatmaps https://www.tradingview.com/support/solutions/43000766446
+- 範圍：GET /api/groupings/{custom|concept}（代號→族群）；即時頁頂列加「分組」切換；app.js 在 filterStocks 後依對照把 industry 換成族群並複製多群組股票（沿用 transform 現有函式），矩陣與熱力圖自動跟著；測試。
