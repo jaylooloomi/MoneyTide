@@ -23,6 +23,17 @@
 | 09 | B 排行「領漲股」欄 | 2.7（scores-07.md） | Yahoo 股市盤後新聞（族群強勢出擊）；鉅亨網盤後 https://www.nstock.tw/news/article_c?id=307347 | b276f7f：group_stats 每族群附 leader（當日漲幅最大者）；B 表新增可排序的「領漲股」欄（名稱＋漲幅），點擊開個股卡片 | `uv run pytest -q tests/test_history.py` | ✅ 116 py／19 js；headless：排序與點擊開卡片（2468 華經）通過 | ① 列出前 3 名：欄位過寬、B 表已很擠；② 以成交值最大者為領頭羊：與「漲幅帶動」語意不同 |
 | 10 | B 排行多期間報酬（5／20／60 日） | 2.5（scores-07.md） | OpenBB Compare Groups（perf 1D/1W/1M/3M）https://docs.openbb.co/platform/data_models/CompareGroups ；finvizfinance group performance https://finvizfinance.readthedocs.io/en/latest/group.html | 33ec487：store.change_rows()（精簡欄位查詢）＋metrics.group_periods()（一次掃 60 日，等權日報酬連乘取 5／20／60 日）；GET /api/history/periods；B 表在平均／市值加權後新增「5日／20日／60日」三欄（上色、可排序），B 先顯示、期間欄非同步補上並依日期＋分組快取 | `uv run pytest -q tests/test_history.py` | ✅ 117 py／19 js；headless：20 日排序前三 鋼鐵 +6.92%（與 E 圖一致）；端點冷啟 6.8 s／熱 0.69 s | ① 併入 /groups 同步回傳：每次換日 B 都要等 60 日運算；② 用收盤價直接算個股區間報酬再平均：與 E 圖、C 矩陣的等權日報酬口徑不一致 |
 
+## 夜間程式碼審查修正
+獨立審查代理檢查 main..HEAD 全部程式變更（XSS、監聽器重複、非同步競態、多族群重複計數、API 邊界），回報 6 項＋1 小項，全部已修：
+| 問題 | 修正 commit |
+|---|---|
+| 歷史頁快速切換日期／分組時，A/B/C/D 舊回應覆蓋新資料（含 B 期間欄卡在「…」） | bc9e2a1 |
+| 自訂族群編輯後 5／20／60 日快取不失效 | bc9e2a1 |
+| D 在自訂／概念分組下重複計數股票 | bc9e2a1 |
+| 切換分組後 E 圖保留不存在的族群 | bc9e2a1 |
+| 族群名稱「.」「..」使 URL 路徑被正規化、「,」破壞 E 圖查詢 | 24197b3 |
+| 即時個股卡片每次輪詢重建，關掉展開中的下拉選單並重抓所屬族群 | 0f5aee4 |
+
 ## 判斷不值得做
 - C3 相對成交量（量能倍數）— 1.6（scores-01.md）：要新增指標並改 B/C，效益對影響範圍不划算
 - C4 族群連續強勢天數 — 1.5：只有新聞評論支持，無產品實作參考
