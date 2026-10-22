@@ -276,3 +276,12 @@ test('colour by 20-day period', async () => {
   assert.equal(leaf.itemStyle.color, '#e0262c');
   assert.equal(buildTreemapData([s], { sizeBy: 'cap', colorBy: 'p20' }).data[0].pct, 25); // industry header
 });
+
+test('groupMembers filters by group and dedupes', async () => {
+  const { groupMembers } = await import('../../static/js/transform.js');
+  const rows = [
+    { code: 'A', industry: 'X' }, { code: 'B', industry: 'Y' }, { code: 'A', industry: 'X' }, { code: 'C', industry: 'X' },
+  ];
+  assert.deepEqual(groupMembers(rows, 'X').map((r) => r.code), ['A', 'C']);
+  assert.deepEqual(groupMembers(rows, 'Z'), []);
+});

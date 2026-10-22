@@ -14,7 +14,7 @@ import {
   fmtTurnover,
   sortRows,
 } from './transform.js';
-import { toCsv } from './transform.js';
+import { groupMembers, limitTag, toCsv } from './transform.js';
 import { breadthBarHtml, breadthShare, marketBreadth } from './transform.js';
 import { getGroups, loadGroups, onGroupsChange, openGroupPanel, setStockNames } from './groups.js';
 
@@ -178,6 +178,7 @@ function renderChart() {
   renderCrumb();
   renderHistBreadth(); // bonus-05
   renderHistColorSeg(); // bonus-13
+  if (members.group) renderMembers(); // bonus-15
 }
 
 function zoomTo(name) {
@@ -1025,3 +1026,67 @@ function markCalendar() {
     el.style.outline = el.dataset.date === st.date ? '2px solid #fff' : '';
   }
 }
+
+// ---- bonus-15: member table for the group picked in B ---------------------------------
+
+const members = { group: null, sort: { key: 'change_pct', dir: 'desc' } };
+
+function membersBox() {
+  let box = $('#hMembers');
+  if (box) return box;
+  box = document.createElement('div');
+  box.id = 'hMembers';
+  box.hidden = true;
+  box.style.cssText = 'border-top:1px solid var(--line);max-height:230px;overflow:auto;flex-shrink:0';
+  document.querySelector('#historyView .hB').appendChild(box);
+  box.addEventListener('click', (e) => {
+    const th = e.target.closest('th[data-msort]');
+    if (th) {
+      const key = th.dataset.msort;
+      members.sort = members.sort.key === key
+        ? { key, dir: members.sort.dir === 'asc' ? 'desc' : 'asc' }
+        : { key, dir: key === 'name' || key === 'code' ? 'asc' : 'desc' };
+      renderMembers();
+      return;
+    }
+    if (e.target.closest('#hMembersClose')) {
+      members.group = null;
+      renderMembers();
+      return;
+    }
+    const tr = e.target.closest('tr[data-code]');
+    if (tr) openHistCard(tr.dataset.code);
+  });
+  return box;
+}
+
+function renderMembers() {
+  const box = membersBox();
+  if (!members.group) {
+    box.hidden = true;
+    return;
+  }
+  const list = sortRows(groupMembers(st.stocks, members.group), members.sort.key, members.sort.dir);
+  const th = (key, label, cls = '') => {
+    const aria = members.sort.key === key ? ` aria-sort="${members.sort.dir === 'asc' ? 'ascending' : 'descending'}"` : '';
+    return `<th data-msort="${key}" class="${cls}"${aria}>${label}</th>`;
+  };
+  const cell = (v, limit) => `<td class="c" style="background:${colorFor(v, limit)}">${fmtPct(v)}</td>`;
+  box.innerHTML = `<div class="panel-h" style="position:sticky;top:0;background:var(--panel);z-index:2"><b>${escapeHtml(members.group)}</b>
+      <span class="muted">${list.length} 檔成分股 · ${escapeHtml(st.date || '')} · 點股票看卡片</span><span class="spacer"></span>
+      <button type="button" class="icon" id="hMembersClose" aria-label="關閉">✕</button></div>
+    <table class="grid"><thead><tr>${th('code', '代號', 'l')}${th('name', '名稱', 'l')}${th('change_pct', '漲幅')}${th('week_pct', '5日')}${th('period_20', '20日')}${th('turnover_100m', '成交值')}</tr></thead>
+    <tbody>${list
+      .map((s) => `<tr data-code="${escapeHtml(s.code)}"><td class="l">${escapeHtml(s.code)}</td><td class="l">${escapeHtml(s.name)}${limitTag(s.change_pct) ? ` <span class="muted">${limitTag(s.change_pct)}</span>` : ''}</td>${cell(s.change_pct, 7)}${cell(s.week_pct, 15)}${cell(s.period_20, 25)}<td>${fmtTurnover(s.turnover_100m)}</td></tr>`)
+      .join('')}</tbody></table>`;
+  box.hidden = false;
+}
+
+// pick a group from B (the existing B click handler also zooms A to it)
+document.addEventListener('click', (e) => {
+  const tr = e.target.closest('#hGroups tbody tr[data-group]');
+  if (!tr || e.target.closest('a.leader')) return;
+  members.group = tr.dataset.group;
+  renderMembers();
+}, true); // capture: the B handler re-renders the rows, detaching the clicked one
+

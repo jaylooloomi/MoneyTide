@@ -393,3 +393,11 @@ export function limitStyle(pct, color) {
   if (!tag) return { color };
   return { color, borderColor: tag === '漲停' ? '#ffd400' : '#3de0ff', borderWidth: 2 };
 }
+
+// ---- bonus-15: members of one group for the history member table ----------------------
+
+/** Stocks whose (possibly regrouped) industry equals `group`, deduplicated by code. */
+export function groupMembers(stocks, group) {
+  const seen = new Set();
+  return stocks.filter((s) => s.industry === group && !seen.has(s.code) && seen.add(s.code));
+}
