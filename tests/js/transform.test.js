@@ -243,3 +243,10 @@ test('market breadth', async () => {
   assert.equal(breadthBarHtml(marketBreadth([])), '');
   assert.equal(marketBreadth([s(0, 0, 0)]).upTurnoverShare, null);
 });
+
+test('toCsv quoting, numbers, BOM', async () => {
+  const { toCsv } = await import('../../static/js/transform.js');
+  const csv = toCsv(['名稱', '值'], [['a,b', 1.234567], ['say "hi"', null], ['line\nbreak', NaN]]);
+  assert.ok(csv.startsWith('\ufeff'));
+  assert.equal(csv.slice(1), '名稱,值\r\n"a,b",1.2346\r\n"say ""hi""",\r\n"line\nbreak",\r\n');
+});

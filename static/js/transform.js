@@ -361,3 +361,15 @@ export function breadthBarHtml(b) {
     `<span class="up">▲${b.up}</span> <span class="muted">${b.flat}</span> <span class="down">▼${b.down}</span>` +
     `<span class="muted"> · 漲停 ${b.limitUp} 跌停 ${b.limitDown} · 漲股量 ${share}</span></span>`;
 }
+
+// ---- bonus-07: CSV export ----------------------------------------------------------
+
+/** rows: array of arrays. RFC 4180 quoting; UTF-8 BOM so Excel opens Chinese text correctly. */
+export function toCsv(header, rows) {
+  const cell = (v) => {
+    if (v === null || v === undefined) return '';
+    const s = typeof v === 'number' ? (Number.isFinite(v) ? String(Math.round(v * 10000) / 10000) : '') : String(v);
+    return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  };
+  return '\ufeff' + [header, ...rows].map((r) => r.map(cell).join(',')).join('\r\n') + '\r\n';
+}

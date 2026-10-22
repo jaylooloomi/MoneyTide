@@ -14,6 +14,7 @@ import {
   fmtTurnover,
   sortRows,
 } from './transform.js';
+import { toCsv } from './transform.js';
 import { breadthBarHtml, marketBreadth } from './transform.js';
 import { getGroups, loadGroups, onGroupsChange, openGroupPanel, setStockNames } from './groups.js';
 
@@ -40,6 +41,7 @@ const st = {
 };
 
 let chart = null;
+const csvData = { rotation: null, movers: null }; // bonus-07: last data shown in C / D
 let started = false;
 let daysTimer = null;
 
@@ -248,6 +250,7 @@ async function loadRotation() {
     table.innerHTML = '';
     return;
   }
+  csvData.rotation = data; // bonus-07
   const head = data.dates.map((d) => `<th data-date="${d}" title="${d}">${d.slice(5).replace('-', '/')}</th>`).join('');
   const rows = data.groups
     .map(
@@ -289,6 +292,7 @@ async function loadMovers() {
     $('#hMovers').innerHTML = '<p class="hint">無法載入。</p>';
     return;
   }
+  csvData.movers = data; // bonus-07
   const total = data.groups.reduce((a, g) => a + g.stocks.length, 0);
   $('#hMoverSummary').textContent = `${total} 檔，${data.groups.length} 個族群`;
   const unit = mode === 'streak' ? '天' : '%';
@@ -753,3 +757,66 @@ function stopReplay() {
 
 document.addEventListener('DOMContentLoaded', replayControls);
 if (document.readyState !== 'loading') replayControls();
+
+// ---- bonus-07: CSV export of B / C / D ----------------------------------------------
+
+const GROUPING_LABEL = { industry: '官方產業', custom: '自訂族群', concept: '概念股' };
+
+function downloadCsv(name, header, rows) {
+  const blob = new Blob([toCsv(header, rows)], { type: 'text/csv;charset=utf-8' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = name;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+
+const CSV_EXPORTS = {
+  hB: () => [
+    `強勢族群_${st.date}_${GROUPING_LABEL[st.grouping]}.csv`,
+    ['日期', '族群', '平均漲幅%', '市值加權%', `漲幅≥${st.threshold}%家數`, `≥${st.threshold}%佔比%`, '漲停', '跌停', '上漲', '下跌', '家數', '成交值(元)'],
+    sortRows(st.groups, st.groupSort.key, st.groupSort.dir).map((g) => [
+      st.date, g.name, g.avg_pct, g.cap_pct, g.strong_count, g.strong_ratio, g.limit_up, g.limit_down, g.up, g.down, g.count, g.turnover,
+    ]),
+  ],
+  hC: () => {
+    const d = csvData.rotation;
+    if (!d) return null;
+    return [
+      `族群輪動_${d.metric}_${d.dates[d.dates.length - 1] || ''}_${GROUPING_LABEL[st.grouping]}.csv`,
+      ['族群', ...d.dates],
+      d.groups.map((g) => [g.name, ...g.values]),
+    ];
+  },
+  hD: () => {
+    const d = csvData.movers;
+    if (!d) return null;
+    return [
+      `集體上漲_${d.mode}_${st.date}_${GROUPING_LABEL[st.grouping]}.csv`,
+      ['日期', '族群', '代號', '名稱', d.label || '數值', '當日漲幅%', '收盤'],
+      d.groups.flatMap((g) => g.stocks.map((x) => [st.date, g.name, x.code, x.name, x.value, x.change_pct, x.close])),
+    ];
+  },
+};
+
+function addCsvButtons() {
+  for (const [cls, build] of Object.entries(CSV_EXPORTS)) {
+    const head = document.querySelector(`#historyView .${cls} .panel-h`);
+    if (!head || head.querySelector('.csv-btn')) continue;
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'icon wide csv-btn';
+    b.textContent = 'CSV';
+    b.title = '匯出目前顯示的資料（Excel 可開）';
+    b.addEventListener('click', () => {
+      const out = build();
+      if (out && out[2].length) downloadCsv(...out);
+    });
+    head.appendChild(b);
+  }
+}
+
+if (document.readyState !== 'loading') addCsvButtons();
+else document.addEventListener('DOMContentLoaded', addCsvButtons);
