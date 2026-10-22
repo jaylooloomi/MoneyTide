@@ -28,7 +28,7 @@
 | 14 | 每日市場廣度月曆 | 2.4（scores-11.md） | TradingView Seasonality Heatmap https://www.tradingview.com/script/Bfz2VMKL-Seasonality-Heatmap-QuantAlgo/ ；thetrading.tools Market Heatmap（% closed higher）https://www.thetrading.tools/market-heatmap ；Strike Advance-Decline https://www.strike.money/?p=12411 | 75525de：store.daily_breadth()（單一 SQL 彙總每日漲跌家數與平均漲幅，0.6 s）；GET /api/history/calendar；歷史頁新增「F · 每日廣度月曆」：每列一個月、每格一個交易日、顏色＝上漲家數佔比，tooltip 顯示家數與平均漲幅，點格子切換日期（停止播放、同步網址），目前日期加白框 | `uv run pytest -q tests/test_history.py` | ✅ 119 py／20 js；headless：242 格、13 個月，點 2025-11-04 → 日期與網址切換 | ① 依星期對齊的 GitHub 式日曆：一年 52 欄太寬、交易日不連續留白多；② 顏色用指數漲幅：本專案無指數資料，廣度更貼近「集體上漲」 |
 
 ## 夜間程式碼審查修正
-獨立審查代理檢查 main..HEAD 全部程式變更（XSS、監聽器重複、非同步競態、多族群重複計數、API 邊界），回報 6 項＋1 小項，全部已修：
+獨立審查代理分兩輪檢查程式變更（XSS、監聽器重複、非同步競態、多族群重複計數、API 邊界、主控台錯誤）：第一輪 6 項＋1 小項、第二輪 3 項，全部已修：
 | 問題 | 修正 commit |
 |---|---|
 | 歷史頁快速切換日期／分組時，A/B/C/D 舊回應覆蓋新資料（含 B 期間欄卡在「…」） | bc9e2a1 |
@@ -37,6 +37,9 @@
 | 切換分組後 E 圖保留不存在的族群 | bc9e2a1 |
 | 族群名稱「.」「..」使 URL 路徑被正規化、「,」破壞 E 圖查詢 | 24197b3 |
 | 即時個股卡片每次輪詢重建，關掉展開中的下拉選單並重抓所屬族群 | 0f5aee4 |
+| 第二輪審查（bonus-11–14）：每次載入主控台 ReferenceError（livePeriods 宣告順序） | 97913af |
+| 第二輪審查：已開啟的分頁貼上書籤網址（#history/… 或 #live）不會切換模式 | 97913af |
+| 第二輪審查：較慢且失敗的舊請求會清空已載入的新資料（A／B） | 97913af |
 
 ## 判斷不值得做
 - C3 相對成交量（量能倍數）— 1.6（scores-01.md）：要新增指標並改 B/C，效益對影響範圍不划算
