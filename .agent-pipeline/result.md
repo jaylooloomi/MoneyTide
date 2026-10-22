@@ -32,7 +32,7 @@
 | 18 | B 排行名次變化（▲▼） | 3.3（scores-16.md） | TradingView Sector Rotation Dashboard https://www.tradingview.com/script/dAOscEaH-Sector-Rotation-Dashboard-v1/ ；Factor Investor Report（名次變動）https://factorinvestor.substack.com/p/factor-investor-report-april-2021 | 06603f6：metrics.group_rank_change()（依等權平均漲幅排名、與前一交易日比，沿用每日快取）；/api/history/groups 每族群附 rank／rank_change；B 表在族群名後新增「名次」欄（今日名次＋▲n／▼n，可依變化排序） | `uv run pytest -q tests/test_history.py` | ✅ 124 py／22 js；headless：10/22 名次上升最多 貿易百貨 ▲28 | ① 依 B 目前排序欄位動態算名次：每次排序都要回 server、口徑不固定；② 用強勢佔比排名：小族群常 0% 同名次、變動無意義 |
 
 ## 夜間程式碼審查修正
-獨立審查代理分兩輪檢查程式變更（XSS、監聽器重複、非同步競態、多族群重複計數、API 邊界、主控台錯誤）：第一輪 6 項＋1 小項、第二輪 3 項、第三輪 3 項，另有夜間實測發現的換日延遲，全部已修：
+獨立審查代理分兩輪檢查程式變更（XSS、監聽器重複、非同步競態、多族群重複計數、API 邊界、主控台錯誤）：第一輪 6 項＋1 小項、第二輪 3 項、第三輪 3 項、第四輪 3 項，另有夜間實測發現的換日延遲，全部已修：
 | 問題 | 修正 commit |
 |---|---|
 | 歷史頁快速切換日期／分組時，A/B/C/D 舊回應覆蓋新資料（含 B 期間欄卡在「…」） | bc9e2a1 |
@@ -47,6 +47,7 @@
 | 夜間實測：換日要 7–23 秒（5／20／60 日欄與 E 圖的重運算搶 GIL，拖慢當日面板）→ 每日族群平均值依分組快取、期間欄延後載入，降到約 0.65 秒 | ced1df6 |
 | 第三輪審查：collector 存檔時清快取與請求競態 → KeyError 500（快取改一次讀出、commit 後才清） | 3760c43 |
 | 第三輪審查：切換分組後成分股表仍顯示舊族群；量能欄抓取失敗後整天不重試 | 3760c43 |
+| 第四輪審查（bonus-17／18）：概念股暫時未就緒時覆寫掉已存的分組偏好；自訂族群名稱與產業同名時誤顯示產業的 20日／量能；編輯族群時與進行中請求的競態 | d92b001 |
 
 ## 判斷不值得做
 - C3 相對成交量（量能倍數）— 1.6（scores-01.md）：要新增指標並改 B/C，效益對影響範圍不划算
