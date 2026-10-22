@@ -210,3 +210,12 @@ test('breadth share and colour', async () => {
   assert.equal(breadthColor(4, 4), colorFor(0, 50)); // even → grey
   assert.equal(breadthColor(0, 0), '#2e2e2e');
 });
+
+test('treemap ids stay unique when a stock is in several groups', async () => {
+  const { buildTreemapData } = await import('../../static/js/transform.js');
+  const s = { code: '3017', name: '奇鋐', price: 1, change: 1, change_pct: 1, week_pct: 1, prev_close: 1, turnover_100m: 1, kind: 'stock', market_cap: 10 };
+  const tree = buildTreemapData([{ ...s, industry: '散熱' }, { ...s, industry: 'AI' }], { sizeBy: 'cap', colorBy: 'today' });
+  const ids = tree.data.flatMap((g) => g.children.map((c) => c.id));
+  assert.equal(new Set(ids).size, 2);
+  assert.ok(ids.includes('stk:3017'));
+});

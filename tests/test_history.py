@@ -166,3 +166,19 @@ def test_run_once_resumes_and_waits_for_reference(tmp_path):
     assert first > 200 and c.state.done == c.state.total and not c.state.running
     asyncio.run(c.run_once())
     assert len(twse.calls) == first + 1  # only today (not_ready) is retried
+
+
+def test_custom_grouping_multi_membership_and_any_kind(store):
+    from openmarket.history.metrics import mapping_grouping
+
+    grouping = mapping_grouping({"2603": ["貨櫃", "我的觀察"], "2609": ["貨櫃"], "0050": ["我的觀察"]})
+    stats = {g["name"]: g for g in group_stats(store.day_rows(date(2026, 10, 21)), 5, grouping)}
+    assert stats["貨櫃"]["count"] == 2 and stats["我的觀察"]["count"] == 2  # ETF allowed in custom groups
+    assert "半導體業" not in stats
+    rot = rotation(store, days=2, metric="avg_pct", threshold=5, grouping=grouping)
+    assert {g["name"] for g in rot["groups"]} == {"貨櫃", "我的觀察"}
+    stocks = day_stocks(store, date(2026, 10, 21), grouping)
+    assert sorted((s["code"], s["industry"]) for s in stocks) == [
+        ("0050", "我的觀察"), ("2603", "我的觀察"), ("2603", "貨櫃"), ("2609", "貨櫃")]
+    mv = movers(store, date(2026, 10, 21), "day", 5, grouping=grouping)
+    assert {g["name"] for g in mv["groups"]} == {"貨櫃", "我的觀察"}

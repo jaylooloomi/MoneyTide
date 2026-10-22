@@ -191,6 +191,7 @@ export function buildTreemapData(stocks, view) {
   const groups = new Map();
   let hiddenNoSize = 0;
   let hiddenEtf = 0;
+  const seen = new Set();
   for (const s of stocks) {
     const size = sizeOf(s, view.sizeBy);
     if (!(size > 0)) {
@@ -200,7 +201,8 @@ export function buildTreemapData(stocks, view) {
     }
     if (!groups.has(s.industry)) groups.set(s.industry, []);
     groups.get(s.industry).push({
-      id: 'stk:' + s.code,
+      // a stock can sit in several custom/concept groups: later copies get a group suffix
+      id: seen.has(s.code) ? `stk:${s.code}@${s.industry}` : (seen.add(s.code), 'stk:' + s.code),
       name: s.name,
       value: size,
       code: s.code,

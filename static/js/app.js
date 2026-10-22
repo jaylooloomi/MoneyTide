@@ -20,6 +20,7 @@ import {
   watchRows,
 } from './transform.js';
 import { showHistory } from './history.js';
+import { addToGroup, getGroups, loadGroups, onGroupsChange, openGroupPanel, setStockNames } from './groups.js';
 
 const SNAPSHOT_POLL_MS = 10_000;
 const PREFS_KEY = 'openmarket.prefs.v1';
@@ -95,6 +96,7 @@ async function pollSnapshot() {
     if (!resp.ok || !body) throw new Error(`HTTP ${resp.status}`);
     state.etag = resp.headers.get('ETag');
     state.snapshot = body;
+    setStockNames(body.stocks);
     render();
   } catch (err) {
     renderStatus(`無法連線到本機伺服器（${err.message}）`);
@@ -373,6 +375,17 @@ function closeCard() {
   renderCard();
 }
 
+function groupSelect(code) {
+  const groups = getGroups();
+  const member = groups.filter((g) => g.codes.includes(code)).map((g) => g.name);
+  const options = groups
+    .filter((g) => !g.codes.includes(code))
+    .map((g) => `<option value="${escapeHtml(g.name)}">${escapeHtml(g.name)}</option>`)
+    .join('');
+  const label = member.length ? `已在：${member.map(escapeHtml).join('、')}` : '加入自訂族群…';
+  return `<select class="field" id="cardGroup" aria-label="加入自訂族群"><option value="">${label}</option>${options}<option value="__manage">管理族群…</option></select>`;
+}
+
 function renderCard() {
   const el = $('#card');
   if (!state.cardCode) {
@@ -404,10 +417,23 @@ function renderCard() {
       <button type="button" class="${watched ? '' : 'primary'}" id="cardWatch">${watched ? '★ 移除自選' : '☆ 加入自選'}</button>
       <a href="https://histock.tw/stock/${encodeURIComponent(s.code)}" target="_blank" rel="noopener noreferrer">HiStock ↗</a>
       <button type="button" id="cardClose" aria-label="關閉">✕</button>
-    </div>`;
+    </div>
+    ${groupSelect(s.code)}`;
   el.hidden = false;
   $('#cardWatch').addEventListener('click', () => setWatched(s.code, !watched));
   $('#cardClose').addEventListener('click', closeCard);
+  $('#cardGroup').addEventListener('change', async (e) => {
+    const value = e.target.value;
+    e.target.value = '';
+    if (value === '__manage') return openGroupPanel();
+    if (!value) return;
+    try {
+      await addToGroup(value, s.code);
+      toast(`已加入族群「${value}」`);
+    } catch (err) {
+      toast(`加入失敗：${err.message}`);
+    }
+  });
 }
 
 // ---- toast ------------------------------------------------------------------
@@ -578,6 +604,8 @@ async function main() {
   }
   initChart();
   bindEvents();
+  onGroupsChange(() => renderCard());
+  loadGroups().catch(() => {});
   $('#modeSwitch').addEventListener('click', (e) => {
     const b = e.target.closest('button[data-mode]');
     if (b) setMode(b.dataset.mode);

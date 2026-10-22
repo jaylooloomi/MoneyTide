@@ -6,7 +6,7 @@ from datetime import date
 from fastapi import APIRouter, HTTPException, Query
 
 from .ingest import HistoryCollector
-from .metrics import METRICS, day_stocks, group_stats, movers, rotation
+from .metrics import METRICS, Grouping, day_stocks, group_stats, industry_grouping, movers, rotation
 from .store import HistoryStore
 
 
@@ -17,8 +17,21 @@ def _date(text: str) -> date:
         raise HTTPException(422, f"invalid date {text!r}, expected YYYY-MM-DD") from exc
 
 
-def create_history_router(get_store: Callable[[], HistoryStore], get_collector: Callable[[], HistoryCollector | None]) -> APIRouter:
+GROUPINGS = ("industry", "custom", "concept")
+
+
+def create_history_router(
+    get_store: Callable[[], HistoryStore],
+    get_collector: Callable[[], HistoryCollector | None],
+    get_grouping: Callable[[str], Grouping | None] = lambda name: industry_grouping if name == "industry" else None,
+) -> APIRouter:
     r = APIRouter(prefix="/api/history")
+
+    def grouping_of(name: str) -> Grouping:
+        g = get_grouping(name) if name in GROUPINGS else None
+        if g is None:
+            raise HTTPException(422, f"unknown or unavailable grouping {name!r}")
+        return g
 
     @r.get("/days")
     def days() -> dict:
@@ -31,20 +44,23 @@ def create_history_router(get_store: Callable[[], HistoryStore], get_collector: 
         }
 
     @r.get("/day/{day}")
-    def day(day: str) -> dict:
+    def day(day: str, grouping: str = "industry") -> dict:
         d = _date(day)
-        stocks = day_stocks(get_store(), d)
-        if not stocks:
+        if not get_store().day_rows(d):
             raise HTTPException(404, f"no data for {day}")
+        stocks = day_stocks(get_store(), d, None if grouping == "industry" else grouping_of(grouping))
         return {"date": d.isoformat(), "stocks": stocks}
 
     @r.get("/groups")
-    def groups(day: str = Query(..., alias="date"), threshold: float = Query(5, ge=0, le=10)) -> dict:
+    def groups(
+        day: str = Query(..., alias="date"), threshold: float = Query(5, ge=0, le=10), grouping: str = "industry"
+    ) -> dict:
         d = _date(day)
+        g = grouping_of(grouping)
         rows = get_store().day_rows(d)
         if not rows:
             raise HTTPException(404, f"no data for {day}")
-        return {"date": d.isoformat(), "threshold": threshold, "groups": group_stats(rows, threshold)}
+        return {"date": d.isoformat(), "threshold": threshold, "groups": group_stats(rows, threshold, g)}
 
     @r.get("/rotation")
     def rotation_(
@@ -52,10 +68,12 @@ def create_history_router(get_store: Callable[[], HistoryStore], get_collector: 
         metric: str = Query("strong_ratio"),
         threshold: float = Query(5, ge=0, le=10),
         to: str | None = None,
+        grouping: str = "industry",
     ) -> dict:
         if metric not in METRICS:
             raise HTTPException(422, f"metric must be one of {METRICS}")
-        return rotation(get_store(), days, metric, threshold, up_to=_date(to) if to else None)
+        g = grouping_of(grouping)
+        return rotation(get_store(), days, metric, threshold, up_to=_date(to) if to else None, grouping=g)
 
     @r.get("/movers")
     def movers_(
@@ -63,9 +81,11 @@ def create_history_router(get_store: Callable[[], HistoryStore], get_collector: 
         mode: str = Query("day", pattern="^(day|range|streak)$"),
         value: float = Query(5, ge=0, le=1000),
         start: str | None = Query(None, alias="from"),
+        grouping: str = "industry",
     ) -> dict:
+        g = grouping_of(grouping)
         try:
-            return movers(get_store(), _date(to), mode, value, start=_date(start) if start else None)
+            return movers(get_store(), _date(to), mode, value, start=_date(start) if start else None, grouping=g)
         except ValueError as exc:
             raise HTTPException(422, str(exc)) from exc
 

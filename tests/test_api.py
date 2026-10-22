@@ -137,3 +137,32 @@ def test_history_endpoints(setup, tmp_path):
     mv = client.get("/api/history/movers", params={"to": "2026-10-21", "mode": "day", "value": 5}).json()
     assert mv["groups"][0]["stocks"][0]["code"] == "2330"
     assert client.get("/api/history/movers", params={"to": "2026-10-21", "mode": "nope"}).status_code == 422
+
+
+def test_groups_api_and_custom_history(setup):
+    from datetime import date, datetime
+
+    from openmarket.config import TAIPEI
+    from openmarket.history.ingest import build_rows
+    from openmarket.sources.official import DailyRow
+
+    client, _, _ = setup
+    assert client.get("/api/groups").json() == {"groups": []}
+    assert client.put("/api/groups/散熱").json() == {"groups": [{"name": "散熱", "codes": []}]}
+    assert client.put("/api/groups/散熱/2330").json()["groups"][0]["codes"] == ["2330"]
+    assert client.put("/api/groups/散熱/bad!").status_code == 422
+    assert client.put("/api/groups/none/2330").status_code == 404
+    assert client.post("/api/groups/散熱/rename", json={"name": "散熱模組"}).json()["groups"][0]["name"] == "散熱模組"
+
+    store = client.app.state.history
+    infos = {"2330": StockInfo("2330", "台積電", "半導體業", "上市", "stock")}
+    store.save_day(date(2026, 10, 21), build_rows([DailyRow("2330", "台積電", "上市", 110, 10, 110, 110, 110, 1000, 1e8)], infos, {}),
+                   datetime(2026, 10, 21, 16, tzinfo=TAIPEI))
+    g = client.get("/api/history/groups", params={"date": "2026-10-21", "grouping": "custom"}).json()
+    assert [x["name"] for x in g["groups"]] == ["散熱模組"]
+    day = client.get("/api/history/day/2026-10-21", params={"grouping": "custom"}).json()
+    assert day["stocks"][0]["industry"] == "散熱模組"
+    assert client.get("/api/history/groups", params={"date": "2026-10-21", "grouping": "concept"}).status_code == 422
+    assert client.get("/api/history/rotation", params={"grouping": "custom"}).status_code == 200
+    assert client.delete("/api/groups/散熱模組/2330").json()["groups"][0]["codes"] == []
+    assert client.delete("/api/groups/散熱模組").json() == {"groups": []}

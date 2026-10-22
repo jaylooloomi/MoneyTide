@@ -48,9 +48,10 @@
       <button class="icon" id="hPrev" title="前一個交易日" aria-label="前一個交易日">◀</button>
       <input type="date" id="hDate" class="field" aria-label="日期">
       <button class="icon" id="hNext" title="下一個交易日" aria-label="下一個交易日">▶</button>
-      <div class="seg" role="group" aria-label="族群分類">
-        <button class="on" aria-pressed="true" title="自訂族群、概念股族群之後加入">官方產業</button>
+      <div class="seg" id="hGrouping" role="group" aria-label="族群分類">
+        <button data-value="industry">官方產業</button><button data-value="custom">自訂族群</button><button data-value="concept" disabled title="概念股族群尚未提供">概念股</button>
       </div>
+      <button class="icon wide" id="hManageGroups" title="建立與編輯自訂族群">管理族群</button>
       <label class="chk">強勢門檻 <input type="number" id="hThreshold" class="field num" min="1" max="10" step="0.5"> %</label>
       <span class="spacer"></span>
       <span class="status" id="hStatus"><i class="dot"></i><span id="hStatusText">載入中…</span></span>
@@ -150,6 +151,16 @@
       <div class="movers" id="hMovers"></div>
     </section>
   </main>
+  <div class="popover groups-panel" id="groupPanel" hidden role="dialog" aria-label="自訂族群">
+    <div class="gp-head"><b>自訂族群</b><button class="icon" id="gpClose" aria-label="關閉">✕</button></div>
+    <div class="gp-new"><input class="field" id="gpNewName" maxlength="30" placeholder="新族群名稱，例如：散熱"><button class="primary" id="gpCreate">建立</button></div>
+    <div class="gp-body">
+      <ul class="gp-list" id="gpList"></ul>
+      <div class="gp-detail" id="gpDetail"></div>
+    </div>
+    <datalist id="gpStockList"></datalist>
+    <p class="err" id="gpErr"></p>
+  </div>
   <div id="toast" class="toast" hidden></div>
 </body>
 </html>

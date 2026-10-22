@@ -14,7 +14,9 @@ from starlette.middleware.trustedhost import TrustedHostMiddleware
 from pydantic import BaseModel
 
 from .config import STATIC_DIR, AppConfig
+from .groups import GroupStore
 from .history.api import create_history_router
+from .history.metrics import industry_grouping, mapping_grouping
 from .history.ingest import HistoryCollector
 from .history.store import HistoryStore
 from .poller import Poller, RefreshTooSoon
@@ -28,6 +30,10 @@ from .storage import JsonCache, SettingsStore, Watchlist
 
 class SettingsBody(BaseModel):
     poll_seconds: int
+
+
+class RenameBody(BaseModel):
+    name: str
 
 
 def build_poller(client: httpx.AsyncClient, data_dir: Path, settings: SettingsStore) -> Poller:
@@ -54,6 +60,14 @@ def create_app(
     config = config or AppConfig.from_env()
     settings = SettingsStore(config.data_dir / "settings.json")
     watchlist = Watchlist(config.data_dir / "watchlist.json")
+    groups = GroupStore(config.data_dir / "groups.json")
+
+    def get_grouping(name: str):
+        if name == "industry":
+            return industry_grouping
+        if name == "custom":
+            return mapping_grouping(groups.mapping())
+        return None
 
     @contextlib.asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
@@ -89,7 +103,7 @@ def create_app(
     app.state.poller = poller
     app.state.history = history_store or HistoryStore(config.data_dir / "history.sqlite")
     app.state.collector = None
-    app.include_router(create_history_router(lambda: app.state.history, lambda: app.state.collector))
+    app.include_router(create_history_router(lambda: app.state.history, lambda: app.state.collector, get_grouping))
     # Local-only app: reject other Host headers (DNS rebinding could otherwise reach the PUT routes).
     app.add_middleware(TrustedHostMiddleware, allowed_hosts=list(allowed_hosts))
 
@@ -148,6 +162,40 @@ def create_app(
     @app.delete("/api/watchlist/{code}")
     def remove_watch(code: str) -> dict:
         return {"codes": watchlist.remove(code)}
+
+    # ---- custom groups (自訂族群) ----
+
+    def _groups_call(fn, *args) -> dict:
+        try:
+            return {"groups": fn(*args)}
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from exc
+        except KeyError as exc:
+            raise HTTPException(404, f"group not found: {exc.args[0]}") from exc
+
+    @app.get("/api/groups")
+    def list_groups() -> dict:
+        return {"groups": groups.all()}
+
+    @app.put("/api/groups/{name}")
+    def create_group(name: str) -> dict:
+        return _groups_call(groups.create, name)
+
+    @app.post("/api/groups/{name}/rename")
+    def rename_group(name: str, body: RenameBody) -> dict:
+        return _groups_call(groups.rename, name, body.name)
+
+    @app.delete("/api/groups/{name}")
+    def delete_group(name: str) -> dict:
+        return _groups_call(groups.delete, name)
+
+    @app.put("/api/groups/{name}/{code}")
+    def add_to_group(name: str, code: str) -> dict:
+        return _groups_call(groups.add, name, code)
+
+    @app.delete("/api/groups/{name}/{code}")
+    def remove_from_group(name: str, code: str) -> dict:
+        return _groups_call(groups.remove, name, code)
 
     if static_dir.is_dir():
         # Windows takes MIME types from the registry, where .js may not be text/javascript;

@@ -16,11 +16,13 @@ METRICS = ("avg_pct", "cap_pct", "strong_ratio", "breadth", "limit_up")
 
 
 def industry_grouping(row: dict) -> list[str]:
-    return [row["industry"]] if row.get("industry") else []
+    """Official industry; only common stocks (ETF/preferred/TDR are not an industry's members)."""
+    return [row["industry"]] if row.get("industry") and row.get("kind") == "stock" else []
 
 
-def _stocks(rows: Iterable[dict]) -> list[dict]:
-    return [r for r in rows if r.get("kind") == "stock"]
+def mapping_grouping(code_to_groups: dict[str, list[str]]) -> Grouping:
+    """Grouping from a code → [group names] map (custom / concept groups; any security kind)."""
+    return lambda row: code_to_groups.get(row["code"], [])
 
 
 def _cap_weight(r: dict) -> float:
@@ -32,7 +34,7 @@ def _cap_weight(r: dict) -> float:
 
 def group_stats(rows: list[dict], threshold: float, grouping: Grouping = industry_grouping) -> list[dict]:
     groups: dict[str, list[dict]] = defaultdict(list)
-    for r in _stocks(rows):
+    for r in rows:
         for g in grouping(r):
             groups[g].append(r)
     out = []
@@ -82,8 +84,11 @@ def rotation(
     return {"dates": [d.isoformat() for d in dates], "metric": metric, "groups": groups}
 
 
-def day_stocks(store: HistoryStore, day: date) -> list[dict]:
-    """One day's rows in the live-snapshot Stock shape (so the treemap code is reused)."""
+def day_stocks(store: HistoryStore, day: date, grouping: Grouping | None = None) -> list[dict]:
+    """One day's rows in the live-snapshot Stock shape (so the treemap code is reused).
+
+    With a grouping, `industry` is replaced by the group name and a stock that belongs to
+    several groups appears once per group; stocks in no group are left out."""
     dates = store.trading_dates(up_to=day, limit=WEEK_DAYS + 1)
     if not dates or dates[0] != day:
         return []
@@ -91,6 +96,9 @@ def day_stocks(store: HistoryStore, day: date) -> list[dict]:
     week_ago = {r["code"]: r["close"] for r in rows.get(dates[-1], [])} if len(dates) > WEEK_DAYS else {}
     out = []
     for r in rows[day]:
+        names = grouping(r) if grouping else [r["industry"]]
+        if not names:
+            continue
         prev, close = r["prev_close"], r["close"]
         base = week_ago.get(r["code"])
         out.append({
@@ -103,6 +111,9 @@ def day_stocks(store: HistoryStore, day: date) -> list[dict]:
             "turnover_100m": r["turnover_yuan"] / 1e8 if r["turnover_yuan"] is not None else None,
             "market_cap": r["market_cap"],
         })
+        if grouping:
+            base_row = out.pop()
+            out.extend({**base_row, "industry": n, "kind": "stock"} for n in names)
     return out
 
 
@@ -118,7 +129,7 @@ def movers(
     """
     if mode == "day":
         rows = store.rows([to]).get(to, [])
-        picked = [(r, r["change_pct"]) for r in _stocks(rows) if r.get("change_pct") is not None and r["change_pct"] >= value]
+        picked = [(r, r["change_pct"]) for r in rows if grouping(r) and r.get("change_pct") is not None and r["change_pct"] >= value]
         label = "漲幅"
     elif mode == "range":
         if start is None or start > to:
@@ -131,7 +142,7 @@ def movers(
         data = store.rows([base_day, to])
         base = {r["code"]: r["close"] for r in data[base_day]}
         picked = []
-        for r in _stocks(data[to]):
+        for r in (r for r in data[to] if grouping(r)):
             b = base.get(r["code"])
             if r["close"] and b:
                 ret = (r["close"] / b - 1) * 100
@@ -148,7 +159,7 @@ def movers(
         latest = {r["code"]: r for r in data.get(to, [])}
         picked = []
         for code, r in latest.items():
-            if r.get("kind") != "stock":
+            if not grouping(r):
                 continue
             streak = 0
             for row in by_code[code]:

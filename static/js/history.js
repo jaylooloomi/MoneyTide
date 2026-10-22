@@ -9,6 +9,7 @@ import {
   fmtPct,
   sortRows,
 } from './transform.js';
+import { getGroups, loadGroups, onGroupsChange, openGroupPanel, setStockNames } from './groups.js';
 
 const PREFS_KEY = 'openmarket.history.v1';
 const $ = (sel) => document.querySelector(sel);
@@ -24,6 +25,7 @@ const st = {
   moverValue: { day: 5, range: 15, streak: 3 },
   from: null,
   groupSort: { key: 'strong_ratio', dir: 'desc' },
+  grouping: 'industry', // industry | custom | concept
   zoom: null,
   // data
   stocks: [],
@@ -38,7 +40,7 @@ let daysTimer = null;
 function loadPrefs() {
   try {
     const p = JSON.parse(localStorage.getItem(PREFS_KEY) || '{}');
-    for (const k of ['threshold', 'sizeBy', 'rotDays', 'rotMetric', 'moverMode', 'groupSort']) if (p[k] !== undefined) st[k] = p[k];
+    for (const k of ['threshold', 'sizeBy', 'rotDays', 'rotMetric', 'moverMode', 'groupSort', 'grouping']) if (p[k] !== undefined) st[k] = p[k];
     if (p.moverValue) Object.assign(st.moverValue, p.moverValue);
   } catch {
     /* defaults */
@@ -47,8 +49,8 @@ function loadPrefs() {
 
 function savePrefs() {
   try {
-    const { threshold, sizeBy, rotDays, rotMetric, moverMode, moverValue, groupSort } = st;
-    localStorage.setItem(PREFS_KEY, JSON.stringify({ threshold, sizeBy, rotDays, rotMetric, moverMode, moverValue, groupSort }));
+    const { threshold, sizeBy, rotDays, rotMetric, moverMode, moverValue, groupSort, grouping } = st;
+    localStorage.setItem(PREFS_KEY, JSON.stringify({ threshold, sizeBy, rotDays, rotMetric, moverMode, moverValue, groupSort, grouping }));
   } catch {
     /* ignore */
   }
@@ -124,7 +126,7 @@ async function selectDate(date) {
   if (!st.from || st.from >= st.date) st.from = st.days[Math.min(i + 4, st.days.length - 1)];
   $('#hFrom').value = st.from;
   $('#hBDate').textContent = st.date;
-  await Promise.all([loadDay(), loadGroups(), loadMovers()]);
+  await Promise.all([loadDay(), loadGroups_(), loadMovers()]);
   renderRotationSelection();
 }
 
@@ -132,8 +134,9 @@ async function selectDate(date) {
 
 async function loadDay() {
   try {
-    const data = await getJson(`/api/history/day/${st.date}`);
+    const data = await getJson(`/api/history/day/${st.date}?grouping=${st.grouping}`);
     st.stocks = data.stocks.filter((s) => s.kind === 'stock');
+    if (st.grouping === 'industry') setStockNames(st.stocks);
   } catch {
     st.stocks = [];
   }
@@ -145,7 +148,11 @@ function renderChart() {
   const tree = buildTreemapData(st.stocks, { sizeBy: st.sizeBy, colorBy: 'today' });
   chart.setOption(buildTreemapOption(tree), { notMerge: true });
   $('#hEmpty').hidden = tree.data.length > 0;
-  if (!tree.data.length) $('#hEmpty').textContent = '這一天沒有資料。';
+  if (!tree.data.length) {
+    $('#hEmpty').textContent = customEmpty()
+      ? '還沒有自訂族群（或族群內沒有股票）。按上方「管理族群」建立。'
+      : '這一天沒有資料。';
+  }
   if (st.zoom && tree.data.some((d) => d.name === st.zoom)) {
     chart.dispatchAction({ type: 'treemapRootToNode', seriesId: 'map', targetNodeId: 'ind:' + st.zoom });
   } else st.zoom = null;
@@ -174,9 +181,9 @@ function renderCrumb() {
 
 // ---- B: group ranking -------------------------------------------------------
 
-async function loadGroups() {
+async function loadGroups_() {
   try {
-    const data = await getJson(`/api/history/groups?date=${st.date}&threshold=${st.threshold}`);
+    const data = await getJson(`/api/history/groups?date=${st.date}&threshold=${st.threshold}&grouping=${st.grouping}`);
     st.groups = data.groups;
   } catch {
     st.groups = [];
@@ -228,7 +235,7 @@ async function loadRotation() {
   const table = $('#hRotation');
   let data;
   try {
-    data = await getJson(`/api/history/rotation?days=${st.rotDays}&metric=${st.rotMetric}&threshold=${st.threshold}`);
+    data = await getJson(`/api/history/rotation?days=${st.rotDays}&metric=${st.rotMetric}&threshold=${st.threshold}&grouping=${st.grouping}`);
   } catch {
     table.innerHTML = '';
     return;
@@ -265,7 +272,7 @@ async function loadMovers() {
   $('#hFromWrap').hidden = mode !== 'range';
   $('#hMoverUnit').textContent = mode === 'streak' ? '天' : '%';
   $('#hMoverValue').value = value;
-  let url = `/api/history/movers?to=${st.date}&mode=${mode}&value=${value}`;
+  let url = `/api/history/movers?to=${st.date}&mode=${mode}&value=${value}&grouping=${st.grouping}`;
   if (mode === 'range') url += `&from=${st.from}`;
   let data;
   try {
@@ -305,7 +312,42 @@ function renderSegs() {
   }
 }
 
+function renderGrouping() {
+  for (const b of $('#hGrouping').querySelectorAll('button')) {
+    b.classList.toggle('on', b.dataset.value === st.grouping);
+    b.setAttribute('aria-pressed', String(b.dataset.value === st.grouping));
+  }
+}
+
+function customEmpty() {
+  return st.grouping === 'custom' && !getGroups().some((g) => g.codes.length);
+}
+
+/** Reload everything that depends on the grouping. */
+async function reloadGrouped() {
+  renderGrouping();
+  if (customEmpty()) {
+    $('#hEmpty').hidden = false;
+    $('#hEmpty').textContent = '還沒有自訂族群（或族群內沒有股票）。按上方「管理族群」建立。';
+  }
+  if (!st.date) return;
+  await Promise.all([loadDay(), loadGroups_(), loadMovers()]);
+  loadRotation();
+}
+
 function bind() {
+  $('#hGrouping').addEventListener('click', (e) => {
+    const b = e.target.closest('button[data-value]');
+    if (!b || b.disabled || b.dataset.value === st.grouping) return;
+    st.grouping = b.dataset.value;
+    st.zoom = null;
+    savePrefs();
+    reloadGrouped();
+  });
+  $('#hManageGroups').addEventListener('click', () => openGroupPanel());
+  onGroupsChange(() => {
+    if (st.grouping === 'custom') reloadGrouped();
+  });
   $('#hPrev').addEventListener('click', () => {
     const i = st.days.indexOf(st.date);
     if (i < st.days.length - 1) selectDate(st.days[i + 1]);
@@ -323,7 +365,7 @@ function bind() {
     }
     st.threshold = v;
     savePrefs();
-    loadGroups();
+    loadGroups_();
     loadRotation();
   });
   for (const seg of document.querySelectorAll('#historyView .seg[data-hgroup]')) {
@@ -387,6 +429,9 @@ export async function showHistory() {
     started = true;
     loadPrefs();
     $('#hThreshold').value = st.threshold;
+    if (st.grouping === 'concept') st.grouping = 'industry'; // not available yet
+    renderGrouping();
+    loadGroups().catch(() => {});
     chart = echarts.init($('#hChart'));
     chart.on('click', (p) => {
       if (p.data?.industry) zoomTo(p.data.name);
