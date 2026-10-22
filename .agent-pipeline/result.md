@@ -73,6 +73,7 @@
 - Z2 即時卡片 20 日小圖 — 1.5（scores-10.md）：引用來源不支持、即時卡片顯示歷史資料易混淆
 
 ## 需要你決定的事
+- **分支未 push**：此 repo 沒有設定任何 git remote（`git remote` 為空），收工時的 `git push -u origin night-shift/2026-10-23` 失敗（"Please make sure you have the correct access rights and the repository exists"）。所有 commit 都在本機分支 `night-shift/2026-10-23`；請設定 remote 後自行 push，或直接在本機合併。
 - 即時頁的產業指標切換（等權平均漲幅／≥5% 佔比用在即時熱力圖的哪裡）：你當時沒選套用方式就改提歷史需求，所以本夜沒做；歷史頁 B 已有這些指標。要不要做、做成哪種（產業總覽模式／只換標題排序／只加矩陣欄），請決定。
 - 概念股資料來自 Yahoo 股市（第三方網站，與 HiStock 相同屬「個人本機使用」）。
 
