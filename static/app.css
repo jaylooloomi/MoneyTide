@@ -153,7 +153,9 @@ button { font: inherit; color: inherit; cursor: pointer; }
   flex: 1; min-height: 0; overflow: auto; padding: 8px;
   display: grid; gap: 8px;
   grid-template-columns: minmax(0, 3fr) minmax(360px, 2fr);
-  grid-template-rows: 480px auto auto;
+  /* max-content: auto rows collapse to ~0 inside this fixed-height scroll container */
+  grid-template-rows: 480px max-content max-content;
+  grid-auto-rows: max-content;
   grid-template-areas: "a b" "c c" "d d";
 }
 .hA { grid-area: a; } .hB { grid-area: b; } .hC { grid-area: c; } .hD { grid-area: d; }
@@ -177,7 +179,7 @@ table.rot td.sel { outline: 1px solid #fff; }
 .tag { padding: 2px 7px; border-radius: 3px; color: #fff; font-size: 12px; text-decoration: none; white-space: nowrap; }
 .tag small { opacity: .85; margin-left: 4px; }
 @media (max-width: 1100px) {
-  .hist { grid-template-columns: 1fr; grid-template-rows: 420px 420px auto auto; grid-template-areas: "a" "b" "c" "d"; }
+  .hist { grid-template-columns: 1fr; grid-template-rows: 420px 420px max-content max-content; grid-template-areas: "a" "b" "c" "d"; }
 }
 
 /* ---- custom groups panel ---- */

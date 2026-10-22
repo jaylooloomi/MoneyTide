@@ -208,3 +208,56 @@ def stock_history(store: HistoryStore, code: str, to: date, days: int = 20) -> d
         "period_pct": (last["close"] / first_close - 1) * 100 if last["close"] and first_close else None,
         "series": [{"date": r["date"], "close": r["close"], "change_pct": r["change_pct"]} for r in rows],
     }
+
+
+# ---- bonus-04: cumulative group index for the comparison chart ----
+
+MARKET = "全市場"
+
+
+def group_index(
+    store: HistoryStore, days: int, up_to: date | None = None, names: list[str] | None = None,
+    top: int = 5, grouping: Grouping = industry_grouping,
+) -> dict:
+    """Cumulative return (%) of each group's equal-weight daily average, compounded over the last
+    `days` trading days, plus the whole market (common stocks) as a benchmark.
+
+    `names` picks the groups; otherwise the `top` groups by period return are returned."""
+    dates = sorted(store.trading_dates(up_to=up_to, limit=days))
+    by_day = store.rows(dates)
+    # one pass per day: equal-weight average change of each group and of the whole market
+    daily: dict[str, list] = defaultdict(lambda: [None] * len(dates))
+    market_daily: list = [None] * len(dates)
+    for i, d in enumerate(dates):
+        sums: dict[str, list[float]] = defaultdict(lambda: [0.0, 0])
+        msum, mcount = 0.0, 0
+        for r in by_day[d]:
+            pct = r.get("change_pct")
+            if pct is None:
+                continue
+            if r.get("kind") == "stock":
+                msum += pct
+                mcount += 1
+            for g in grouping(r):
+                acc = sums[g]
+                acc[0] += pct
+                acc[1] += 1
+        for g, (total, n) in sums.items():
+            daily[g][i] = total / n
+        market_daily[i] = msum / mcount if mcount else None
+
+    def compound(values: list) -> list:
+        level, out = 1.0, []
+        for v in values:
+            if v is not None:
+                level *= 1 + v / 100
+            out.append(round((level - 1) * 100, 4))
+        return out
+
+    series = [{"name": n, "values": compound(v)} for n, v in daily.items()]
+    if names:
+        wanted = set(names)
+        series = [x for x in series if x["name"] in wanted]
+    else:
+        series = sorted(series, key=lambda x: x["values"][-1] if x["values"] else 0, reverse=True)[:top]
+    return {"dates": [d.isoformat() for d in dates], "series": series, "market": compound(market_daily)}

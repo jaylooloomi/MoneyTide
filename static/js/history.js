@@ -132,6 +132,7 @@ async function selectDate(date) {
   $('#hFrom').value = st.from;
   $('#hBDate').textContent = st.date;
   await Promise.all([loadDay(), loadGroups_(), loadMovers()]);
+  loadIndex(); // bonus-04
   renderRotationSelection();
 }
 
@@ -364,6 +365,7 @@ async function reloadGrouped() {
   if (!st.date) return;
   await Promise.all([loadDay(), loadGroups_(), loadMovers()]);
   loadRotation();
+  loadIndex(); // bonus-04
 }
 
 function bind() {
@@ -480,11 +482,13 @@ export async function showHistory() {
     renderCrumb();
     await loadDays();
     await loadRotation();
+    loadIndex(); // bonus-04
     return;
   }
   chart.resize();
   await loadDays();
   loadRotation();
+  loadIndex(); // bonus-04
 }
 
 // ---- bonus-02: stock card with a short price history ----------------------------
@@ -586,4 +590,91 @@ async function fillMembership(card) {
     return `<div title="${escapeHtml(names.join('、'))}"><span class="muted">${label}</span> ${shown}${more}</div>`;
   };
   slot.innerHTML = line('概念：', m.concepts) + line('自訂：', m.custom);
+}
+
+// ---- bonus-04: E · cumulative group return comparison -------------------------
+
+const IDX_DAYS = [20, 60, 120];
+const idx = { days: 20, picked: [], chart: null, ticket: 0 };
+
+function indexSection() {
+  let sec = $('#hIndex');
+  if (sec) return sec;
+  sec = document.createElement('section');
+  sec.id = 'hIndex';
+  sec.className = 'panel';
+  sec.style.gridColumn = '1 / -1';
+  sec.innerHTML = `
+    <div class="panel-h"><b>E · 族群走勢比較</b>
+      <div class="seg" id="hIdxDays">${IDX_DAYS.map((d) => `<button data-value="${d}">${d} 日</button>`).join('')}</div>
+      <select class="field" id="hIdxAdd" aria-label="加入族群"><option value="">＋ 加入族群…</option></select>
+      <span id="hIdxChips" class="gp-codes"></span>
+      <button type="button" class="icon wide" id="hIdxReset" title="改回期間累積報酬前 5 名">前 5 名</button>
+      <span class="muted">等權日報酬連乘；虛線為全市場</span>
+    </div>
+    <div style="height:340px"><div id="hIdxChart" style="height:100%"></div></div>`;
+  $('#historyView').appendChild(sec);
+  $('#hIdxDays').addEventListener('click', (e) => {
+    const b = e.target.closest('button[data-value]');
+    if (!b) return;
+    idx.days = Number(b.dataset.value);
+    loadIndex();
+  });
+  $('#hIdxAdd').addEventListener('change', (e) => {
+    const name = e.target.value;
+    e.target.value = '';
+    if (name && !idx.picked.includes(name)) {
+      idx.picked.push(name);
+      loadIndex();
+    }
+  });
+  $('#hIdxChips').addEventListener('click', (e) => {
+    const b = e.target.closest('button[data-remove]');
+    if (!b) return;
+    idx.picked = idx.picked.filter((n) => n !== b.dataset.remove);
+    loadIndex();
+  });
+  $('#hIdxReset').addEventListener('click', () => {
+    idx.picked = [];
+    loadIndex();
+  });
+  idx.chart = echarts.init($('#hIdxChart'));
+  new ResizeObserver(() => idx.chart.resize()).observe($('#hIdxChart'));
+  return sec;
+}
+
+async function loadIndex() {
+  if (!st.date) return;
+  indexSection();
+  for (const b of $('#hIdxDays').querySelectorAll('button')) b.classList.toggle('on', Number(b.dataset.value) === idx.days);
+  let url = `/api/history/index?days=${idx.days}&to=${st.date}&grouping=${st.grouping}`;
+  if (idx.picked.length) url += `&groups=${encodeURIComponent(idx.picked.join(','))}`;
+  const ticket = ++idx.ticket; // ignore responses that arrive after a newer request
+  let d;
+  try {
+    d = await getJson(url);
+  } catch {
+    return;
+  }
+  if (ticket !== idx.ticket) return;
+  const names = (st.groups || []).map((g) => g.name).sort((a, b) => a.localeCompare(b, 'zh-Hant'));
+  $('#hIdxAdd').innerHTML = '<option value="">＋ 加入族群…</option>' +
+    names.filter((n) => !idx.picked.includes(n)).map((n) => `<option value="${escapeHtml(n)}">${escapeHtml(n)}</option>`).join('');
+  $('#hIdxChips').innerHTML = idx.picked
+    .map((n) => `<span>${escapeHtml(n)}<button type="button" data-remove="${escapeHtml(n)}" title="移除">✕</button></span>`)
+    .join('');
+  const pct = (v) => `${v >= 0 ? '+' : ''}${v.toFixed(2)}%`;
+  idx.chart.setOption({
+    animation: false,
+    color: ['#ff6b6b', '#ffb84d', '#ffe66d', '#6bcB77', '#4d96ff', '#c77dff', '#ff8fab', '#5ee7df', '#f9f871', '#a0a0ff'],
+    grid: { left: 52, right: 150, top: 16, bottom: 28 },
+    tooltip: { trigger: 'axis', valueFormatter: (v) => (v == null ? '—' : pct(v)) },
+    legend: { type: 'scroll', orient: 'vertical', right: 0, top: 10, textStyle: { color: '#ccc' } },
+    xAxis: { type: 'category', data: d.dates.map((x) => x.slice(5).replace('-', '/')), axisLabel: { color: '#999' } },
+    yAxis: { type: 'value', axisLabel: { color: '#999', formatter: (v) => `${v}%` }, splitLine: { lineStyle: { color: '#262a33' } } },
+    series: [
+      ...d.series.map((s) => ({ name: s.name, type: 'line', data: s.values, symbol: 'none', lineStyle: { width: 2 }, endLabel: { show: false } })),
+      { name: '全市場', type: 'line', data: d.market, symbol: 'none', lineStyle: { width: 1.5, type: 'dashed', color: '#aaa' }, itemStyle: { color: '#aaa' } },
+    ],
+  }, { notMerge: true });
 }

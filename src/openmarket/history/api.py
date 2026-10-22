@@ -6,7 +6,7 @@ from datetime import date
 from fastapi import APIRouter, HTTPException, Query
 
 from .ingest import HistoryCollector
-from .metrics import METRICS, Grouping, day_stocks, group_stats, industry_grouping, movers, rotation, stock_history
+from .metrics import METRICS, Grouping, day_stocks, group_stats, industry_grouping, movers, rotation, stock_history, group_index
 from .store import HistoryStore
 
 
@@ -96,5 +96,18 @@ def create_history_router(
         if data is None:
             raise HTTPException(404, f"no data for {code} on {to}")
         return data
+
+    # bonus-04: cumulative group index comparison
+    @r.get("/index")
+    def index(
+        days: int = Query(20, ge=2, le=250),
+        to: str | None = None,
+        groups: str | None = None,
+        top: int = Query(5, ge=1, le=20),
+        grouping: str = "industry",
+    ) -> dict:
+        g = grouping_of(grouping)
+        names = [n for n in (groups or "").split(",") if n] or None
+        return group_index(get_store(), days, up_to=_date(to) if to else None, names=names, top=top, grouping=g)
 
     return r

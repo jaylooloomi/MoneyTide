@@ -193,3 +193,21 @@ def test_stock_history(store):
     assert h["industry"] == "航運業" and h["turnover_100m"] == 1
     assert stock_history(store, "2603", date(2026, 10, 18)) is None  # not a stored day for that date
     assert stock_history(store, "9999", date(2026, 10, 21)) is None
+
+
+def test_group_index(store):
+    from openmarket.history.metrics import group_index
+
+    idx = group_index(store, days=3, up_to=date(2026, 10, 21))
+    assert idx["dates"] == ["2026-10-19", "2026-10-20", "2026-10-21"]
+    ship = next(s for s in idx["series"] if s["name"] == "航運業")
+    # 2603 prev closes 120/130/140 (+10 each day), 2609 flat then +10% → daily equal-weight averages
+    exp, level = [], 1.0
+    for v in ((10 / 120 * 100) / 2, (10 / 130 * 100) / 2, (10 / 140 * 100 + 10) / 2):
+        level *= 1 + v / 100
+        exp.append((level - 1) * 100)
+    assert ship["values"] == pytest.approx(exp, rel=1e-4)
+    assert idx["series"][0]["name"] == "航運業"  # top by period return
+    assert len(idx["market"]) == 3
+    picked = group_index(store, days=3, up_to=date(2026, 10, 21), names=["半導體業"])
+    assert [s["name"] for s in picked["series"]] == ["半導體業"]
