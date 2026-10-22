@@ -39,7 +39,7 @@
 | 25 | 即時熱力圖色階範圍可調 | 2.0（scores-22.md） | Sharesight Community「Heatmap needs to be a bit darker/lighter」https://community.sharesight.com/t/heatmap-needs-to-be-a-bit-darker-lighter/1610 ；TradingView How to set up the display of the Heatmap https://www.tradingview.com/support/solutions/43000707156-how-to-set-up-the-display-of-the-heatmap | transform TODAY_SCALES＋colorLimit(colorBy, todayScale)（只覆寫今日色階；本週／20 日／量比不變；純函式＋測試）；圖例旁「色階 ±3／5／7／10%」下拉，套用熱力圖、圖例與矩陣今日欄，偏好保存；非今日模式時停用 | `node --test "tests/js/*.test.js"`；headless：±3% 時 -1.45% 格子由 #375247 變 #2f6e48、圖例 +3%、重新整理後保留、本週模式仍 ±15% | ✅ 08c640c（pytest 127、node 26） | ① 自動依當日波動調整色階：每次刷新顏色意義會變，難以跨時比較；② 也套用到歷史頁：歷史 A 已有 1／5／20 日色階切換，先不擴大範圍 |
 
 ## 夜間程式碼審查修正
-獨立審查代理分兩輪檢查程式變更（XSS、監聽器重複、非同步競態、多族群重複計數、API 邊界、主控台錯誤）：第一輪 6 項＋1 小項、第二輪 3 項、第三輪 3 項、第四輪 3 項，另有夜間實測發現的換日延遲，全部已修：
+獨立審查代理分兩輪檢查程式變更（XSS、監聽器重複、非同步競態、多族群重複計數、API 邊界、主控台錯誤）：第一輪 6 項＋1 小項、第二輪 3 項、第三輪 3 項、第四輪 3 項、第五輪 5 項＋1 小項，另有夜間實測發現的換日延遲，全部已修：
 | 問題 | 修正 commit |
 |---|---|
 | 歷史頁快速切換日期／分組時，A/B/C/D 舊回應覆蓋新資料（含 B 期間欄卡在「…」） | bc9e2a1 |
@@ -55,8 +55,10 @@
 | 第三輪審查：collector 存檔時清快取與請求競態 → KeyError 500（快取改一次讀出、commit 後才清） | 3760c43 |
 | 第三輪審查：切換分組後成分股表仍顯示舊族群；量能欄抓取失敗後整天不重試 | 3760c43 |
 | 第四輪審查（bonus-17／18）：概念股暫時未就緒時覆寫掉已存的分組偏好；自訂族群名稱與產業同名時誤顯示產業的 20日／量能；編輯族群時與進行中請求的競態 | d92b001 |
+| 第五輪審查（bonus-22–25）：量比盤中未依交易時間換算（50a4f09）；開盤前／週末基準含當天；基準抓取失敗整天不重試；注音／倉頡選字的 Enter 觸發搜尋；已存的量比按鈕首次未高亮；門檻篩選後空白訊息誤導 | 50a4f09、fc28487 |
 
 ## 判斷不值得做
+- AO1 盤中族群轉強提醒 — 1.0（scores-24.md，第 24 輪 TOP: none）：只看盤需求下屬附加功能，且與先前否決的 V1 近似
 - AN1 歷史 D「量增上漲」模式 — 1.5（scores-23.md，第 23 輪 TOP: none）：來源只是一般篩選器教學，屬 D 的精修
 - C3 相對成交量（量能倍數）— 1.6（scores-01.md）：要新增指標並改 B/C，效益對影響範圍不划算
 - C4 族群連續強勢天數 — 1.5：只有新聞評論支持，無產品實作參考
@@ -75,3 +77,8 @@
 - 概念股資料來自 Yahoo 股市（第三方網站，與 HiStock 相同屬「個人本機使用」）。
 
 ## 統計
+- 回合數：Stop hook 計數 13 回合（本 session 經多次 context 壓縮，實際工作輪次遠多於此）；調研 24 輪（第 9、15、23、24 輪 TOP: none）
+- commit：91 個（main..HEAD）；收尾 2 項、加分 25 項、審查修正 5 輪＋換日延遲修正
+- 程式檔案：22 個（不含 .agent-pipeline），+2,997／−79 行
+- 最後 build/test：`uv run pytest -q` 128 passed；`node --test "tests/js/*.test.js"` 27 passed；headless Chrome 實測各加分項
+- 結束原因：無候選（第 23、24 輪連續 TOP: none）；剩餘時間約 5.5 小時未用

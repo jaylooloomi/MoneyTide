@@ -243,3 +243,11 @@
 因為原始需求是 **回溯每一天哪些股票集體上漲**，所以頂尖做法會順便做 **價量同步的篩選（相對成交量 > 1～2 且上漲）**（Finviz 篩選器以 Relative Volume 搭配 Change 篩選；交易教學建議以相對量 > 1 為起點）；目前的成果 **只有部分**——D 只有當日漲幅／區間累計／連續上漲三種模式，看不出是否有量。
 - 參考：Daytradingz「How to Use Finviz」https://daytradingz.com/how-to-use-finviz/ ；TradingView VB Finviz-style MTF Screener https://it.tradingview.com/script/FygpRrxA-VB-Finviz-style-MTF-Screener
 - 範圍：metrics.movers 加 mode=volume（以 store 前 20 個交易日成交值平均為基準，漲幅門檻沿用 value）；history.js D 多一顆「量增上漲」並在列中顯示倍數；pytest＋前端無新純函式；約 3–4 檔。
+
+# 加分候選（第 24 輪）
+（第 23 輪 TOP: none）
+
+## AO1. 盤中族群轉強提醒（族群漲幅或 ≥5% 佔比「穿越」門檻時提示）
+因為原始需求是 **盤中看產業熱力圖找強勢族群**（使用者不會一直盯著螢幕），所以業界做法會順便做 **族群門檻警示**（Kite 使用者要求自訂股票群組盤中漲 1% 時跳出提示；Trade-Ideas 有 Sector Breakout from Open 警示；Heat Map Monitor 以「市場＋族群＋指標門檻」規則推播）；目前的成果 **沒有**——只能自己看。
+- 參考：Kite forum「front end development」（group 1% pop-up）https://kite.trade/forum/discussion/5981/front-end-development ；Trade-Ideas Sector Breakout (from Open) https://trade-ideas.com/help/alert/SBOO/ ；Heat Map Monitor https://wingstock.duckdns.org/heatmap-monitor.html
+- 範圍：transform 加 crossedGroups(prev, next, rule)（純函式：只回報由下而上穿越的族群，避免每次刷新重複提醒；測試）；app.js 一個「提醒」下拉（關／族群漲幅 ≥2%／≥3%／≥5% 佔比 ≥30%），穿越時 toast，使用者按下後可選擇開啟瀏覽器通知；無後端改動；約 3 檔。
