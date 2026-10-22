@@ -186,3 +186,15 @@
 因為原始需求是 **回溯每一天的強勢族群**（打開歷史頁就要看），所以業界做法會順便做 **cache warming：重啟後先把可預期的熱門資料載入快取，避免第一批請求打到資料庫造成延遲尖峰**；目前的成果 **只有部分**——重啟後第一次開歷史頁的 5／20／60 日欄、E 圖、月曆要 4–7 秒（夜間實測），之後才快。
 - 參考：OneUptime「Redis cache preloading at application startup」https://oneuptime.com/blog/post/2026-03-31-redis-cache-preloading-application-startup/view ；Aerospike「Cache warming explained」https://aerospike.com/blog/cache-warming-explained ；OneUptime Cache Warming Strategies https://oneuptime.com/blog/post/2026-01-30-cache-warming-strategies/view
 - 範圍：HistoryCollector 每輪回補／累積結束後（及啟動後一次）在背景執行緒對最新 60 個交易日預先計算 industry 每日平均與 20 日均量（只算可預期的官方產業）；不改 API；測試。
+
+# 加分候選（第 18 輪）
+
+## AI1. HiStock 失效時改用證交所 MIS 即時報價備援
+因為原始需求是 **盤中看產業熱力圖**（資料來源為第三方 HiStock），所以業界做法會順便做 **多資料源備援**（證交所 MIS getStockInfo.jsp 以 ex_ch 串接多檔查詢；第三方整理的限制約每 5 秒 3 個請求）；目前的成果 **沒有**——HiStock 改版或擋爬時，即時頁只能顯示舊資料。
+- 參考：iT 邦幫忙 MIS API 範例 https://ithelp.ithome.com.tw/articles/10258478 ；tsrtc https://github.com/Asoul/tsrtc ；TWSE 即時資訊 FAQ https://www.twse.com.tw/pcversion/en/page/products/info-vendor/faq.html
+- 範圍：sources/twse_mis.py（約 2,000 檔需分 40 批以上、受頻率限制，單次輪詢需 1 分鐘以上）；poller 在 HiStock 失敗時切換；測試。
+
+## AI2. B 排行族群名稱篩選框
+因為原始需求是 **回溯強勢族群**（概念股分組下 B 有 101 列），所以常見做法會順便做 **表格即時篩選**（MarketInOut 產業排行可依名稱檢索）；目前的成果 **沒有**——要捲動或排序才找得到特定族群。
+- 參考：MarketInOut Industry Growth https://www.marketinout.com/stock-screener/report/industry-growth
+- 範圍：B 標題列加輸入框，依名稱子字串過濾列；history.js；無後端改動。
