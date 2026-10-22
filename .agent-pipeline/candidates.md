@@ -224,3 +224,15 @@
 因為原始需求是 **回溯強勢族群與輪動**，所以頂尖做法會順便做 **多期間名次變化**（Stage Analysis 的 IBD 族群表列出 1、2、4 週前的名次變動）；目前的成果 **只有部分**——bonus-18 只比較前一交易日。
 - 參考：Stage Analysis IBD Industry Groups Bell Curve https://stageanalysis.net/blog/517246/ibd-industry-groups-bell-curve-bullish-percent
 - 範圍：metrics.group_rank_change 加 lag 參數；api 回傳 5／20 日前名次；B 表名次欄 tooltip 或切換；屬 bonus-18 續做。
+
+# 加分候選（第 22 輪）
+
+## AM1. 熱力圖色階範圍可調（±3／±5／±7／±10%）
+因為原始需求是 **用顏色看哪些產業／股票集體上漲**（目前今日色階固定 ±7%，平盤附近的日子幾乎全是淡色），所以常見做法會順便做 **可調整色階或更細的顏色層次**（Sharesight 使用者要求熱力圖顏色更有層次，並以 Finviz 的漸層為例；TradingView heatmap 有顯示設定）；目前的成果 **沒有**——COLOR_LIMITS 寫死。
+- 參考：Sharesight Community「Heatmap needs to be a bit darker/lighter」https://community.sharesight.com/t/heatmap-needs-to-be-a-bit-darker-lighter/1610 ；TradingView How to set up the display of the Heatmap https://www.tradingview.com/support/solutions/43000707156-how-to-set-up-the-display-of-the-heatmap
+- 範圍：transform colorLimit 接受覆寫（純函式＋測試）；即時頂列與圖例旁一個「色階」下拉，套用即時熱力圖、矩陣與圖例；偏好保存；歷史頁不動。
+
+## AM2. 個股「量比」顏色模式（今日成交值 ÷ 20 日均成交值）
+因為原始需求是 **找出集體上漲的股票**（量增價漲才是真的集體行動），所以頂尖做法會順便做 **以相對成交量著色**（LuxAlgo Heatmap Volume 以均量與標準差分級異常量）；目前的成果 **只有部分**——bonus-16 只有族群層級的量能欄。
+- 參考：LuxAlgo Heatmap Volume https://www.luxalgo.com/library/indicator/unWex8N4-heatmap-volume ；TradingView Intraday Volume Spikes Heatmap https://de.tradingview.com/script/l4nZQnW2-Intraday-Volume-Spikes-Heatmap-everget/
+- 範圍：新 API 回傳各股 20 日均成交值（store 查詢）；即時顏色多一個「量比」；transform 色階；後端＋前端約 5 檔。
