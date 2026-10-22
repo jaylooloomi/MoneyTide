@@ -4,3 +4,4 @@ tests/fixtures/** binary
 *.html text eol=lf
 *.css text eol=lf
 *.md text eol=lf
+*.bat text eol=crlf

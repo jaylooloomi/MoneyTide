@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import argparse
+import json
 import logging
 import socket
 import sys
 import threading
 import time
+import urllib.request
 import webbrowser
 
 import uvicorn
@@ -17,6 +19,15 @@ from .config import AppConfig
 def _port_free(host: str, port: int) -> bool:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
         return sock.connect_ex((host, port)) != 0
+
+
+def _is_openmarket(url: str) -> bool:
+    """True when the process on our port is already an Open Market server."""
+    try:
+        with urllib.request.urlopen(f"{url}/api/settings", timeout=2) as resp:
+            return resp.status == 200 and "poll_seconds" in json.load(resp)
+    except (OSError, ValueError):
+        return False
 
 
 def _open_when_listening(host: str, port: int, url: str, timeout: float = 20.0) -> None:
@@ -42,7 +53,12 @@ def main() -> None:
     config = AppConfig.from_env()
     url = f"http://{config.host}:{config.port}"
     if not _port_free(config.host, config.port):
-        sys.exit(f"連接埠 {config.port} 已被占用。請關閉另一個執行中的 openmarket，或設定 OPENMARKET_PORT。")
+        if _is_openmarket(url):
+            print(f"Open Market 已在執行中 → {url}")
+            if not args.no_browser:
+                webbrowser.open(url)
+            return
+        sys.exit(f"連接埠 {config.port} 已被其他程式占用。請關閉該程式，或設定 OPENMARKET_PORT。")
     if not args.no_browser:
         threading.Thread(
             target=_open_when_listening, args=(config.host, config.port, url), daemon=True
