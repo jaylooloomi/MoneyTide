@@ -198,3 +198,10 @@
 因為原始需求是 **回溯強勢族群**（概念股分組下 B 有 101 列），所以常見做法會順便做 **表格即時篩選**（MarketInOut 產業排行可依名稱檢索）；目前的成果 **沒有**——要捲動或排序才找得到特定族群。
 - 參考：MarketInOut Industry Growth https://www.marketinout.com/stock-screener/report/industry-growth
 - 範圍：B 標題列加輸入框，依名稱子字串過濾列；history.js；無後端改動。
+
+# 加分候選（第 19 輪）
+
+## AJ1. 熱力圖全螢幕模式
+因為原始需求是 **以熱力圖為主畫面看盤**（約 2,400 檔、許多小格子），所以頂尖做法會順便做 **熱力圖全螢幕按鈕**（TradingView Heatmap 右上角 Fullscreen 按鈕開啟全尺寸檢視）；目前的成果 **沒有**——熱力圖受頂列、側欄、廣度列擠壓。
+- 參考：TradingView How to set up the display of the Heatmap?（Fullscreen button）https://www.tradingview.com/support/solutions/43000707156-how-to-set-up-the-display-of-the-heatmap ；TradingView heatmaps https://www.tradingview.com/support/solutions/43000766446
+- 範圍：即時與歷史 A 標題列各一顆「⛶」，用瀏覽器 Fullscreen API 放大熱力圖容器（Esc 離開），ECharts resize；app.js、history.js；無後端改動。
