@@ -338,3 +338,15 @@ test('relative volume colour mode', async () => {
   assert.deepEqual(g.children.map((c) => c.rvolText), ['2.0x', '0.3x', '—', '0.0x']);
   assert.equal(fmtRvol(12.4), '12x');
 });
+
+test('daily colour scale override', async () => {
+  const { colorLimit, buildTreemapData, colorFor } = await import('../../static/js/transform.js');
+  assert.equal(colorLimit('today'), 7);
+  assert.equal(colorLimit('today', 3), 3);
+  assert.equal(colorLimit('today', '10'), 10);
+  assert.equal(colorLimit('today', 4), 7); // not offered → default
+  assert.equal(colorLimit('week', 3), 15); // other modes keep their own scale
+  const s = { code: 'a', name: 'a', industry: 'X', kind: 'stock', market_cap: 1, change_pct: 3 };
+  const tree = buildTreemapData([s], { sizeBy: 'cap', colorBy: 'today', scale: 3 });
+  assert.equal(tree.data[0].children[0].itemStyle.color, colorFor(3, 3));
+});

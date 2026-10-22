@@ -27,7 +27,9 @@ export function colorFor(pct, limit) {
 // colorBy: 'today' | 'week' (5 trading days) | 'p20' (20 trading days, history only — bonus-13)
 export const pctField = (colorBy) =>
   colorBy === 'rvol' ? 'rvol_pct' : colorBy === 'p20' ? 'period_20' : colorBy === 'week' ? 'week_pct' : 'change_pct';
-export const colorLimit = (colorBy) =>
+// bonus-25: `todayScale` (±%) overrides the daily scale only; week / 20-day / 量比 keep theirs
+export const colorLimit = (colorBy, todayScale) =>
+  (colorBy === 'today' || !colorBy) && TODAY_SCALES.includes(Number(todayScale)) ? Number(todayScale) :
   colorBy === 'rvol' ? COLOR_LIMITS.rvol : colorBy === 'p20' ? COLOR_LIMITS.p20 : colorBy === 'week' ? COLOR_LIMITS.week : COLOR_LIMITS.today;
 
 // ---- formatting ----------------------------------------------------------
@@ -192,7 +194,7 @@ const sizeOf = (s, sizeBy) => (sizeBy === 'equal' ? 1 : sizeBy === 'turnover' ? 
  */
 export function buildTreemapData(stocks, view) {
   const field = pctField(view.colorBy);
-  const limit = colorLimit(view.colorBy);
+  const limit = colorLimit(view.colorBy, view.scale);
   const industries = new Map(aggregateIndustries(stocks).map((r) => [r.name, r]));
   const groups = new Map();
   let hiddenNoSize = 0;
@@ -477,3 +479,6 @@ function groupRvol(children) {
   }
   return base > 0 ? now / base : null;
 }
+
+// ---- bonus-25: selectable colour range for the daily change ----------------------------
+export const TODAY_SCALES = [3, 5, 7, 10];

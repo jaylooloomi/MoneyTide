@@ -20,7 +20,7 @@ import {
   watchRows,
 } from './transform.js';
 import { showHistory } from './history.js';
-import { MIN_FILTERS, breadthBarHtml, findStock, marketBreadth, regroupStocks, withRelVolume } from './transform.js';
+import { MIN_FILTERS, TODAY_SCALES, breadthBarHtml, findStock, marketBreadth, regroupStocks, withRelVolume } from './transform.js';
 import { addToGroup, getGroups, loadGroups, onGroupsChange, openGroupPanel, setStockNames } from './groups.js';
 
 const SNAPSHOT_POLL_MS = 10_000;
@@ -316,7 +316,8 @@ function renderNote() {
 }
 
 function renderLegend() {
-  const limit = colorLimit(state.view.colorBy);
+  renderScaleSelect(); // bonus-25
+  const limit = colorLimit(state.view.colorBy, state.view.scale);
   const rvol = state.view.colorBy === 'rvol'; // bonus-24: log2 scale, ±100 = ½x … 2x
   $('#legendMin').textContent = rvol ? '½x' : `-${limit}%`;
   $('#legendMax').textContent = rvol ? '2x' : `+${limit}%`;
@@ -348,7 +349,7 @@ function renderMatrix(rows) {
     .map(
       (r) => `<tr data-industry="${escapeHtml(r.name)}"${r.name === state.zoomIndustry ? ' class="hl"' : ''}>
         <td class="l">${escapeHtml(r.name)}</td>
-        ${pctCell(r.change_pct, colorLimit('today'))}
+        ${pctCell(r.change_pct, colorLimit('today', state.view.scale))}
         ${pctCell(r.week_pct, colorLimit('week'))}
         ${pctCell(livePeriods.byGroup[r.name]?.perf_20 ?? null, 15)}
         <td>${r.amplitude_pct === null ? '—' : r.amplitude_pct.toFixed(2) + '%'}</td>
@@ -375,7 +376,7 @@ function renderWatch(allStocks) {
         <td class="l">${escapeHtml(s.code)}</td>
         <td class="l">${escapeHtml(s.name)}</td>
         <td>${fmtPrice(s.price)}</td>
-        ${pctCell(s.change_pct, colorLimit('today'))}
+        ${pctCell(s.change_pct, colorLimit('today', state.view.scale))}
         ${pctCell(s.week_pct, colorLimit('week'))}
         <td>${fmtTurnover(s.turnover_100m)}</td>
         <td><button class="rm" data-remove="${escapeHtml(s.code)}" title="移除">✕</button></td>
@@ -958,4 +959,24 @@ function renderRvolButton() {
     b.title = '今日成交值 ÷ 前 20 個交易日平均成交值（紅＝放量、綠＝縮量；2 倍以上全紅）';
     seg.append(b);
   }
+}
+
+// ---- bonus-25: daily colour range (±3 / ±5 / ±7 / ±10%) next to the legend ---------------
+function renderScaleSelect() {
+  let sel = $('#liveScale');
+  if (!sel) {
+    sel = document.createElement('select');
+    sel.id = 'liveScale';
+    sel.className = 'field';
+    sel.title = '今日漲跌的色階範圍：數字越小，小漲小跌越明顯（本週／量比不受影響）';
+    sel.innerHTML = TODAY_SCALES.map((n) => `<option value="${n}">色階 ±${n}%</option>`).join('');
+    $('#legendMin').closest('.legend').after(sel);
+    sel.addEventListener('change', () => {
+      state.view.scale = Number(sel.value);
+      savePrefs();
+      render();
+    });
+  }
+  sel.value = String(colorLimit('today', state.view.scale));
+  sel.disabled = state.view.colorBy !== 'today';
 }
