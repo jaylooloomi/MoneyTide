@@ -225,7 +225,7 @@ function renderGroups() {
     else th.removeAttribute('aria-sort');
   }
   const pct = (v, limit) => `<td class="c" style="background:${colorFor(v, limit)}">${fmtPct(v)}</td>`;
-  table.tBodies[0].innerHTML = sortRows(st.groups, st.groupSort.key, st.groupSort.dir)
+  table.tBodies[0].innerHTML = sortRows(filterGroupRows(st.groups), st.groupSort.key, st.groupSort.dir) // bonus-20
     .map(
       (g) => `<tr data-group="${escapeHtml(g.name)}"${g.name === st.zoom ? ' class="hl"' : ''}>
         <td class="l">${escapeHtml(g.name)}</td>
@@ -1099,4 +1099,37 @@ function rankCell(g) {
   const ch = g.rank_change;
   const delta = ch == null ? '' : ch > 0 ? ` <span class="up">▲${ch}</span>` : ch < 0 ? ` <span class="down">▼${-ch}</span>` : ' <span class="muted">–</span>';
   return `<td title="今日名次 ${g.rank}">${g.rank}${delta}</td>`;
+}
+
+// ---- bonus-20: filter the B ranking by group name ------------------------------------
+const groupFilter = { text: '' };
+
+function filterGroupRows(rows) {
+  ensureGroupFilterBox();
+  const t = groupFilter.text.trim().toLowerCase();
+  return t ? rows.filter((g) => g.name.toLowerCase().includes(t)) : rows;
+}
+
+function ensureGroupFilterBox() {
+  if ($('#hGroupFilter')) return;
+  const input = document.createElement('input');
+  input.id = 'hGroupFilter';
+  input.className = 'field';
+  input.type = 'search';
+  input.placeholder = '篩選族群名稱…';
+  input.style.width = '140px';
+  input.setAttribute('aria-label', '篩選族群名稱');
+  $('#hBDate').after(input);
+  input.addEventListener('input', () => {
+    groupFilter.text = input.value;
+    renderGroups();
+  });
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      e.stopPropagation();
+      input.value = '';
+      groupFilter.text = '';
+      renderGroups();
+    }
+  });
 }
