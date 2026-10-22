@@ -703,6 +703,7 @@ function renderLiveBreadth(stocks) {
 
 function withPeriods(rows) {
   ensureLivePeriods();
+  if (liveGrouping.by !== 'industry') return rows.map((r) => ({ ...r, perf_20: null, vol_ratio: null })); // industry-only figures
   return rows.map((r) => ({ ...r, perf_20: livePeriods.byGroup[r.name]?.perf_20 ?? null, vol_ratio: volRatio(r) }));
 }
 
@@ -771,7 +772,11 @@ function applyLiveGrouping(stocks) {
 }
 
 async function loadLiveMapping(name, force = false) {
-  if (liveGrouping.loading[name] || (liveGrouping.maps[name] && !force)) return;
+  if (liveGrouping.loading[name]) {
+    if (force) liveGrouping.pending = { ...(liveGrouping.pending || {}), [name]: true };
+    return;
+  }
+  if (liveGrouping.maps[name] && !force) return;
   liveGrouping.loading[name] = true;
   try {
     const resp = await fetch(`/api/groupings/${name}`, { cache: 'no-store' });
@@ -781,20 +786,26 @@ async function loadLiveMapping(name, force = false) {
   } catch (err) {
     if (liveGrouping.by === name) {
       toast(`無法使用此分組：${err.message}`);
-      setLiveGrouping('industry');
+      setLiveGrouping('industry', { persist: false }); // keep the saved choice for next time
     }
   } finally {
     liveGrouping.loading[name] = false;
+    if (liveGrouping.pending?.[name]) {
+      liveGrouping.pending[name] = false;
+      loadLiveMapping(name, true);
+    }
   }
 }
 
-function setLiveGrouping(by) {
+function setLiveGrouping(by, { persist = true } = {}) {
   liveGrouping.by = by;
   state.zoomIndustry = null; // names differ between groupings
-  try {
-    localStorage.setItem('openmarket.live.grouping', JSON.stringify(by));
-  } catch {
-    /* ignore */
+  if (persist) {
+    try {
+      localStorage.setItem('openmarket.live.grouping', JSON.stringify(by));
+    } catch {
+      /* ignore */
+    }
   }
   render();
 }
