@@ -103,3 +103,15 @@
 因為原始需求是 **看哪些股票集體上漲、由誰帶動**，所以頂尖做法會順便做 **列出族群內漲幅最大的領漲股**（盤後報導普遍以「某族群由 X 領漲／強勢出擊」描述）；目前的成果 **沒有**——要點進 D 或放大 A 才知道。
 - 參考：Yahoo 股市盤後新聞（族群強勢出擊）https://tw.stock.yahoo.com/news/%E5%85%A9%E8%90%AC%E9%BB%9E%E5%9B%9E%E4%BE%86%E5%95%A6-%E5%8F%B0%E7%A9%8D%E9%9B%BB%E4%B8%8A%E6%8F%9A%E6%8B%89%E6%8A%AC%E5%8F%B0%E8%82%A1%E6%94%B6%E6%BC%B2161-68%E9%BB%9E-%E5%B1%85%E5%AE%B6%E7%94%9F%E6%B4%BB%E6%97%8F%E7%BE%A4%E5%BC%B7%E5%8B%A2%E5%87%BA%E6%93%8A-071100849.html ；鉅亨網盤後 https://www.nstock.tw/news/article_c?id=307347
 - 範圍：group_stats 加 leader（名稱、代號、漲幅）；B 表多一欄，點擊開 bonus-02 個股卡片；測試。
+
+# 加分候選（第 8 輪）
+
+## X1. 即時產業矩陣加入近 5／20 日欄
+因為原始需求是 **盤中看產業熱力圖＋強勢族群**，所以頂尖做法會順便做 **族群績效表同時看當日與 1 週／1 月**（Finviz Groups Performance 視圖、OpenBB CompareGroups perf 1D/1W/1M）；目前的成果 **只有部分**——即時矩陣只有今日、本週（HiStock 週漲跌），歷史頁才有 5／20／60 日。
+- 參考：OpenBB Compare Groups https://docs.openbb.co/platform/data_models/CompareGroups ；finvizfinance group performance https://finvizfinance.readthedocs.io/en/latest/group.html
+- 範圍：即時頁載入一次 /api/history/periods（最新交易日）；產業矩陣多「20日」欄（可排序、上色）；app.js＋index.html；無後端改動。
+
+## X2. 網址保存檢視狀態（日期／分組／模式），可加書籤
+因為原始需求是 **回溯每一天的強勢族群**，所以頂尖做法會順便做 **把目前檢視編進網址，可分享／書籤**（Finviz map 以 map.ashx?t=sec 等參數指定地圖；提供嵌入產生器保存市場與期間選擇）；目前的成果 **沒有**——重新整理後回到最新日，無法把「10/16 概念股」存成書籤。
+- 參考：Finviz 嵌入地圖（選市場、期間）https://finviz.com/blog/you-can-now-embed-finviz-maps-on-your-website-blog-or-app/ ；Finviz 熱力圖網址 finviz.com/map.ashx?t=sec（Optuma 論壇引用）https://forum.optuma.com/t/heat-map/4074
+- 範圍：history.js 以 location.hash（#history/2026-10-16/concept）同步日期與分組，載入時讀取；app.js 模式切換寫入 hash；無後端改動。
