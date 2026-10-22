@@ -215,3 +215,8 @@ table.rot td.sel { outline: 1px solid #fff; }
 .mbar { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; white-space: nowrap; }
 .mbar-track { display: inline-flex; width: 110px; height: 8px; border-radius: 4px; overflow: hidden; background: #2a2d35; }
 .mbar-track i { display: block; height: 100%; }
+
+/* bonus-21: heatmap fullscreen */
+.fs-btn { position: absolute; right: 8px; bottom: 8px; z-index: 6; width: 30px; height: 28px; border-radius: 5px; border: 1px solid #3a3e48; background: #1d212aee; color: var(--muted); cursor: pointer; }
+.fs-btn:hover { color: #fff; }
+.chart-wrap:fullscreen { background: var(--bg); }

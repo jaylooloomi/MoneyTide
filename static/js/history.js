@@ -1133,3 +1133,17 @@ function ensureGroupFilterBox() {
     }
   });
 }
+
+// ---- bonus-21: fullscreen button for the history heatmap (A) -------------------------
+(function addHistFullscreen() {
+  const wrap = document.querySelector('#historyView .hA .chart-wrap');
+  if (!wrap || !document.fullscreenEnabled) return;
+  const b = document.createElement('button');
+  b.type = 'button';
+  b.className = 'fs-btn';
+  b.title = '全螢幕（Esc 離開）';
+  b.setAttribute('aria-label', '全螢幕');
+  b.textContent = '⛶';
+  b.addEventListener('click', () => (document.fullscreenElement ? document.exitFullscreen() : wrap.requestFullscreen()));
+  wrap.appendChild(b);
+})();
