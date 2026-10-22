@@ -20,7 +20,7 @@ import {
   watchRows,
 } from './transform.js';
 import { showHistory } from './history.js';
-import { MIN_FILTERS, breadthBarHtml, marketBreadth, regroupStocks } from './transform.js';
+import { MIN_FILTERS, breadthBarHtml, findStock, marketBreadth, regroupStocks } from './transform.js';
 import { addToGroup, getGroups, loadGroups, onGroupsChange, openGroupPanel, setStockNames } from './groups.js';
 
 const SNAPSHOT_POLL_MS = 10_000;
@@ -28,6 +28,8 @@ const SNAPSHOT_POLL_MS = 10_000;
 const livePeriods = { date: null, byGroup: {}, loading: false };
 // bonus-17: live grouping switch state (declared before main() runs)
 const liveGrouping = { by: 'industry', maps: {}, loading: {} };
+// bonus-23: declared up here because main() renders before the module finishes evaluating
+const liveSearch = { shown: [], listFor: null };
 try {
   const saved = JSON.parse(localStorage.getItem('openmarket.live.grouping') || '""');
   if (['industry', 'custom', 'concept'].includes(saved)) liveGrouping.by = saved;
@@ -228,6 +230,7 @@ function render() {
   renderLegend();
   renderMatrix(withPeriods(aggregateIndustries(stocks))); // bonus-11: 20-day column
   renderLiveBreadth(filtered); // bonus-05 (each stock once, whatever the grouping)
+  renderLiveSearch(snap, stocks); // bonus-23
   renderWatch(snap ? snap.stocks : []);
   renderCard();
 }
@@ -863,4 +866,54 @@ function renderLiveMinSelect() {
     });
   }
   sel.value = state.filters.min || '';
+}
+
+// ---- bonus-23: "find a stock" box (code / name -> zoom its group and open the card) -----
+
+function renderLiveSearch(snap, shown) {
+  liveSearch.shown = shown;
+  let input = $('#liveFind');
+  if (!input) {
+    input = document.createElement('input');
+    input.id = 'liveFind';
+    input.type = 'search';
+    input.className = 'field';
+    input.placeholder = '找股票：代號／名稱';
+    input.setAttribute('list', 'liveFindList');
+    input.setAttribute('aria-label', '找股票');
+    const list = document.createElement('datalist');
+    list.id = 'liveFindList';
+    $('#liveControls').append(input, list);
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') goToStock(input.value);
+      else if (e.key === 'Escape') input.blur();
+      e.stopPropagation(); // keep the page's Esc / shortcut handlers out of typing
+    });
+    // picking a datalist entry fires "input" with the full "code name" value
+    input.addEventListener('input', (e) => {
+      if (!e.inputType || e.inputType === 'insertReplacementText') goToStock(input.value);
+    });
+  }
+  if (snap && liveSearch.listFor !== snap) {
+    liveSearch.listFor = snap;
+    $('#liveFindList').innerHTML = snap.stocks
+      .map((s) => `<option value="${escapeHtml(s.code)} ${escapeHtml(s.name)}"></option>`)
+      .join('');
+  }
+}
+
+function goToStock(query) {
+  if (!String(query || '').trim()) return;
+  const all = state.snapshot?.stocks || [];
+  const hit = findStock(all, query);
+  if (!hit) {
+    toast(`找不到「${query.trim()}」`);
+    return;
+  }
+  const shown = liveSearch.shown.find((s) => s.code === hit.code);
+  if (shown) zoomTo(shown.industry);
+  else toast(`${hit.code} ${hit.name} 不在目前的篩選／分組中，只開啟資訊卡`);
+  openCard(hit.code);
+  $('#liveFind').value = '';
+  $('#liveFind').blur();
 }

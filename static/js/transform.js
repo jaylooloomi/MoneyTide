@@ -431,3 +431,18 @@ export function passesMin(s, key) {
   if (f.cap !== undefined && !((s.market_cap || 0) >= f.cap)) return false;
   return true;
 }
+
+// ---- bonus-23: find a stock by code or name ------------------------------------------
+/** Best match for a typed query: exact code, exact name, code prefix, then name substring. */
+export function findStock(stocks, query) {
+  const q = String(query || '').trim().split(/\s+/)[0]; // datalist values are "code name"
+  if (!q) return null;
+  const lower = q.toLowerCase();
+  return (
+    stocks.find((s) => s.code === q) ||
+    stocks.find((s) => s.name === q) ||
+    stocks.find((s) => s.code.startsWith(q)) ||
+    stocks.find((s) => (s.name || '').toLowerCase().includes(lower)) ||
+    null
+  );
+}

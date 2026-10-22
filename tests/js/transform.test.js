@@ -306,3 +306,19 @@ test('minimum turnover / cap filter', async () => {
   const codes = filterStocks([s('A', 6, 200e8), s('B', 2, 20e8), s('C', 0, null)], { market: 'all', includeEtf: false, watchOnly: false, min: 't5' }, []).map((x) => x.code);
   assert.deepEqual(codes, ['A']);
 });
+
+test('findStock matches code, name, prefix, substring', async () => {
+  const { findStock } = await import('../../static/js/transform.js');
+  const list = [
+    { code: '2330', name: '台積電' },
+    { code: '2303', name: '聯電' },
+    { code: '23301', name: '台積電甲' },
+  ];
+  assert.equal(findStock(list, '2330').code, '2330');
+  assert.equal(findStock(list, ' 2303 聯電 ').code, '2303');
+  assert.equal(findStock(list, '台積電').code, '2330');
+  assert.equal(findStock(list, '233').code, '2330');
+  assert.equal(findStock(list, '積電甲').code, '23301');
+  assert.equal(findStock(list, ''), null);
+  assert.equal(findStock(list, '9999'), null);
+});
