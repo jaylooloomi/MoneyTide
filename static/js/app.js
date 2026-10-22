@@ -24,6 +24,8 @@ import { breadthBarHtml, marketBreadth } from './transform.js';
 import { addToGroup, getGroups, loadGroups, onGroupsChange, openGroupPanel, setStockNames } from './groups.js';
 
 const SNAPSHOT_POLL_MS = 10_000;
+// bonus-11: 20-day industry returns for the live matrix (declared before main() runs)
+const livePeriods = { date: null, byGroup: {}, loading: false };
 const PREFS_KEY = 'openmarket.prefs.v1';
 
 const $ = (sel) => document.querySelector(sel);
@@ -631,6 +633,11 @@ async function main() {
   if (location.hash.startsWith('#history')) state.mode = 'history'; // bonus-12: bookmarked view
   else if (location.hash === '#live') state.mode = 'live';
   setMode(state.mode);
+  window.addEventListener('hashchange', () => {
+    // bonus-12: a pasted bookmark switches mode; history.js then applies its date/grouping
+    const want = location.hash.startsWith('#history') ? 'history' : location.hash === '#live' ? 'live' : null;
+    if (want && want !== state.mode) setMode(want);
+  });
   try {
     const [{ body: settings }] = await Promise.all([api('/api/settings'), loadWatchlist()]);
     if (settings) state.settings = settings;
@@ -679,7 +686,6 @@ function renderLiveBreadth(stocks) {
 }
 
 // ---- bonus-11: 20-day industry return in the live matrix (from stored history) ----
-const livePeriods = { date: null, byGroup: {}, loading: false };
 
 function withPeriods(rows) {
   ensureLivePeriods();

@@ -154,6 +154,7 @@ async function loadDay() {
     st.stocks = data.stocks.filter((s) => s.kind === 'stock');
     if (st.grouping === 'industry') setStockNames(st.stocks);
   } catch {
+    if (t !== tickets.day) return;
     st.stocks = [];
   }
   renderChart();
@@ -207,6 +208,7 @@ async function loadGroups_() {
     st.groups = data.groups.map((g) => ({ ...g, leader_pct: g.leader?.change_pct ?? null })); // bonus-09
     loadPeriods(); // bonus-10
   } catch {
+    if (t !== tickets.groups) return;
     st.groups = [];
   }
   renderGroups();
@@ -522,7 +524,9 @@ export async function showHistory() {
     return;
   }
   chart.resize();
-  writeHash(); // bonus-12
+  const pasted = parseHash(); // bonus-12: a bookmark pasted while in live mode
+  if (pasted?.date || pasted?.grouping) await onHashChange();
+  else writeHash();
   await loadDays();
   loadRotation();
   loadIndex(); // bonus-04
