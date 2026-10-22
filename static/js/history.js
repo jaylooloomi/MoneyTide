@@ -141,9 +141,14 @@ async function selectDate(date) {
 
 // ---- A: day heatmap ---------------------------------------------------------
 
+// Each loader drops responses that arrive after a newer request (fast date/grouping switches).
+const tickets = { day: 0, groups: 0, rotation: 0, movers: 0 };
+
 async function loadDay() {
+  const t = ++tickets.day;
   try {
     const data = await getJson(`/api/history/day/${st.date}?grouping=${st.grouping}`);
+    if (t !== tickets.day) return;
     st.stocks = data.stocks.filter((s) => s.kind === 'stock');
     if (st.grouping === 'industry') setStockNames(st.stocks);
   } catch {
@@ -192,8 +197,10 @@ function renderCrumb() {
 // ---- B: group ranking -------------------------------------------------------
 
 async function loadGroups_() {
+  const t = ++tickets.groups;
   try {
     const data = await getJson(`/api/history/groups?date=${st.date}&threshold=${st.threshold}&grouping=${st.grouping}`);
+    if (t !== tickets.groups) return;
     st.groups = data.groups.map((g) => ({ ...g, leader_pct: g.leader?.change_pct ?? null })); // bonus-09
     loadPeriods(); // bonus-10
   } catch {
@@ -247,12 +254,14 @@ function rotationText(metric, v) {
 async function loadRotation() {
   const table = $('#hRotation');
   let data;
+  const t = ++tickets.rotation;
   try {
     data = await getJson(`/api/history/rotation?days=${st.rotDays}&metric=${st.rotMetric}&threshold=${st.threshold}&grouping=${st.grouping}`);
   } catch {
-    table.innerHTML = '';
+    if (t === tickets.rotation) table.innerHTML = '';
     return;
   }
+  if (t !== tickets.rotation) return;
   csvData.rotation = data; // bonus-07
   const head = data.dates.map((d) => `<th data-date="${d}" title="${d}">${d.slice(5).replace('-', '/')}</th>`).join('');
   const rows = data.groups
@@ -289,14 +298,16 @@ async function loadMovers() {
   let url = `/api/history/movers?to=${st.date}&mode=${mode}&value=${value}&grouping=${st.grouping}`;
   if (mode === 'range') url += `&from=${st.from}`;
   let data;
+  const t = ++tickets.movers;
   try {
     data = await getJson(url);
   } catch {
-    $('#hMovers').innerHTML = '<p class="hint">無法載入。</p>';
+    if (t === tickets.movers) $('#hMovers').innerHTML = '<p class="hint">無法載入。</p>';
     return;
   }
+  if (t !== tickets.movers) return;
   csvData.movers = data; // bonus-07
-  const total = data.groups.reduce((a, g) => a + g.stocks.length, 0);
+  const total = new Set(data.groups.flatMap((g) => g.stocks.map((x) => x.code))).size;
   $('#hMoverSummary').textContent = `${total} 檔，${data.groups.length} 個族群`;
   const unit = mode === 'streak' ? '天' : '%';
   $('#hMovers').innerHTML = data.groups.length
@@ -383,11 +394,13 @@ function bind() {
     if (!b || b.disabled || b.dataset.value === st.grouping) return;
     st.grouping = b.dataset.value;
     st.zoom = null;
+    idx.picked = []; // E: names picked under another grouping would not exist here
     savePrefs();
     reloadGrouped();
   });
   $('#hManageGroups').addEventListener('click', () => openGroupPanel());
   onGroupsChange(() => {
+    for (const key of [...periodState.cache.keys()]) if (key.endsWith('|custom')) periodState.cache.delete(key);
     if (st.grouping === 'custom') reloadGrouped();
   });
   $('#hPrev').addEventListener('click', () => {
