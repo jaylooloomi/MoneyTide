@@ -13,6 +13,7 @@
 | # | 名稱 | Score | 參考來源（競品 / 專案 / 文章） | 做了什麼 | 驗證指令 | 測試狀態 | 否決的替代作法 |
 |---|---|---|---|---|---|---|---|
 | 01 | 等大小（Mono）格子 | 7.5（scores-01.md） | TradingView Heatmaps「Mono」大小選項 https://www.tradingview.com/support/solutions/43000766446 | c8ecd1a：即時頁與歷史頁 A 的大小切換多一顆「等大小」，每檔一格只看顏色（產業面積＝家數）；概念股模式下不再被台積電占滿 | `node --test "tests/js/*.test.js"` | ✅ 16/16 js；headless：101 族群、2,631 格全為 1 | ① 依 log(市值) 縮放：仍有大小偏差、使用者難解讀；② 只在概念股模式強制等大小：行為不一致 |
+| 02 | 歷史頁個股資訊卡＋近 20 日走勢 | 4.5（scores-01.md） | TradingView Heatmaps 點擊進入個股 https://www.tradingview.com/support/solutions/43000766446 ；Finviz heatmap https://finviz.com/blog/evolving-the-heatmap-dow-jones-nasdaq-100-russell-2000-and-more | 566ff9f：store.stock_rows＋metrics.stock_history＋GET /api/history/stock/{code}；歷史頁 A 點個股、D 點股票標籤即開卡片（當日價量、近 20 日走勢小圖與區間漲幅、HiStock 連結；Ctrl＋點擊仍直接開 HiStock）| `uv run pytest -q tests/test_history.py` | ✅ 113 py／16 js；headless：2468 華經卡片 20 點走勢 | ① 直接連到 HiStock 個股頁：離開回溯脈絡、看不到當日資料；② 開新的完整個股頁（K 線）：超出規模 |
 
 ## 判斷不值得做
 
