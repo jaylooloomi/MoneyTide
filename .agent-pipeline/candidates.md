@@ -205,3 +205,10 @@
 因為原始需求是 **以熱力圖為主畫面看盤**（約 2,400 檔、許多小格子），所以頂尖做法會順便做 **熱力圖全螢幕按鈕**（TradingView Heatmap 右上角 Fullscreen 按鈕開啟全尺寸檢視）；目前的成果 **沒有**——熱力圖受頂列、側欄、廣度列擠壓。
 - 參考：TradingView How to set up the display of the Heatmap?（Fullscreen button）https://www.tradingview.com/support/solutions/43000707156-how-to-set-up-the-display-of-the-heatmap ；TradingView heatmaps https://www.tradingview.com/support/solutions/43000766446
 - 範圍：即時與歷史 A 標題列各一顆「⛶」，用瀏覽器 Fullscreen API 放大熱力圖容器（Esc 離開），ECharts resize；app.js、history.js；無後端改動。
+
+# 加分候選（第 20 輪）
+
+## AK1. 熱力圖「最低成交值／最低市值」篩選
+因為原始需求是 **用熱力圖看哪些股票集體上漲**（全市場約 2,400 格，冷門小型股雜訊多），所以頂尖做法會順便做 **熱力圖篩選條件**（TradingView heatmap 提供數十種篩選；Finviz 熱力圖可搭配篩選器）；目前的成果 **只有部分**——只能篩市場、ETF、自選。
+- 參考：Liberated Stock Trader「Stock heat map」評測（TradingView heatmap filters）https://www.liberatedstocktrader.com/stock-heat-map/ ；TradeAlgo Best Heat Map Tools 2026 https://www.tradealgo.com/trading-guides/tools/best-heat-map-tools-for-stocks-options-and-crypto-in-2026 ；TradingView Heatmaps https://www.tradingview.com/support/solutions/43000766446
+- 範圍：transform filterStocks 增加 minTurnover／minCap（純函式＋測試）；即時頂列與歷史 A 標題列各一個下拉（不限／成交值 ≥1 億／≥5 億、市值 ≥100 億）；app.js、history.js。
