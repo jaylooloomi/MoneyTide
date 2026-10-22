@@ -210,3 +210,8 @@ table.rot td.sel { outline: 1px solid #fff; }
 .seg button:disabled:hover { background: none; color: var(--muted); }
 
 .card .memb { font-size: 12px; margin-top: 6px; line-height: 1.5; }
+
+/* bonus-05: market breadth bar */
+.mbar { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; white-space: nowrap; }
+.mbar-track { display: inline-flex; width: 110px; height: 8px; border-radius: 4px; overflow: hidden; background: #2a2d35; }
+.mbar-track i { display: block; height: 100%; }

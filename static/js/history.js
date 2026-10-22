@@ -14,6 +14,7 @@ import {
   fmtTurnover,
   sortRows,
 } from './transform.js';
+import { breadthBarHtml, marketBreadth } from './transform.js';
 import { getGroups, loadGroups, onGroupsChange, openGroupPanel, setStockNames } from './groups.js';
 
 const PREFS_KEY = 'openmarket.history.v1';
@@ -163,6 +164,7 @@ function renderChart() {
     chart.dispatchAction({ type: 'treemapRootToNode', seriesId: 'map', targetNodeId: 'ind:' + st.zoom });
   } else st.zoom = null;
   renderCrumb();
+  renderHistBreadth(); // bonus-05
 }
 
 function zoomTo(name) {
@@ -677,4 +679,18 @@ async function loadIndex() {
       { name: '全市場', type: 'line', data: d.market, symbol: 'none', lineStyle: { width: 1.5, type: 'dashed', color: '#aaa' }, itemStyle: { color: '#aaa' } },
     ],
   }, { notMerge: true });
+}
+
+// ---- bonus-05: market breadth for the selected day (A panel header) ----
+function renderHistBreadth() {
+  let el = $('#mbarHist');
+  if (!el) {
+    el = document.createElement('span');
+    el.id = 'mbarHist';
+    $('#hCrumb').after(el);
+  }
+  // custom/concept groupings repeat a stock once per group: count each code once
+  const seen = new Set();
+  const unique = st.stocks.filter((s) => !seen.has(s.code) && seen.add(s.code));
+  el.innerHTML = breadthBarHtml(marketBreadth(unique));
 }

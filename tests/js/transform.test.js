@@ -233,3 +233,13 @@ test('equal size: every stock one tile, none hidden', async () => {
   assert.equal(tree.hiddenEtf, 0);
   assert.deepEqual(tree.data.flatMap((g) => g.children.map((c) => c.value)), [1, 1, 1]);
 });
+
+test('market breadth', async () => {
+  const { marketBreadth, breadthBarHtml } = await import('../../static/js/transform.js');
+  const s = (change, change_pct, turnover_100m, kind = 'stock') => ({ change, change_pct, turnover_100m, kind });
+  const b = marketBreadth([s(1, 10, 3), s(2, 2, 1), s(-1, -9.8, 4), s(0, 0, 2), s(5, 5, 100, 'etf'), s(null, null, 0)]);
+  assert.deepEqual(b, { up: 2, down: 1, flat: 2, limitUp: 1, limitDown: 1, upTurnoverShare: 40 });
+  assert.match(breadthBarHtml(b), /▲2/);
+  assert.equal(breadthBarHtml(marketBreadth([])), '');
+  assert.equal(marketBreadth([s(0, 0, 0)]).upTurnoverShare, null);
+});

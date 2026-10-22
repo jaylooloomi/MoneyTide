@@ -20,6 +20,7 @@ import {
   watchRows,
 } from './transform.js';
 import { showHistory } from './history.js';
+import { breadthBarHtml, marketBreadth } from './transform.js';
 import { addToGroup, getGroups, loadGroups, onGroupsChange, openGroupPanel, setStockNames } from './groups.js';
 
 const SNAPSHOT_POLL_MS = 10_000;
@@ -214,6 +215,7 @@ function render() {
   renderNote();
   renderLegend();
   renderMatrix(aggregateIndustries(stocks));
+  renderLiveBreadth(stocks); // bonus-05
   renderWatch(snap ? snap.stocks : []);
   renderCard();
 }
@@ -648,4 +650,15 @@ async function fillMembership(card) {
     return `<div title="${escapeHtml(names.join('、'))}"><span class="muted">${label}</span> ${shown}${more}</div>`;
   };
   slot.innerHTML = line('概念：', m.concepts) + line('自訂：', m.custom);
+}
+
+// ---- bonus-05: market breadth bar in the live top bar ----
+function renderLiveBreadth(stocks) {
+  let el = $('#mbarLive');
+  if (!el) {
+    el = document.createElement('span');
+    el.id = 'mbarLive';
+    $('#status').before(el);
+  }
+  el.innerHTML = breadthBarHtml(marketBreadth(stocks));
 }

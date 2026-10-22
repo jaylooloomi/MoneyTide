@@ -327,3 +327,37 @@ export function breadthColor(up, down) {
   const share = breadthShare(up, down);
   return share === null ? NO_DATA_COLOR : colorFor(share - 50, 50);
 }
+
+// ---- bonus-05: market breadth (advancers / decliners) ---------------------------
+
+const LIMIT_PCT = 9.5; // same rule as the history metrics: ≥9.5% counts as limit-up
+
+/** Advancers/decliners/unchanged among common stocks, limit moves, and advancers' turnover share. */
+export function marketBreadth(stocks) {
+  let up = 0, down = 0, flat = 0, limitUp = 0, limitDown = 0, upTurnover = 0, turnover = 0;
+  for (const s of stocks) {
+    if (s.kind && s.kind !== 'stock') continue;
+    const t = s.turnover_100m || 0;
+    turnover += t;
+    if (s.change > 0) {
+      up += 1;
+      upTurnover += t;
+    } else if (s.change < 0) down += 1;
+    else flat += 1;
+    if (s.change_pct >= LIMIT_PCT) limitUp += 1;
+    else if (s.change_pct <= -LIMIT_PCT) limitDown += 1;
+  }
+  return { up, down, flat, limitUp, limitDown, upTurnoverShare: turnover > 0 ? (upTurnover / turnover) * 100 : null };
+}
+
+/** Small HTML bar: red share = advancers, grey = unchanged, green = decliners. */
+export function breadthBarHtml(b) {
+  const n = b.up + b.down + b.flat;
+  if (!n) return '';
+  const w = (x) => ((x / n) * 100).toFixed(1);
+  const share = b.upTurnoverShare === null ? '—' : `${b.upTurnoverShare.toFixed(0)}%`;
+  return `<span class="mbar" title="上漲 ${b.up}／平盤 ${b.flat}／下跌 ${b.down}；漲停 ${b.limitUp}、跌停 ${b.limitDown}；上漲股成交值占 ${share}">` +
+    `<span class="mbar-track"><i style="width:${w(b.up)}%;background:#e0262c"></i><i style="width:${w(b.flat)}%;background:#55555f"></i><i style="width:${w(b.down)}%;background:#1fa24a"></i></span>` +
+    `<span class="up">▲${b.up}</span> <span class="muted">${b.flat}</span> <span class="down">▼${b.down}</span>` +
+    `<span class="muted"> · 漲停 ${b.limitUp} 跌停 ${b.limitDown} · 漲股量 ${share}</span></span>`;
+}
