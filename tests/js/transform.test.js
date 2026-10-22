@@ -219,3 +219,17 @@ test('treemap ids stay unique when a stock is in several groups', async () => {
   assert.equal(new Set(ids).size, 2);
   assert.ok(ids.includes('stk:3017'));
 });
+
+test('equal size: every stock one tile, none hidden', async () => {
+  const { buildTreemapData } = await import('../../static/js/transform.js');
+  const base = { price: 1, change: 1, change_pct: 1, week_pct: 1, prev_close: 1, kind: 'stock', industry: 'X' };
+  const stocks = [
+    { ...base, code: 'A', name: 'A', market_cap: 1e12, turnover_100m: 100 },
+    { ...base, code: 'B', name: 'B', market_cap: null, turnover_100m: 0 },
+    { ...base, code: 'E', name: 'E', kind: 'etf', industry: 'ETF', market_cap: null, turnover_100m: null },
+  ];
+  const tree = buildTreemapData(stocks, { sizeBy: 'equal', colorBy: 'today' });
+  assert.equal(tree.hiddenNoSize, 0);
+  assert.equal(tree.hiddenEtf, 0);
+  assert.deepEqual(tree.data.flatMap((g) => g.children.map((c) => c.value)), [1, 1, 1]);
+});

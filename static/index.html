@@ -21,7 +21,7 @@
       <button data-value="all">全部</button><button data-value="上市">上市</button><button data-value="上櫃">上櫃</button>
     </div>
     <div class="seg" data-group="sizeBy" role="group" aria-label="格子大小">
-      <button data-value="cap">大小：市值</button><button data-value="turnover">成交值</button>
+      <button data-value="cap">大小：市值</button><button data-value="turnover">成交值</button><button data-value="equal" title="每檔一樣大，只看顏色">等大小</button>
     </div>
     <div class="seg" data-group="colorBy" role="group" aria-label="顏色指標">
       <button data-value="today">顏色：今日</button><button data-value="week">本週</button>
@@ -110,7 +110,7 @@
     <section class="panel hA">
       <div class="panel-h"><b>A · 當日熱力圖</b><span class="crumb" id="hCrumb"></span>
         <span class="spacer"></span>
-        <div class="seg" data-hgroup="sizeBy"><button data-value="cap">市值</button><button data-value="turnover">成交值</button></div>
+        <div class="seg" data-hgroup="sizeBy"><button data-value="cap">市值</button><button data-value="turnover">成交值</button><button data-value="equal" title="每檔一樣大，只看顏色">等大小</button></div>
       </div>
       <div class="chart-wrap"><div id="hChart"></div><div id="hEmpty" class="empty" hidden></div></div>
     </section>

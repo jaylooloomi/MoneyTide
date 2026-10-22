@@ -178,7 +178,8 @@ export function watchRows(stocks, codes) {
 
 // ---- treemap ----------------------------------------------------------------
 
-const sizeOf = (s, sizeBy) => (sizeBy === 'turnover' ? s.turnover_100m : s.market_cap);
+// cap / turnover, or 'equal' (TradingView-style "mono" size: every stock one tile, colour only)
+const sizeOf = (s, sizeBy) => (sizeBy === 'equal' ? 1 : sizeBy === 'turnover' ? s.turnover_100m : s.market_cap);
 
 /**
  * view: { sizeBy: 'cap'|'turnover', colorBy: 'today'|'week' }
