@@ -122,3 +122,16 @@
 因為原始需求是 **看哪些股票集體上漲**，所以頂尖做法會順便做 **找出與某檔股票走勢高度連動的同伴（co-movement／correlation peers）**（dqydj Stock Correlation Calculator 列出最相關的股票對；開源 stock-correlation 技能以一年日資料、相關係數門檻 0.6 排出 co-movement peers）；目前的成果 **沒有**——只能靠官方產業或概念股分組推測。
 - 參考：dqydj Stock Correlation Calculator https://dqydj.com/stock-correlation-calculator/ ；stock-correlation（co-movement discovery）https://skillselion.com/skills/himself65/finance-skills/stock-correlation ；MarketXLS Correlation Matrix guide https://marketxls.com/blog/correlation-matrix-stock-comparison-tool/
 - 範圍：metrics.comovers（以 change_rows 取近 60 日，對全部普通股算皮爾森相關，取前 8 檔、至少 40 個共同交易日）；GET /api/history/comovers/{code}；歷史個股卡片（bonus-02 續做）加一行「同步股」可點開；測試。
+
+# 加分候選（第 10 輪）
+（第 9 輪 TOP: none）
+
+## Z1. 歷史熱力圖顏色期間：1 日／5 日／20 日（個股區間報酬）
+因為原始需求是 **回溯強勢族群、哪些股票集體上漲**，所以頂尖做法會順便做 **熱力圖可切換期間（1D／1W／1M…）**（Finviz 地圖嵌入工具提供 1 Day、1 Week、1 Month、3 Months、YTD、1 Year 期間選擇）；目前的成果 **只有部分**——歷史 A 只能看單日（tooltip 有 5 日）。與第 1 輪 C2 相比縮小範圍：只改 A 的顏色來源，不動 B。
+- 參考：Finviz「You Can Now Embed Finviz Maps」（期間選擇）https://finviz.com/blog/you-can-now-embed-finviz-maps-on-your-website-blog-or-app/ ；第三方 Finviz 資料 App 期間選項 https://apptopia.com/google-play/app/com.cousinHub.HeatMap/about
+- 範圍：day_stocks 已有 week_pct（5 日）；新增 period_20（收盤對 20 交易日前收盤）一個欄位；A 標題列「顏色：1日／5日／20日」切換；transform colorBy 增加 'p20'；測試。
+
+## Z2. 即時個股卡片顯示近 20 日走勢小圖
+因為原始需求是 **盤中看哪些股票上漲**，所以頂尖做法會順便做 **點個股即看近期走勢**（TradingView／Finviz 熱力圖點擊進入個股走勢）；目前的成果 **只有部分**——歷史卡片有 20 日小圖，即時卡片沒有。
+- 參考：TradingView Heatmaps https://www.tradingview.com/support/solutions/43000766446 ；Finviz heatmap https://finviz.com/blog/evolving-the-heatmap-dow-jones-nasdaq-100-russell-2000-and-more
+- 範圍：即時卡片呼叫既有 /api/history/stock/{code}（最新存檔日）畫迷你走勢；app.js；無後端改動。
