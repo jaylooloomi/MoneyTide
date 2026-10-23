@@ -773,6 +773,15 @@ function closeHistCard() {
   }
 }
 
+/** The card's 三大法人 rows (張): 合計 with its streak, then 外資／投信／自營; '' before 法人 is out. */
+export function cardInstRows(i) {
+  if (!i) return '';
+  const n = (v) => `<span class="${v > 0 ? 'up' : v < 0 ? 'down' : ''}">${v > 0 ? '+' : v < 0 ? '−' : ''}${Math.abs(v).toLocaleString()}</span>`;
+  const streak = (s, who) => (s ? `<small class="${s.side === 'buy' ? 'up' : 'down'}">${who}連${s.side === 'buy' ? '買' : '賣'} ${s.days} 天</small>` : '');
+  return `<tr><td>法人</td><td>${n(i.total)} 張</td><td colspan="2">${[streak(i.streak, '法人'), streak(i.trust_streak, '投信')].filter(Boolean).join('　')}</td></tr>
+      <tr><td colspan="4" class="muted">外資 ${n(i.foreign)}／投信 ${n(i.trust)}／自營 ${n(i.dealer)} 張</td></tr>`;
+}
+
 async function openHistCard(code) {
   cardCode = code;
   let d;
@@ -792,6 +801,7 @@ async function openHistCard(code) {
       <tr><td>近 ${d.series.length} 日</td><td>${fmtPct(d.period_pct)}</td><td>成交值</td><td>${fmtTurnover(d.turnover_100m)}</td></tr>
       <tr><td>最高</td><td>${fmtPrice(d.high)}</td><td>最低</td><td>${fmtPrice(d.low)}</td></tr>
       <tr><td>成交量</td><td>${fmtNum(d.volume_lots, 0)} 張</td><td>市值</td><td>${fmtCap(d.market_cap)}</td></tr>
+      ${cardInstRows(d.inst)}
     </table>
     <div class="memb" data-memb="${escapeHtml(d.code)}"></div>
     <div class="btns">

@@ -467,3 +467,28 @@ def test_store_inst_queries_can_be_limited_to_some_codes(tmp_path):
     assert s.inst_trust([d2], {"B"}) == {d2: {"B": 5}}
     assert s.inst_net([d1]) == {d1: {"A": 3, "B": 9, "C": 15}}  # no codes: every stock, as before
     assert s.inst_net([d1], []) == {d1: {}} and s.inst_net([], ["A"]) == {}
+
+
+def test_stock_card_endpoint_carries_inst(tmp_path):
+    from datetime import datetime
+
+    from fastapi.testclient import TestClient
+
+    from openmarket.api import create_app
+    from openmarket.config import AppConfig
+    from openmarket.history.store import HistoryStore
+    from openmarket.sources.institutional import InstRow
+
+    s = HistoryStore(tmp_path / "h.sqlite")
+    days = [date(2026, 3, 2), date(2026, 3, 3), date(2026, 3, 4)]
+    row = {"code": "A", "name": "a", "market": "上市", "industry": "X", "kind": "stock", "close": 10.0, "prev_close": 10.0, "change": 0, "change_pct": 0, "high": 10.0, "low": 10.0, "open": 10.0}
+    for d in days:
+        s.save_day(d, [row], datetime(d.year, d.month, d.day, 15))
+    for d, f in zip(days, (-1000, 2_000_000, 1_500_400)):
+        s.save_inst_day(d, [InstRow("A", f, 300_000, -20_000, f + 280_000)], datetime(d.year, d.month, d.day, 17))
+    app = create_app(AppConfig(data_dir=tmp_path), start_polling=False, start_history=False, start_concepts=False, history_store=s)
+    with TestClient(app, base_url="http://127.0.0.1") as client:
+        inst = client.get("/api/history/stock/A", params={"to": "2026-03-04", "days": 2}).json()["inst"]
+        assert inst == {"foreign": 1500, "trust": 300, "dealer": -20, "total": 1780, "streak": {"days": 3, "side": "buy"}, "trust_streak": {"days": 3, "side": "buy"}}
+        s.save_day(date(2026, 3, 5), [row], datetime(2026, 3, 5, 15))  # 法人 not out yet for 3/5
+        assert client.get("/api/history/stock/A", params={"to": "2026-03-05", "days": 2}).json()["inst"] is None
