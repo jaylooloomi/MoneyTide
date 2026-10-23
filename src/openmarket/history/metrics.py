@@ -103,11 +103,13 @@ def group_stats(rows: list[dict], threshold: float, grouping: Grouping = industr
         total_w = sum(w for _, w in weighted)
         up = sum(1 for r in members if (r.get("change") or 0) > 0)
         down = sum(1 for r in members if (r.get("change") or 0) < 0)
+        amps = [(r["high"] - r["low"]) / r["prev_close"] * 100 for r in members if r.get("high") and r.get("low") and r.get("prev_close")]
         out.append({
             "name": name,
             "count": len(members),
             "avg_pct": sum(pcts) / len(pcts) if pcts else None,
             "cap_pct": sum(v * w for v, w in weighted) / total_w if total_w else None,
+            "avg_amp": sum(amps) / len(amps) if amps else None,  # (high − low) / prev close, equal weight
             "strong_count": sum(1 for p in pcts if p >= threshold),
             "strong_ratio": sum(1 for p in pcts if p >= threshold) / len(pcts) * 100 if pcts else None,
             "limit_up": sum(1 for p in pcts if p >= LIMIT_PCT),

@@ -258,6 +258,7 @@ function renderGroups() {
         ${rankCell(g)}
         <td class="muted">${g.count}</td>
         ${pct(g.avg_pct, 3)}
+        ${ampCell(g.avg_amp)}
         ${pct(g.cap_pct, 3)}
         ${periodCells(g)}
         <td class="c" style="background:${colorFor(g.strong_ratio, 30)}">${g.strong_ratio === null ? '—' : g.strong_ratio.toFixed(0) + '%'}<small class="muted"> ${g.strong_count}</small></td>
@@ -269,6 +270,12 @@ function renderGroups() {
       </tr>`,
     )
     .join('');
+}
+
+// 平均振幅: amber, deeper the wider the day's range (10% and up is full)
+function ampCell(v) {
+  if (v === null || v === undefined) return '<td class="muted">—</td>';
+  return `<td style="background:rgba(255,179,0,${Math.min(v / 10, 1) * 0.55})">${v.toFixed(2)}%</td>`;
 }
 
 // ---- C: rotation ------------------------------------------------------------
@@ -934,9 +941,9 @@ function downloadCsv(name, header, rows) {
 const CSV_EXPORTS = {
   hB: () => [
     `強勢族群_${st.date}_${GROUPING_LABEL[st.grouping]}.csv`,
-    ['日期', '族群', '平均漲幅%', '市值加權%', `漲幅≥${st.threshold}%家數`, `≥${st.threshold}%佔比%`, '漲停', '漲停佔比%', '比重%', '比重Z(20日)', '資金流', '週轉率%', '法人淨買超(元)', '跌停', '上漲', '下跌', '家數', '成交值(元)'],
+    ['日期', '族群', '平均漲幅%', '平均振幅%', '市值加權%', `漲幅≥${st.threshold}%家數`, `≥${st.threshold}%佔比%`, '漲停', '漲停佔比%', '比重%', '比重Z(20日)', '資金流', '週轉率%', '法人淨買超(元)', '跌停', '上漲', '下跌', '家數', '成交值(元)'],
     sortRows(st.groups, st.groupSort.key, st.groupSort.dir).map((g) => [
-      st.date, g.name, g.avg_pct, g.cap_pct, g.strong_count, g.strong_ratio, g.limit_up, g.limit_ratio, g.share, g.z20, g.mf, g.turnover_rate, g.inst_net, g.limit_down, g.up, g.down, g.count, g.turnover,
+      st.date, g.name, g.avg_pct, g.avg_amp, g.cap_pct, g.strong_count, g.strong_ratio, g.limit_up, g.limit_ratio, g.share, g.z20, g.mf, g.turnover_rate, g.inst_net, g.limit_down, g.up, g.down, g.count, g.turnover,
     ]),
   ],
   hC: () => {

@@ -378,3 +378,13 @@ def test_rotation_benchmark_change_uses_the_official_index(store):
     twse, tpex = rot["benchmarks"]
     assert twse["values"][-1] == pytest.approx(2 / 100 * 100)  # change / prev close
     assert tpex["values"] == [None, None, None]  # no OTC stocks or index in the fixture
+
+
+def test_group_stats_average_amplitude():
+    rows = [
+        {"code": "1", "name": "n1", "industry": "X", "kind": "stock", "change": 1, "change_pct": 1, "high": 110, "low": 100, "prev_close": 100, "market_cap": 1},
+        {"code": "2", "name": "n2", "industry": "X", "kind": "stock", "change": 0, "change_pct": 0, "high": 52, "low": 50, "prev_close": 50, "market_cap": 1},
+        {"code": "3", "name": "n3", "industry": "X", "kind": "stock", "change": 0, "change_pct": 0, "high": None, "low": None, "prev_close": 10, "market_cap": 1},
+    ]
+    (x,) = group_stats(rows, threshold=5)
+    assert x["avg_amp"] == pytest.approx((10 + 4) / 2)  # the stock without a range is left out
