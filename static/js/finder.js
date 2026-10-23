@@ -158,8 +158,14 @@ export function filterOptions(d) {
   } else {
     for (const label of d?.groupings || []) opts.push({ key: label, label, n: groups.filter((g) => g.sources?.some((s) => s.label === label)).length });
   }
+  // by who is buying (both methods), once the day's 法人 is out
+  if (groups.some((g) => g.inst)) {
+    for (const [key, label] of INST_FILTERS) opts.push({ key, label, n: groups.filter((g) => matchesFilter(g, key, d.method)).length });
+  }
   return opts;
 }
+
+const INST_FILTERS = [['@inst+', '🏦 法人買超'], ['@inst-', '🏦 法人賣超']]; // '@': never a grouping label
 
 /** The chip actually in effect: the saved one if that day has cards for it, else 全部 (cards and CSV agree). */
 export function shownFilter(d, saved) {
@@ -168,6 +174,8 @@ export function shownFilter(d, saved) {
 
 export function matchesFilter(g, key, method) {
   if (!key || key === 'all') return true;
+  if (key === '@inst+') return g.inst?.lots > 0;
+  if (key === '@inst-') return g.inst?.lots < 0;
   return method === 'new' ? g.kind === key : !!g.sources?.some((s) => s.label === key);
 }
 

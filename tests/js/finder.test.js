@@ -117,6 +117,14 @@ test('filter chips: 找法1 by source grouping (a group can count twice), 找法
   assert.equal(known.groups.filter((g) => matchesFilter(g, 'all', 'known')).length, 3);
   const fresh = { method: 'new', groups: [{ kind: '跨族群新組合' }, { kind: '已知族群' }, { kind: '跨族群新組合' }] };
   assert.deepEqual(filterOptions(fresh).map((o) => [o.label, o.n]), [['全部', 3], ['已知族群', 1], ['延伸', 0], ['跨族群新組合', 2]]);
+  // 🏦 法人買超／賣超: offered once 法人 is attached, for either method, without recomputing
+  const withInst = { ...known, groups: known.groups.map((g, k) => ({ ...g, inst: { lots: [500, -20, 0][k] } })) };
+  assert.deepEqual(filterOptions(withInst).slice(-2).map((o) => [o.key, o.label, o.n]), [['@inst+', '🏦 法人買超', 1], ['@inst-', '🏦 法人賣超', 1]]);
+  assert.equal(withInst.groups.filter((g) => matchesFilter(g, '@inst+', 'known')).length, 1);
+  assert.equal(matchesFilter({ kind: '已知族群' }, '@inst-', 'new'), false); // no 法人 yet: neither
+  assert.equal(shownFilter(withInst, '@inst-'), '@inst-');
+  assert.equal(shownFilter(known, '@inst-'), 'all'); // the day has no 法人: back to 全部
+  assert.equal(csvExport({ ...withInst, date: '2026-10-22', groups: withInst.groups.map((g) => ({ ...g, members: [{ code: '1', name: '甲' }] })) }, '@inst+')[2].length, 1);
   const html = filterHtml(fresh, '跨族群新組合');
   assert.match(html, /data-filter="跨族群新組合" class="on"/);
   assert.match(html, /data-filter="已知族群的延伸" disabled/);

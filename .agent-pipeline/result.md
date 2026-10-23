@@ -36,6 +36,7 @@
 | 24 | N 卡片法人拆成外資／投信／自營 | 4.0（scores-27.md） | TWSE T86 分欄；CMoney「投信連買」「外資連買」；Goodinfo! 法人買賣超分欄 | inst_daily 早已存三欄（只是沒讀）。store 加 inst_split(day)（只讀，不改表），with_history 每次回應依組合成員加總成張，卡片 facts 多「（外資 +3,200／投信 0／自營 +19 張）」＋tooltip 說明三者動機差異。實測 10/22：六組全是外資主導、投信幾乎沒動。改 store.py／api.py／finder.js／2 測試檔 | `pytest tests/test_finder.py -k splits_inst`；`node --test tests/js/finder.test.js` | ✅ pytest 251、node 87 | 改 inst_net 回傳 tuple（會動到 B／metrics 既有用法）；存進 finder_result（盤後才公布會過期） |
 | 24b | （續 24）法人資訊集中到「🏦」一行 | 同上 | moomoo／富途 個股卡「資金」區塊分行呈現 | 實際看畫面：17／19／23／24 的法人片段夾在日 R、高點差中間，換行成三行、連賣天數掉到第三行尾。改成 💰 成交值下面獨立一行「🏦 法人 … 占成交 … （外資／投信／自營）… 連買 N 天」，R／時間那行恢復乾淨；沒有法人就不出這行。改 finder.js／finder.test.js／app.css | `node --test tests/js/finder.test.js`；瀏覽器截圖 10/22 N 卡片 | ✅ node 87、pytest 251 | 收進 tooltip（要滑過才看得到，失去一眼比較）；縮短文字（張／億都需要） |
 | 11b | （續 11）展開的 K 檢視也帶上 🏦 法人 | 9.0（scores-28.md） | Finviz screener → quote 頁帶同一組欄位；moomoo 個股卡展開保留資金區塊 | 點 N 卡片展開 K 檢視時，標題列下方複製卡片的 🏦 法人那一行（bonus-11 只帶 🔁／📰）。瀏覽器驗證 10/22 華經、驊宏資：標題「🔁 近 5 天第 3 次」下方出現「🏦 法人 +3,219 張（≈ +1.6 億）…外資 +3,200／投信 0／自營 +19 張」。改 finder.js（動 bonus-11 的區塊，所以沿用 11 的編號） | 瀏覽器：點 N 卡片 → 標題列下一個元素是 .fd-inst | ✅ node 87、pytest 251 | 重新查詢法人（卡片已有）；放進 tooltip（失去一眼看到） |
+| 25 | N 篩選 chip「🏦 法人買超／賣超」 | 6.0（scores-29.md） | Finviz screener「Institutional Transactions」；Goodinfo! 選股「法人買超」 | 當天法人已附上時，兩種找法的 chip 列尾多「🏦 法人買超 N」「🏦 法人賣超 N」，點了只留那些卡片、不重算；CSV 沿用同一篩選；當天沒法人就不出這兩顆（存著的篩選退回「全部」）。瀏覽器驗證 10/22 找法1：買超 3／賣超 3，點賣超只剩雷科+鈦昇、波若威+聯鈞、波若威+訊芯-KY。改 finder.js／finder.test.js | `node --test tests/js/finder.test.js` | ✅ node 87、pytest 251 | 另開排序（先前 C4 判斷不值得）；後端篩（要重查） |
 
 ## 判斷不值得做
 - C4 N 卡片可排序（1.5，scores-04.md）：每天篩完通常只剩幾張卡，排序幫助不大，還會改到現有預設順序。
@@ -48,10 +49,12 @@
 - 第 8 輪剩下 TOP: none（scores-14.md）：J6 兩種找法雙重確認（1.0）：同一套漏斗跑兩次，等於重複計算同一證據；10/22 兩邊沒有任何相同組合，標記幾乎不會出現。
 - 第 10 輪剩下 TOP: none（scores-18.md）：L2 即時頁也放 💡 摘要（1.8）：歷史頁已有（bonus-12），即時頁工具列已經很擠。
 - N1 N 卡片「誰先動」（2.2，scores-20.md）：做完後用 10/22 真實資料實驗，已放棄並撤回。5 分 K 與 1 分 K 錯開 ±1～10 分鐘，同一筆資金帶動的股票相關都在「同一分鐘」最高（0.49～0.80），錯開後只剩 0.2 以下 → 幾乎不會顯示任何領先，做成標籤沒有意義（實驗腳本在 scratchpad/exp/lead_diag.py）。
+- U2 B 族群法人欄拆外資／投信／自營（0.2，scores-28.md）：要動 metrics 的族群資金流快取與版本，只換來一個 tooltip；N 卡片已拆。
 
 ## 需要你決定的事
 - 縣市點擊看公司明細：請在方案 A（右側清單往下鑽成公司明細，我推薦）與方案 B（列內展開前 10＋看全部）之間選一個，我就做。
 - [存疑] 扣掉大盤的驗證、資金動機產出形式（A/B/C）：未動。
 
+- 融資融券（散戶槓桿資金）當動機證據（V1，scores-29.md）：要新資料源（TWSE MI_MARGN）＋新資料表，屬 DB migration，夜班圍欄禁止；要做請白天決定。
 ## 統計
 - （收工時填）
