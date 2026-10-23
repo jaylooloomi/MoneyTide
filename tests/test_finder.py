@@ -332,3 +332,16 @@ def test_finder_api_themes_skip_news_older_than_a_week(tmp_path):
     with TestClient(app, base_url="http://127.0.0.1") as client:
         (g,) = client.get("/api/history/finder", params={"date": d.isoformat(), "method": "known", "groupings": "industry"}).json()["groups"]
         assert g["themes"] == [] and g["members"][0]["themes"] == []
+
+
+def test_inst_summary_in_lots_and_amount():
+    from openmarket.history.finder import inst_summary
+
+    groups = [{"members": [{"code": "A"}, {"code": "B"}, {"code": "C"}]}, {"members": [{"code": "X"}]}]
+    inst = {"A": 2_000_000.0, "B": -500_000.0, "C": 0.0}
+    rows = {"A": {"close": 100.0}, "B": {"close": 50.0}, "C": {"close": 10.0}}
+    g, empty = inst_summary(groups, inst, rows)
+    assert g["inst"] == {"lots": 1500, "amount_100m": round((2e6 * 100 - 5e5 * 50) / 1e8, 2), "buyers": 1, "sellers": 1}
+    assert g["inst_net"] == 1_500_000.0 and g["members"][1]["inst_net"] == -500_000.0
+    assert empty["inst"] is None  # 法人 not published for these yet
+    assert "inst" not in groups[0]  # copies, the stored result is untouched

@@ -42,9 +42,12 @@ test('cardHtml: kind, closest grouping, members (outside one marked), facts and 
   assert.match(html, /日 R <b>0\.86<\/b>/);
   assert.match(html, /高點差 <b>4<\/b> 分/);
   assert.match(html, /同時爆量 09:25/);
-  assert.match(html, /法人 \+3\.2 億/);
+  assert.match(html, /法人 \+32\.0 萬張/); // inst_net is shares: 3.2 億股 = 32 萬張
   assert.match(html, /甲、乙同步大漲/);
-  assert.match(cardHtml({ ...G, inst_net: -4.5e6 }, 2), /法人 −450 萬/);
+  assert.match(cardHtml({ ...G, inst_net: -4.5e6 }, 2), /法人 −4,500 張/);
+  const inst = cardHtml({ ...G, inst: { lots: 12345, amount_100m: -3.456, buyers: 1, sellers: 2 } }, 2);
+  assert.match(inst, /法人 <b class="up">\+1\.2 萬張<\/b>（≈ −3\.5 億）.*買超 1／賣超 2 檔/);
+  assert.match(cardHtml({ ...G, inst: { lots: -800, amount_100m: -0.5, buyers: 0, sellers: 2 } }, 2), /法人 <b class="down">−800 張<\/b>/);
   const money = cardHtml({ ...G, turnover_100m: 40, turnover_share: 1.234, avg_pct: 7 }, 4);
   assert.match(money, /成交值 <b>40\.00 億<\/b>（占全市場 <b>1\.23%<\/b>）/);
   assert.match(money, /平均漲幅 <b class="up">\+7\.00%<\/b>/);

@@ -24,7 +24,7 @@ from .history.linkage import (
     INTRADAY_HIGH_R, INTRADAY_LOW_R, bucket_closes, daily_linkage, fmt_minute, pair_matrix, peak_minute_from_bars, peak_minute_from_ticks,
     align_bars, amplitude_pct, limit_down_pct, limit_up_pct, minute_bars, turnover_rate, peak_stats, tick_bars, with_close_bar, race_points, returns, locked_level, top_members, verdict_r, verdict_timing,
 )
-from .history.finder import FinderParams, persistence, run_search
+from .history.finder import FinderParams, inst_summary, persistence, run_search
 from .history.finder import news_themes as finder_news_themes  # api.py has its own news_themes route
 from .intraday import IntradayRecorder
 from .sources.yahoo_intraday import INDEX_SYMBOLS, ONE_MINUTE_DAYS, fetch_bars, fetch_day_1m, fetch_span_1m
@@ -707,6 +707,9 @@ def create_app(
             groups = persistence(res.get("groups", []), earlier)
             # 📰 the news keywords naming each member (the latest 3 news days within a week up to d), attached, not stored
             news = [store.news_day(x) for x in store.news_dates_sorted(up_to=d, limit=3) if (d - x).days <= NEWS_THEME_DAYS]
+            # 🏦 法人 read now, not from the stored result: it is published after the close
+            by_code = {r["code"]: r for r in store.day_rows(d)}
+            groups = inst_summary(groups, store.inst_net([d]).get(d, {}), by_code)
             return {**res, "groups": finder_news_themes(groups, news)}
 
         if not refresh:

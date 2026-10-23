@@ -58,6 +58,19 @@ export function defaultGroupName(g, date) {
   return raw.length > NAME_MAX ? `${raw.slice(0, NAME_MAX - 1)}…` : raw;
 }
 
+/** 三大法人 in 張 and ≈ 億元 (g.inst, attached when served); older results only have inst_net in shares. */
+export function instText(g) {
+  const sign = (v) => (v > 0 ? '+' : v < 0 ? '−' : '');
+  const lots = (n) => (Math.abs(n) >= 1e4 ? `${(Math.abs(n) / 1e4).toFixed(1)} 萬張` : `${Math.abs(n).toLocaleString()} 張`);
+  const i = g.inst;
+  if (i) {
+    const cls = i.lots > 0 ? 'up' : i.lots < 0 ? 'down' : '';
+    const who = `<span class="muted">（買超 ${i.buyers}／賣超 ${i.sellers} 檔）</span>`;
+    return `法人 <b class="${cls}">${sign(i.lots)}${lots(i.lots)}</b>（≈ ${sign(i.amount_100m)}${Math.abs(i.amount_100m).toFixed(1)} 億）${who}`;
+  }
+  return g.inst_net ? `法人 ${sign(g.inst_net)}${lots(Math.round(g.inst_net / 1000))}` : '';
+}
+
 export function cardHtml(g, i) {
   const title =
     g.sources?.length
@@ -83,7 +96,7 @@ export function cardHtml(g, i) {
     `高點差 <b>${g.peak_spread ?? '—'}</b> 分`,
     g.start_spread != null ? `起漲差 ${g.start_spread} 分` : '',
     g.together_bursts?.length ? `同時爆量 ${g.together_bursts.slice(0, 3).join('、')}` : '',
-    g.inst_net ? `法人 ${g.inst_net > 0 ? '+' : '−'}${Math.abs(g.inst_net) >= 1e8 ? `${(Math.abs(g.inst_net) / 1e8).toFixed(1)} 億` : `${Math.round(Math.abs(g.inst_net) / 1e4).toLocaleString()} 萬`}` : '',
+    instText(g),
     g.resolution === 5 ? '<span class="muted">5 分 K</span>' : '',
   ]
     .filter(Boolean)

@@ -492,6 +492,31 @@ def describe(g: dict, rows_by_code: Mapping[str, dict], feats: Mapping[str, Intr
     }
 
 
+def inst_summary(groups: list[dict], inst: Mapping[str, float], rows_by_code: Mapping[str, dict]) -> list[dict]:
+    """三大法人 of each group in the units investors read: net 張 (shares / 1000), ≈ 億元 (shares × close)
+    and how many members were net bought / sold. Attached when a result is served, so 法人 published
+    after the search (TWSE posts it around 15:00–16:30) still shows up; None while the day has none."""
+    out = []
+    for g in groups:
+        nets = {m["code"]: inst[m["code"]] for m in g["members"] if m["code"] in inst}
+        if not nets:
+            out.append({**g, "inst": None})
+            continue
+        amount = sum(v * (rows_by_code.get(c, {}).get("close") or 0) for c, v in nets.items())
+        out.append({
+            **g,
+            "members": [{**m, "inst_net": inst.get(m["code"])} for m in g["members"]],
+            "inst_net": sum(nets.values()),
+            "inst": {
+                "lots": round(sum(nets.values()) / 1000),
+                "amount_100m": round(amount / 1e8, 2),
+                "buyers": sum(1 for v in nets.values() if v > 0),
+                "sellers": sum(1 for v in nets.values() if v < 0),
+            },
+        })
+    return out
+
+
 # ---- persistence across days --------------------------------------------------------------------
 
 SAME_GROUP = 0.5  # Jaccard overlap at which two days' groups count as the same combination
