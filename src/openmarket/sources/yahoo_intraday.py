@@ -24,7 +24,13 @@ DAY_1M_URL = "https://query1.finance.yahoo.com/v8/finance/chart/{symbol}?interva
 ONE_MINUTE_DAYS = 29  # Yahoo drops 1m bars after about 30 days
 
 
+# K's two benchmark rows: Yahoo symbol → (name, market of the official index row)
+INDEX_SYMBOLS = {"^TWII": ("大盤（加權）", "上市"), "IX0043.TWO": ("櫃買（OTC）", "上櫃")}
+
+
 def symbol_for(code: str, market: str) -> str:
+    if code in INDEX_SYMBOLS:  # an index is already a Yahoo symbol
+        return code
     return f"{code}.{'TWO' if market == '上櫃' else 'TW'}"
 
 

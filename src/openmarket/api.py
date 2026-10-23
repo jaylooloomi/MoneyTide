@@ -26,7 +26,7 @@ from .history.linkage import (
 )
 from .history.finder import FinderParams, run_search
 from .intraday import IntradayRecorder
-from .sources.yahoo_intraday import ONE_MINUTE_DAYS, fetch_bars, fetch_day_1m, fetch_span_1m
+from .sources.yahoo_intraday import INDEX_SYMBOLS, ONE_MINUTE_DAYS, fetch_bars, fetch_day_1m, fetch_span_1m
 from .news_themes import NewsThemeCollector, heat_bursts, themes_for_day, themes_mapping
 from .concepts import ConceptLoader
 from .groups import GroupStore
@@ -514,6 +514,7 @@ def create_app(
 
             if yahoo_sessions:
                 await asyncio.gather(*(one(m) for m in members))
+            benchmarks = await index_race(http, d)
         axis = list(range(0, 55))
         series = []
         for c in codes:
@@ -545,9 +546,31 @@ def create_app(
             "peak_std_min": std,
             "race": {"step_min": 5 if coarse else 1, "points": race},
             "leader_lag_min": lag,
+            "benchmarks": benchmarks,
             "verdict": {"daily": verdict_r(daily.get("r20")), "intraday": verdict_r(r_intraday, INTRADAY_HIGH_R, INTRADAY_LOW_R), "timing": verdict_timing(std)},
             "notes": notes,
         }
+
+    async def index_race(http: httpx.AsyncClient, d: date) -> list[dict]:
+        """大盤 / 櫃買 for the top of K's timeline: 1m (else 5m) index bars aligned to the official index,
+        ending on its close. A market without a stored index row that day is left out."""
+        index = app.state.history.index_rows().get(d.isoformat(), {})
+        out = []
+        for code, (name, market) in INDEX_SYMBOLS.items():
+            row = index.get(market)
+            if not row or row.get("close") is None or row.get("change") is None:
+                continue
+            prev = row["close"] - row["change"]
+            bars, _ = await minute_bars_for(http, code, market, d)
+            if not bars:
+                got, _ = await bars_for(http, code, market, [d])
+                bars = got.get(d, [])
+            pts = race_points([(x[0], x[1], x[2], x[3]) for x in align_bars(bars, row)], prev) if bars else []
+            if pts:
+                close = round(row["change"] / prev * 100, 2)
+                pts = [p for p in pts if p[0] < 270] + [[270, close, close, close]]
+            out.append({"code": code, "name": name, "change_pct": round(row["change"] / prev * 100, 2), "points": pts})
+        return out
 
     def _day(day: str) -> date:
         try:

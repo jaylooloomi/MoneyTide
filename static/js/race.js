@@ -167,7 +167,11 @@ export function mountRace(box, d, { onStock } = {}) {
     box.innerHTML = '<p class="hint">這一天沒有分時資料。</p>';
     return () => {};
   }
-  const [lo, hi] = raceDomain(frames);
+  // 大盤 / 櫃買 pinned on top for comparison: no rank, not part of the race
+  const benches = (d.benchmarks || []).filter((b) => b.points?.length);
+  const benchFrames = raceFrames(Object.fromEntries(benches.map((b) => [b.code, b.points])), benches.map((b) => b.code));
+  const top = benches.length * ROW_H;
+  const [lo, hi] = raceDomain({ ...frames, ...benchFrames });
   const inner = ROW_H - 2 * PAD;
   const y = (v) => PAD + ((hi - v) / (hi - lo)) * inner;
   const leader = codes[0]; // 👑 龍頭: the largest market cap
@@ -192,8 +196,19 @@ export function mountRace(box, d, { onStock } = {}) {
     </div>
     <div class="rt">
       <div class="rt-axis">${TICKS.map(([label, m]) => `<span style="left:${pctX(m)}%">${label}</span>`).join('')}</div>
-      <div class="rt-board" style="height:${codes.length * ROW_H}px">
+      <div class="rt-board" style="height:${codes.length * ROW_H + top}px">
         <div class="rt-layer"><span class="rt-after" style="left:${pctX(PEAK_END)}%" title="13:00 之後不計入日內最高點"></span><span class="rt-head" title="拖動黃線選時間"><span class="rt-knob"></span></span></div>
+        ${benches
+          .map(
+            (b, i) => `<div class="rt-row bench" data-bench="${escapeHtml(b.code)}" style="transform:translateY(${i * ROW_H}px)" title="${escapeHtml(b.name)}：比較用，不參與排名">
+              <span class="rt-rank"></span><span class="rt-name">${escapeHtml(b.name)}</span>
+              <span class="rt-track">
+                <svg viewBox="0 0 ${RACE_END} ${ROW_H}" preserveAspectRatio="none"><line class="rt-zero" x1="0" x2="${RACE_END}" y1="${y(0)}" y2="${y(0)}"/><polyline class="rt-path"/></svg>
+                <span class="rt-dot"></span>
+              </span>
+              <span class="rt-now"></span><span class="rt-amp"></span><span class="rt-peak"></span></div>`,
+          )
+          .join('')}
         ${codes
           .map((c) => {
             const m = byCode.get(c);
@@ -210,7 +225,8 @@ export function mountRace(box, d, { onStock } = {}) {
       </div>
     </div></div><div class="race-side"></div></div>`;
   const chart = mountIntraday(box.querySelector('.race-side'), { date: d.date, onCard: onStock });
-  const rows = new Map([...box.querySelectorAll('.rt-row')].map((el) => [el.dataset.code, el]));
+  const rows = new Map([...box.querySelectorAll('.rt-row[data-code]')].map((el) => [el.dataset.code, el]));
+  const benchRows = [...box.querySelectorAll('.rt-row.bench')].map((el) => [el, benchFrames[el.dataset.bench]]);
   const clock = box.querySelector('.race-clock');
   const seek = box.querySelector('.race-seek');
   const head = box.querySelector('.rt-head');
@@ -228,13 +244,21 @@ export function mountRace(box, d, { onStock } = {}) {
     seek.value = String(m);
     head.style.left = `${pctX(m)}%`;
     chart.sync(m);
+    for (const [el, f] of benchRows) paint(el, f, m);
     raceOrder(codes, frames, m).forEach((c, i) => {
       const el = rows.get(c);
-      const f = frames[c];
-      const v = f.values[m];
-      el.style.transform = `translateY(${i * ROW_H}px)`;
+      const v = frames[c].values[m];
+      el.style.transform = `translateY(${top + i * ROW_H}px)`;
       el.querySelector('.rt-rank').textContent = v === null ? '' : String(i + 1);
       el.querySelector('.rt-lead').hidden = !(i === 0 && v > 0); // 領漲: first place right now, while up
+      paint(el, frames[c], m);
+    });
+  }
+
+  // one row's path, intraday-high dot and figures at minute m (stocks and the two indexes alike)
+  function paint(el, f, m) {
+    {
+      const v = f.values[m];
       const path = el.querySelector('.rt-path');
       path.setAttribute('points', pathPoints(f, m, y));
       path.style.stroke = v === null ? 'transparent' : colorFor(v > 0 ? 10 : v < 0 ? -10 : 0, 10);
@@ -252,7 +276,7 @@ export function mountRace(box, d, { onStock } = {}) {
       el.querySelector('.rt-peak').textContent = peak ? `高點 ${fmtClock(peak.m)} ${fmtPct(peak.v)}` : '';
       const amp = amplitudeSoFar(f, m);
       el.querySelector('.rt-amp').textContent = amp === null ? '' : `振幅 ${amp.toFixed(2)}%`;
-    });
+    }
   }
 
   function stop() {
@@ -290,7 +314,7 @@ export function mountRace(box, d, { onStock } = {}) {
       if (state.timer) play();
       return;
     }
-    const row = e.target.closest('.rt-row');
+    const row = e.target.closest('.rt-row[data-code]'); // the index rows are for comparison only
     if (row) pick(row.dataset.code);
   });
   seek.addEventListener('input', () => {
