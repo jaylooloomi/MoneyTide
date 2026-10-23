@@ -717,7 +717,8 @@ def create_app(
             # on trading days, stopping at the first one without 法人: a gap must not join two runs
             have = store.inst_dates()
             inst_days = list(takewhile(lambda x: x in have, store.trading_dates(up_to=d, limit=INST_STREAK_DAYS)))
-            groups = inst_streak(groups, store.inst_net(inst_days), inst_days)
+            member_codes = {m["code"] for g in groups for m in g["members"]}  # 20 days × the cards' stocks only
+            groups = inst_streak(groups, store.inst_net(inst_days, member_codes), inst_days)
             # 外資／投信／自營 summed over the members, in 張 (their motives differ: 投信 themes, 外資 weights)
             split = store.inst_split(d)
 
@@ -727,7 +728,7 @@ def create_app(
 
             groups = [{**g, "inst_split": by_kind(g)} for g in groups]
             # 投信連買／連賣: the same streak on 投信 alone (theme / window-dressing positioning)
-            trust = inst_streak(groups, store.inst_trust(inst_days), inst_days)
+            trust = inst_streak(groups, store.inst_trust(inst_days, member_codes), inst_days)
             groups = [{**g, "trust_streak": t["inst_streak"]} for g, t in zip(groups, trust)]
             return {**res, "groups": finder_news_themes(groups, news)}
 

@@ -451,3 +451,19 @@ def test_finder_api_trust_streak_counts_投信_alone(tmp_path):
         g = client.get("/api/history/finder", params={"date": days[-1].isoformat(), "method": "known", "stored_only": 1, "groupings": "industry"}).json()["groups"][0]
     assert g["inst_streak"] == {"days": 3, "side": "sell"}
     assert g["trust_streak"] == {"days": 3, "side": "buy"}
+
+
+def test_store_inst_queries_can_be_limited_to_some_codes(tmp_path):
+    from datetime import datetime
+
+    from openmarket.history.store import HistoryStore
+    from openmarket.sources.institutional import InstRow
+
+    s = HistoryStore(tmp_path / "h.sqlite")
+    d1, d2 = date(2026, 3, 2), date(2026, 3, 3)
+    for d in (d1, d2):
+        s.save_inst_day(d, [InstRow("A", 1, 2, 0, 3), InstRow("B", 4, 5, 0, 9), InstRow("C", 7, 8, 0, 15)], datetime(d.year, d.month, d.day, 17))
+    assert s.inst_net([d1, d2], ["A", "C"]) == {d1: {"A": 3, "C": 15}, d2: {"A": 3, "C": 15}}
+    assert s.inst_trust([d2], {"B"}) == {d2: {"B": 5}}
+    assert s.inst_net([d1]) == {d1: {"A": 3, "B": 9, "C": 15}}  # no codes: every stock, as before
+    assert s.inst_net([d1], []) == {d1: {}} and s.inst_net([], ["A"]) == {}

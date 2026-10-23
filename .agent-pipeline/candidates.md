@@ -260,3 +260,10 @@
 因為原始需求是 **多維度分析資金流動（使用者要能拿去比較）**，所以頂尖做法會順便做 **匯出與畫面欄位一致**；目前的成果 **只有部分**：CSV（bonus-04）是法人功能（17～25）之前做的，畫面上的 🏦 一整行在 CSV 裡全沒有；用 🏦 chip 篩選後匯出，檔名還會帶「@inst+」這種內部代號。
 - 參考：Finviz screener Export（匯出＝目前畫面的欄位）；Goodinfo! 匯出 XLS 含法人欄。
 - 預估：finder.js csvExport 多 8 欄＋檔名用 chip 的中文標籤；finder.test.js。2 檔、約 20 行。
+
+## 第 23 輪調研
+
+## Y1 · N 回應的法人連續天數查詢只抓卡片成員（每次回應 0.38 → ~0.15 秒）
+因為原始需求是 **N 要快（使用者要求「優化到 1min 以下」，並且頁面每次載入會打 3 次 N 的 stored_only）**，所以頂尖做法會順便做 **回應組裝只讀需要的列**；目前的成果 **只有部分**：bonus-19／24c 的連續天數各讀 20 天 × 全市場約 2,000 檔（各 0.125 秒），實際只需要卡片上的十幾檔；實測暖機後每次回應從 0.28 秒升到 0.38 秒。
+- 參考：Use The Index, Luke!「Partial results / only fetch what you need」；SQLite query planner（WHERE date IN … AND code IN … 走主鍵）。
+- 預估：store.inst_net／inst_trust 加可選 codes 參數（不給＝原行為，B／metrics 不受影響）；api with_history 傳成員 codes；測試確認結果相同。3 檔、約 25 行。
