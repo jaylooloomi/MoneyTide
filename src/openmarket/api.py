@@ -19,12 +19,13 @@ from .concepts import ConceptLoader
 from .groups import GroupStore
 from .history.api import create_history_router
 from .history.metrics import industry_grouping, mapping_grouping
-from .history.ingest import HistoryCollector
+from .history.ingest import REQUEST_DELAY_SECONDS, HistoryCollector
 from .history.store import HistoryStore
 from .poller import Poller, RefreshTooSoon
 from .sources.histock import fetch_quotes
 from .sources.http import make_client
 from .sources.official import fetch_tpex_day, fetch_twse_day
+from .sources.official_index import fetch_index_month
 from .sources.yahoo_concepts import fetch_concepts
 from .sources.shares import fetch_shares
 from .sources.twse_isin import fetch_isin
@@ -102,6 +103,7 @@ def create_app(
                 fetch_twse=lambda d: fetch_twse_day(client, d),
                 fetch_tpex=lambda d: fetch_tpex_day(client, d),
                 reference=lambda: (p.infos, p.shares),
+                fetch_index=lambda market, month: fetch_index_month(client, market, month, asyncio.sleep, REQUEST_DELAY_SECONDS),
             )
             tasks.append(asyncio.create_task(app.state.collector.run()))
         if start_concepts and app.state.concepts is None:

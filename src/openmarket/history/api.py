@@ -7,7 +7,7 @@ from fastapi import APIRouter, HTTPException, Query
 
 from ..config import TAIPEI
 
-from .ingest import HistoryCollector
+from .ingest import INDEX_MARKETS, HistoryCollector, index_window
 from .metrics import METRICS, Grouping, day_stocks, group_stats, industry_grouping, movers, rotation, stock_history, group_index, group_periods, group_rank_change
 from .store import HistoryStore
 
@@ -132,6 +132,21 @@ def create_history_router(
     def turnover_avg(days: int = Query(20, ge=1, le=120)) -> dict:
         return get_store().group_turnover_avg(days)
 
+    # G panel: TAIEX + TPEx daily candles with market strength per day
+    @r.get("/market-index")
+    def market_index(days: int = Query(250, ge=1, le=500)) -> dict:
+        store = get_store()
+        out = index_timeline(store, days)
+        done = sum((m, mo) in store.index_months() for mo in index_window(datetime.now(TAIPEI)) for m in INDEX_MARKETS)
+        collector = get_collector()
+        out["backfill"] = {
+            "months_done": done,
+            "months_total": len(index_window(datetime.now(TAIPEI))) * len(INDEX_MARKETS),
+            "running": bool(collector and collector.index_state.running),
+            "error": collector.index_state.error if collector else "",
+        }
+        return out
+
     # bonus-24: per-stock 20-day average turnover before today (for the live 量比 colour)
     @r.get("/stock-turnover-avg")
     def stock_turnover(days: int = Query(20, ge=1, le=60)) -> dict:
@@ -178,3 +193,31 @@ def stock_turnover_avg(store: HistoryStore, days: int, before: date) -> dict:
     result = {"as_of": dates[0].isoformat(), "days": len(dates), "avg": avg}
     store.derived_cache[key] = result
     return result
+
+
+# ---- G panel: index timeline -----------------------------------------------------------
+
+STRONG_PCT = 5.0  # same threshold as the B ranking's default ≥5% share
+
+
+def index_timeline(store: HistoryStore, days: int) -> dict:
+    """Union of index days and stored stock days, oldest first, the last `days` of them.
+    twse/tpex are null where that market has no index row; strength is null without stock data."""
+    from .metrics import LIMIT_PCT
+
+    index = store.index_rows()
+    strength = store.daily_strength(STRONG_PCT, LIMIT_PCT)
+    dates = sorted(set(index) | {d.isoformat() for d in store.trading_dates()})[-days:]
+    rows = []
+    for d in dates:
+        by_market = index.get(d, {})
+        s = strength.get(d)
+        rows.append({
+            "date": d,
+            "twse": by_market.get("上市"),
+            "tpex": by_market.get("上櫃"),
+            "strong_ratio": s["strong_ratio"] if s else None,
+            "limit_up": s["limit_up"] if s else None,
+            "has_stocks": s is not None,
+        })
+    return {"days": rows}

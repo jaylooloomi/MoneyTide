@@ -29,6 +29,19 @@ CREATE TABLE IF NOT EXISTS trading_day (
     fetched_at TEXT NOT NULL,
     rows INTEGER NOT NULL DEFAULT 0
 );
+CREATE TABLE IF NOT EXISTS index_daily (
+    date TEXT NOT NULL,
+    market TEXT NOT NULL,
+    open REAL, high REAL, low REAL, close REAL, change REAL, turnover_yuan REAL,
+    PRIMARY KEY (date, market)
+);
+CREATE TABLE IF NOT EXISTS index_month (
+    market TEXT NOT NULL,
+    month TEXT NOT NULL,
+    fetched_at TEXT NOT NULL,
+    rows INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (market, month)
+);
 """
 
 
@@ -175,5 +188,61 @@ class HistoryStore:
         for industry, market, total in rows:
             avg.setdefault(industry, {})[market] = (total or 0) / len(dates)
         result = {"as_of": dates[0].isoformat(), "days": len(dates), "avg": avg}
+        self.derived_cache[key] = result
+        return result
+
+
+    # ---- market index history (TAIEX / TPEx, see sources/official_index.py) ----------------
+
+    def save_index_month(self, market: str, month: str, rows: list, fetched_at: datetime) -> None:
+        """Replace one market's rows for `month` ('YYYY-MM') with `rows` (IndexRow-like objects)."""
+        with self._lock, self._conn() as c:
+            c.execute("DELETE FROM index_daily WHERE market = ? AND substr(date, 1, 7) = ?", (market, month))
+            c.executemany(
+                """INSERT INTO index_daily (date, market, open, high, low, close, change, turnover_yuan)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                [(r.date.isoformat(), market, r.open, r.high, r.low, r.close, r.change, r.turnover_yuan) for r in rows],
+            )
+            c.execute(
+                "INSERT OR REPLACE INTO index_month (market, month, fetched_at, rows) VALUES (?, ?, ?, ?)",
+                (market, month, fetched_at.isoformat(), len(rows)),
+            )
+
+    def index_months(self) -> dict[tuple[str, str], datetime]:
+        """{(market, 'YYYY-MM'): fetched_at}"""
+        with self._conn() as c:
+            return {
+                (r["market"], r["month"]): datetime.fromisoformat(r["fetched_at"])
+                for r in c.execute("SELECT market, month, fetched_at FROM index_month")
+            }
+
+    def index_rows(self) -> dict[str, dict[str, dict]]:
+        """{date: {market: {open, high, low, close, change, turnover_yuan}}}"""
+        out: dict[str, dict[str, dict]] = {}
+        with self._conn() as c:
+            for r in c.execute("SELECT * FROM index_daily ORDER BY date"):
+                row = dict(r)
+                d, m = row.pop("date"), row.pop("market")
+                out.setdefault(d, {})[m] = row
+        return out
+
+    def daily_strength(self, strong_pct: float, limit_pct: float) -> dict[str, dict]:
+        """Per stored trading day, over common stocks: share (%) with change >= strong_pct and
+        the count with change >= limit_pct. Cached until the next save_day."""
+        key = ("daily_strength", strong_pct, limit_pct)
+        cached = self.derived_cache.get(key)
+        if cached is not None:
+            return cached
+        with self._conn() as c:
+            rows = c.execute(
+                """SELECT q.date,
+                          AVG(CASE WHEN q.change_pct >= ? THEN 1.0 ELSE 0.0 END) * 100,
+                          SUM(CASE WHEN q.change_pct >= ? THEN 1 ELSE 0 END)
+                   FROM daily_quote q JOIN trading_day t ON t.date = q.date AND t.status = 'ok'
+                   WHERE q.kind = 'stock' AND q.change_pct IS NOT NULL
+                   GROUP BY q.date""",
+                (strong_pct, limit_pct),
+            ).fetchall()
+        result = {d: {"strong_ratio": round(ratio, 2), "limit_up": int(n)} for d, ratio, n in rows}
         self.derived_cache[key] = result
         return result

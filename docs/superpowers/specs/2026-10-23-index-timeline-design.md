@@ -1,7 +1,7 @@
 # 大盤＋櫃買時間軸（歷史頁 G 面板）— 設計規格
 
 - 日期：2026-10-23
-- 狀態：已與使用者確認設計，待審閱規格
+- 狀態：已實作（端點因與 E 面板的 /api/history/index 撞名，改為 /api/history/market-index）
 - 範圍：「多維度看金錢流動」需求拆出的 5 個子項目中的 ④。其餘子項目各自另開規格：
   ① 漲停家數佔比／≥5% 佔比指標、② 細產業分類（CMoney／XQ 無公開資料，需確認替代來源）、
   ③ 台灣地圖金錢熱力圖（依公司地址）、⑤ AI 新聞分析（漲跌前三名原因）。
@@ -45,7 +45,7 @@ index_month(market TEXT, month TEXT /* YYYY-MM */, fetched_at TEXT, rows INTEGER
 
 ## 5. API
 
-`GET /api/history/index?days=250`（1 ≤ days ≤ 500）
+`GET /api/history/market-index?days=250`（1 ≤ days ≤ 500）
 
 ```json
 {
@@ -72,7 +72,7 @@ index_month(market TEXT, month TEXT /* YYYY-MM */, fetched_at TEXT, rows INTEGER
 - **共用時間軸**：兩張共用一個 dataZoom（滑桿＋滾輪），預設顯示最近約 3 個月（60 個交易日），可拖曳看全部。
 - **強勢日標記**：當天 `strong_ratio ≥ 10` 或 `limit_up ≥ 90` 時，在加權 K 棒上方畫一個標記點。依 2026-10 的一年資料，≥5% 佔比的第 90 百分位為 10.0%，漲停家數的第 90 百分位為 89 家，所以一年約 25～30 天會被標記。門檻寫成常數（`STRONG_DAY = { ratio: 10, limitUp: 90 }`）。
 - **tooltip**：日期、兩個指數的開高低收與漲跌、兩市場成交值（億），以及當天的 ≥5% 佔比與漲停家數。
-- **點擊某一天**（K 棒、成交值柱、標記點都可以）：呼叫現有的 `selectDate(date)`，所以熱力圖 A、B～F、日期選單、F 月曆與網址書籤（`#history/<date>/<grouping>`）全部同步。沒有個股資料的日子（只有指數）不切換，改顯示 toast「這天沒有個股資料」。
+- **點擊某一天**（K 棒、成交值柱、標記點都可以）：呼叫現有的 `selectDate(date)`，所以熱力圖 A、B～F、日期選單、F 月曆與網址書籤（`#history/<date>/<grouping>`）全部同步。沒有個股資料的日子（只有指數）不切換，改在 G 面板標題列顯示「<日期> 沒有個股資料，無法切換」（歷史頁沒有 toast 元件）。
 - **目前日期**：在兩張圖上以一條垂直 markLine 標示目前選中的日期。日期從其他地方改變時跟著移動，該日在可視範圍外時自動捲到它。
 - 資料在第一次進入歷史頁時載入一次，之後換日不重抓；每日更新（15:30 後）以頁面重新載入或切換模式時重抓為準。
 
@@ -83,14 +83,14 @@ index_month(market TEXT, month TEXT /* YYYY-MM */, fetched_at TEXT, rows INTEGER
 | `src/openmarket/sources/official_index.py` | 抓 4 個端點並解析成 `IndexRow(date, market, open, high, low, close, change, turnover_yuan)`；純解析函式與 HTTP 分開，方便用 fixture 測試 |
 | `src/openmarket/history/store.py` | `index_daily`／`index_month` 建表、`save_index_month()`、`index_months()`、`index_rows(days)`、`daily_strength()` |
 | `src/openmarket/history/ingest.py` | `HistoryCollector` 增加 `collect_index()`（缺月計算＋抓取） |
-| `src/openmarket/history/api.py` | `/api/history/index` |
+| `src/openmarket/history/api.py` | `/api/history/market-index` |
 | `static/js/indexchart.js`（新檔） | 純函式 `movingAverage()`、`isStrongDay()`、`buildIndexOption()`，以及 G 面板的掛載、點擊與 markLine 同步 |
 | `static/js/history.js` | 掛載 G 面板、在 `selectDate` 之後通知 G 更新 markLine |
 | `static/index.html`／`static/app.css` | G 面板容器與版面 |
 
 ## 8. 錯誤處理
 
-- 指數尚未回補：G 面板顯示「大盤資料回補中（n／13 個月）」，每 30 秒重抓一次 API，直到有資料。
+- 指數尚未回補：G 面板顯示「大盤資料回補中（n／26 個市場月份）」（13 個月 × 上市、上櫃），每 30 秒重抓一次 API，直到有資料。
 - API 失敗：顯示「大盤資料載入失敗」與重試按鈕，不影響其他面板。
 - 某天只有個股、沒有指數：K 線該日留空（ECharts 以 `'-'` 表示），仍可從 F 月曆或日期選單切換。
 

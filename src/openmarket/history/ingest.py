@@ -22,6 +22,7 @@ DAILY_GIVE_UP = time(20, 0)  # after this, an empty "today" is treated as a non-
 RETRY_INTERVAL = timedelta(minutes=30)
 
 DayFetcher = Callable[[date], Awaitable[list[DailyRow] | None]]
+IndexFetcher = Callable[[str, date], Awaitable[list]]  # (market, any day of the month) -> IndexRow list
 
 
 def build_rows(
@@ -79,6 +80,7 @@ class HistoryCollector:
         clock: Callable[[], datetime] = lambda: datetime.now(TAIPEI),
         sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
         request_delay: float = REQUEST_DELAY_SECONDS,
+        fetch_index: IndexFetcher | None = None,
     ) -> None:
         self.store = store
         self._fetch_twse = fetch_twse
@@ -88,6 +90,8 @@ class HistoryCollector:
         self._sleep = sleep
         self._delay = request_delay
         self.state = BackfillState()
+        self._fetch_index = fetch_index
+        self.index_state = BackfillState()
 
     def pending_days(self, now: datetime) -> list[date]:
         """Weekdays within the backfill window that are not stored yet, newest first."""
@@ -141,7 +145,28 @@ class HistoryCollector:
             self.state.done += 1
             await self._sleep(self._delay)
         self.state.running = False
+        await self.collect_index()
         await asyncio.to_thread(warm_history_cache, self.store)  # bonus-19
+
+    async def collect_index(self) -> None:
+        """Fetch the index months that are missing or stale (see index_months_to_fetch)."""
+        if self._fetch_index is None:
+            return
+        now = self._clock()
+        todo = index_months_to_fetch(self.store.index_months(), now)
+        self.index_state = BackfillState(running=bool(todo), total=len(todo))
+        for market, month in todo:
+            try:
+                rows = await self._fetch_index(market, date.fromisoformat(month + "-01"))
+                self.store.save_index_month(market, month, rows, self._clock())
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:
+                log.warning("index fetch %s %s failed: %s", market, month, exc)
+                self.index_state.error = f"{market} {month}: {exc}"
+            self.index_state.done += 1
+            await self._sleep(self._delay)
+        self.index_state.running = False
 
     async def run(self) -> None:
         while True:
@@ -173,3 +198,40 @@ def warm_history_cache(store: HistoryStore) -> None:
             store.group_turnover_avg(20)
     except Exception:
         log.exception("history cache warm-up failed")
+
+
+# ---- market index history (G panel) ---------------------------------------------------
+
+INDEX_MONTHS = 13  # the current month plus the 12 before it
+INDEX_MARKETS = ("上市", "上櫃")
+
+
+def index_window(now: datetime) -> list[str]:
+    """'YYYY-MM' of the current month and the INDEX_MONTHS - 1 before it, newest first."""
+    local = now.astimezone(TAIPEI)
+    y, m = local.year, local.month
+    out = []
+    for _ in range(INDEX_MONTHS):
+        out.append(f"{y:04d}-{m:02d}")
+        y, m = (y - 1, 12) if m == 1 else (y, m - 1)
+    return out
+
+
+def index_months_to_fetch(fetched: dict[tuple[str, str], datetime], now: datetime) -> list[tuple[str, str]]:
+    """(market, month) pairs to (re)fetch, newest first. A month is due when it was never fetched,
+    or when it was fetched before the latest 15:30 close that falls inside it (so the current month
+    refreshes once a day after the close, and last month once more after its final session)."""
+    local = now.astimezone(TAIPEI)
+    ready_today = datetime.combine(local.date(), DAILY_READY, TAIPEI)
+    latest_ready = ready_today if local >= ready_today else ready_today - timedelta(days=1)
+    due = []
+    for month in index_window(now):
+        y, m = int(month[:4]), int(month[5:])
+        first_next = date(y + (m == 12), m % 12 + 1, 1)
+        month_last_ready = datetime.combine(first_next - timedelta(days=1), DAILY_READY, TAIPEI)
+        needed = min(latest_ready, month_last_ready)
+        for market in INDEX_MARKETS:
+            got = fetched.get((market, month))
+            if got is None or got.astimezone(TAIPEI) < needed:
+                due.append((market, month))
+    return due

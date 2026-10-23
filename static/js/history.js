@@ -17,6 +17,7 @@ import {
 import { MIN_FILTERS, groupMembers, limitTag, passesMin, toCsv } from './transform.js';
 import { breadthBarHtml, breadthShare, marketBreadth } from './transform.js';
 import { getGroups, loadGroups, onGroupsChange, openGroupPanel, setStockNames } from './groups.js';
+import { mountIndexPanel } from './indexchart.js';
 
 const PREFS_KEY = 'openmarket.history.v1';
 const $ = (sel) => document.querySelector(sel);
@@ -44,6 +45,7 @@ let chart = null;
 const csvData = { rotation: null, movers: null }; // bonus-07: last data shown in C / D
 let started = false;
 let daysTimer = null;
+let indexPanel = null; // G: TAIEX + TPEx timeline (indexchart.js)
 
 function loadPrefs() {
   try {
@@ -141,6 +143,7 @@ async function selectDate(date) {
   loadIndex(); // bonus-04
   renderRotationSelection();
   markCalendar(); // bonus-14
+  indexPanel?.mark(st.date); // G
 }
 
 // ---- A: day heatmap ---------------------------------------------------------
@@ -530,7 +533,13 @@ export async function showHistory() {
     await applyHashDate(); // bonus-12
     await loadRotation();
     loadIndex(); // bonus-04
-    loadCalendar(); // bonus-14
+    loadCalendar(); // bonus-14 (creates F synchronously, so G lands after it)
+    indexPanel = mountIndexPanel($('#historyView'), (date) => {
+      stopReplay(); // manual navigation ends a running replay
+      selectDate(date);
+    });
+    await indexPanel.load();
+    indexPanel.mark(st.date);
     return;
   }
   chart.resize();
@@ -541,6 +550,7 @@ export async function showHistory() {
   loadRotation();
   loadIndex(); // bonus-04
   loadCalendar(); // bonus-14
+  indexPanel?.load().then(() => indexPanel.mark(st.date)); // G: pick up the day's new candle
 }
 
 // ---- bonus-02: stock card with a short price history ----------------------------
