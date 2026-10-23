@@ -111,6 +111,27 @@ def group_stats(rows: list[dict], threshold: float, grouping: Grouping = industr
     return out
 
 
+def daily_group_stats(store: HistoryStore, dates: list[date], threshold: float, grouping: Grouping) -> list[list[dict]]:
+    """group_stats for each day. Days are immutable once stored, so with a cache_key the results are
+    kept in store.derived_cache (cleared by save_day): switching C between 10/20/60 days or between
+    metrics then reuses the days already computed instead of recomputing every day."""
+    key = getattr(grouping, "cache_key", None)
+    cache = store.derived_cache
+    # read the cached values once: save_day may clear the shared dict from another thread
+    hits = {d: cache.get(("group_stats", key, d, threshold)) for d in dates} if key is not None else {}
+    missing = [d for d in dates if hits.get(d) is None]
+    by_day = store.rows(missing) if missing else {}
+    out = []
+    for d in dates:
+        stats = hits.get(d)
+        if stats is None:
+            stats = group_stats(by_day[d], threshold, grouping)
+            if key is not None:
+                cache[("group_stats", key, d, threshold)] = stats
+        out.append(stats)
+    return out
+
+
 def rotation(
     store: HistoryStore, days: int, metric: str, threshold: float, up_to: date | None = None,
     grouping: Grouping = industry_grouping,
@@ -118,10 +139,9 @@ def rotation(
     if metric not in METRICS:
         raise ValueError(f"metric must be one of {METRICS}")
     dates = sorted(store.trading_dates(up_to=up_to, limit=days))
-    by_day = store.rows(dates)
     table: dict[str, list] = defaultdict(lambda: [None] * len(dates))
-    for i, d in enumerate(dates):
-        for g in group_stats(by_day[d], threshold, grouping):
+    for i, stats in enumerate(daily_group_stats(store, dates, threshold, grouping)):
+        for g in stats:
             table[g["name"]][i] = g[metric]
     groups = [{"name": n, "values": v} for n, v in table.items()]
     # strongest recent groups first: mean of the last 3 values

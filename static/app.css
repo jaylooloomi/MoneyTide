@@ -159,6 +159,8 @@ button { font: inherit; color: inherit; cursor: pointer; }
   grid-template-areas: "a b" "c c" "d d";
 }
 .hA { grid-area: a; } .hB { grid-area: b; } .hC { grid-area: c; } .hD { grid-area: d; }
+/* A and B stay pinned while the panels below scroll under them; the shadow hides the grid gap */
+.hA, .hB { position: sticky; top: 0; z-index: 5; box-shadow: 0 0 0 8px var(--bg); }
 .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; display: flex; flex-direction: column; min-height: 0; min-width: 0; }
 .panel-h { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 10px; border-bottom: 1px solid var(--line); }
 .panel-h b { color: #fff; }
@@ -172,7 +174,7 @@ table.rot th.sel { color: #fff; box-shadow: inset 0 -2px var(--accent); }
 table.rot td { min-width: 34px; height: 22px; text-align: center; color: #fff; cursor: pointer; border-radius: 2px; }
 table.rot td.name { position: sticky; left: 0; background: var(--panel); text-align: left; color: var(--text); padding-right: 8px; white-space: nowrap; z-index: 1; cursor: default; }
 table.rot td.sel { outline: 1px solid #fff; }
-.movers { padding: 8px 10px; display: flex; flex-direction: column; gap: 10px; }
+.movers { padding: 8px 10px; display: flex; flex-direction: column; gap: 10px; max-height: 420px; overflow: auto; } /* D scrolls inside */
 .mgroup b { color: #fff; }
 .mgroup .count { color: var(--muted); margin-left: 6px; }
 .tags { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
@@ -180,6 +182,7 @@ table.rot td.sel { outline: 1px solid #fff; }
 .tag small { opacity: .85; margin-left: 4px; }
 @media (max-width: 1100px) {
   .hist { grid-template-columns: 1fr; grid-template-rows: 420px 420px max-content max-content; grid-template-areas: "a" "b" "c" "d"; }
+  .hA, .hB { position: static; box-shadow: none; } /* stacked, pinning both would fill the screen */
 }
 
 /* ---- custom groups panel ---- */
@@ -220,3 +223,11 @@ table.rot td.sel { outline: 1px solid #fff; }
 .fs-btn { position: absolute; right: 8px; bottom: 8px; z-index: 6; width: 30px; height: 28px; border-radius: 5px; border: 1px solid #3a3e48; background: #1d212aee; color: var(--muted); cursor: pointer; }
 .fs-btn:hover { color: #fff; }
 .chart-wrap:fullscreen { background: var(--bg); }
+
+/* a history panel waiting for a newer response: old content dimmed with a badge */
+#historyView .panel.loading { position: relative; }
+#historyView .panel.loading > :not(.panel-h) { opacity: .35; transition: opacity .15s; }
+#historyView .panel.loading::after {
+  content: '載入中…'; position: absolute; top: 8px; right: 12px; z-index: 3;
+  padding: 2px 8px; border-radius: 4px; background: #2b3a55; color: #cfe0ff; font-size: 12px;
+}

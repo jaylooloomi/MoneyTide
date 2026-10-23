@@ -158,6 +158,7 @@ const tickets = { day: 0, groups: 0, rotation: 0, movers: 0 };
 
 async function loadDay() {
   const t = ++tickets.day;
+  const done = panelLoading('.hA', 'day', t);
   try {
     const data = await getJson(`/api/history/day/${st.date}?grouping=${st.grouping}`);
     if (t !== tickets.day) return;
@@ -167,6 +168,7 @@ async function loadDay() {
     if (t !== tickets.day) return;
     st.stocks = [];
   }
+  done();
   renderChart();
 }
 
@@ -218,6 +220,7 @@ function renderCrumb() {
 
 async function loadGroups_() {
   const t = ++tickets.groups;
+  const done = panelLoading('.hB', 'groups', t);
   try {
     const data = await getJson(`/api/history/groups?date=${st.date}&threshold=${st.threshold}&grouping=${st.grouping}`);
     if (t !== tickets.groups) return;
@@ -227,6 +230,7 @@ async function loadGroups_() {
     if (t !== tickets.groups) return;
     st.groups = [];
   }
+  done();
   renderGroups();
 }
 
@@ -278,13 +282,16 @@ async function loadRotation() {
   const table = $('#hRotation');
   let data;
   const t = ++tickets.rotation;
+  const done = panelLoading('.hC', 'rotation', t);
   try {
     data = await getJson(`/api/history/rotation?days=${st.rotDays}&metric=${st.rotMetric}&threshold=${st.threshold}&grouping=${st.grouping}`);
   } catch {
     if (t === tickets.rotation) table.innerHTML = '';
+    done();
     return;
   }
   if (t !== tickets.rotation) return;
+  done();
   csvData.rotation = data; // bonus-07
   const head = data.dates.map((d) => `<th data-date="${d}" title="${d}">${d.slice(5).replace('-', '/')}</th>`).join('');
   const rows = data.groups
@@ -322,13 +329,16 @@ async function loadMovers() {
   if (mode === 'range') url += `&from=${st.from}`;
   let data;
   const t = ++tickets.movers;
+  const done = panelLoading('.hD', 'movers', t);
   try {
     data = await getJson(url);
   } catch {
     if (t === tickets.movers) $('#hMovers').innerHTML = '<p class="hint">無法載入。</p>';
+    done();
     return;
   }
   if (t !== tickets.movers) return;
+  done();
   csvData.movers = data; // bonus-07
   const total = new Set(data.groups.flatMap((g) => g.stocks.map((x) => x.code))).size;
   $('#hMoverSummary').textContent = `${total} 檔，${data.groups.length} 個族群`;
@@ -785,7 +795,7 @@ function replayControls() {
   if ($('#hPlay')) return;
   const wrap = document.createElement('span');
   wrap.className = 'replay';
-  wrap.innerHTML = `<button class="icon" id="hPlay" title="從目前日期逐日播放到最新日" aria-label="播放">▶▶</button>
+  wrap.innerHTML = `<button class="icon wide" id="hPlay" title="從目前日期逐日播放到最新日" aria-label="播放">▶▶</button>
     <select class="field" id="hSpeed" aria-label="播放速度" title="每個交易日停留秒數">${REPLAY_SPEEDS.map((s) => `<option value="${s}">${s} 秒/日</option>`).join('')}</select>`;
   $('#hNext').after(wrap);
   $('#hSpeed').value = String(replay.speed);
@@ -1250,4 +1260,14 @@ async function renderCountyPanel() {
   }
   if (t !== countyPanel.ticket || date !== st.date) return;
   countyPanel.ctl.render(stocks, date);
+}
+
+// ---- loading state: a panel keeps its old content while a newer request runs, so dim it -------
+/** Mark a panel as loading; the returned function clears it only if `t` is still the latest ticket. */
+function panelLoading(sel, key, t) {
+  const el = document.querySelector(`#historyView ${sel}`);
+  el?.classList.add('loading');
+  return () => {
+    if (t === tickets[key]) el?.classList.remove('loading');
+  };
 }
