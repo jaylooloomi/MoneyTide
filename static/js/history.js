@@ -560,6 +560,7 @@ export async function showHistory() {
     renderSegs();
     renderCrumb();
     window.addEventListener('hashchange', onHashChange); // bonus-12
+    setupRowResizer(); // A/B height can be dragged
     await loadDays();
     await applyHashDate(); // bonus-12
     await loadRotation();
@@ -1290,4 +1291,64 @@ function pickNewsTheme(name) {
   if (changed) reloadGrouped();
   else renderChart();
   document.querySelector('#historyView .hA').scrollIntoView({ block: 'nearest' });
+}
+
+// ---- A/B row height: drag the bottom edge of A or B; double-click restores the default ---------
+const ROW_KEY = 'openmarket.history.abHeight';
+const ROW_MIN = 260;
+
+function applyRowHeight(px) {
+  const view = $('#historyView');
+  if (px) view.style.setProperty('--hab-h', `${px}px`);
+  else view.style.removeProperty('--hab-h');
+}
+
+function setupRowResizer() {
+  try {
+    const saved = Number(localStorage.getItem(ROW_KEY));
+    if (saved >= ROW_MIN) applyRowHeight(saved);
+  } catch {
+    /* default */
+  }
+  for (const panel of document.querySelectorAll('#historyView .hA, #historyView .hB')) {
+    const grip = document.createElement('div');
+    grip.className = 'panel-resizer';
+    grip.title = '拖動調整 A、B 的高度（雙擊恢復預設）';
+    panel.appendChild(grip);
+    grip.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      grip.setPointerCapture(e.pointerId);
+      const startY = e.clientY;
+      const startH = panel.getBoundingClientRect().height;
+      const max = Math.round(window.innerHeight * 0.9);
+      grip.classList.add('dragging');
+      document.body.classList.add('resizing-rows');
+      let h = startH;
+      const move = (ev) => {
+        h = Math.round(Math.min(max, Math.max(ROW_MIN, startH + ev.clientY - startY)));
+        applyRowHeight(h);
+      };
+      const up = () => {
+        grip.removeEventListener('pointermove', move);
+        grip.classList.remove('dragging');
+        document.body.classList.remove('resizing-rows');
+        try {
+          localStorage.setItem(ROW_KEY, String(h));
+        } catch {
+          /* ignore */
+        }
+      };
+      grip.addEventListener('pointermove', move);
+      grip.addEventListener('pointerup', up, { once: true });
+      grip.addEventListener('pointercancel', up, { once: true });
+    });
+    grip.addEventListener('dblclick', () => {
+      applyRowHeight(null);
+      try {
+        localStorage.removeItem(ROW_KEY);
+      } catch {
+        /* ignore */
+      }
+    });
+  }
 }
