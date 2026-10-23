@@ -248,7 +248,7 @@ function renderGroups() {
   table.tBodies[0].innerHTML = sortRows(filterGroupRows(st.groups), st.groupSort.key, st.groupSort.dir) // bonus-20
     .map(
       (g) => `<tr data-group="${escapeHtml(g.name)}"${g.name === st.zoom ? ' class="hl"' : ''}>
-        <td class="l">${escapeHtml(g.name)}</td>
+        <td class="l"><span class="clip" title="${escapeHtml(g.name)}">${escapeHtml(g.name)}</span></td>
         ${rankCell(g)}
         ${pct(g.avg_pct, 3)}
         ${pct(g.cap_pct, 3)}
@@ -300,7 +300,7 @@ async function loadRotation() {
   const rows = data.groups
     .map(
       (g) =>
-        `<tr><td class="name">${escapeHtml(g.name)}</td>` +
+        `<tr><td class="name"><span class="clip" title="${escapeHtml(g.name)}">${escapeHtml(g.name)}</span></td>` +
         g.values
           .map(
             (v, i) =>

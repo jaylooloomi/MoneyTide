@@ -262,3 +262,6 @@ body.resizing-rows { cursor: ns-resize; user-select: none; }
 }
 .panel-resizer-v:hover::after, .panel-resizer-v.dragging::after { background: var(--accent); height: 160px; margin-top: -80px; }
 body.resizing-cols { cursor: ew-resize; user-select: none; }
+
+/* long group names (細產業 etc.): cut with … and show the full name on hover */
+.clip { display: inline-block; max-width: 12em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom; }

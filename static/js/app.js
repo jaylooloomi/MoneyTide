@@ -365,7 +365,7 @@ function renderMatrix(rows) {
   table.tBodies[0].innerHTML = sorted
     .map(
       (r) => `<tr data-industry="${escapeHtml(r.name)}"${r.name === state.zoomIndustry ? ' class="hl"' : ''}>
-        <td class="l">${escapeHtml(r.name)}</td>
+        <td class="l"><span class="clip" title="${escapeHtml(r.name)}">${escapeHtml(r.name)}</span></td>
         ${pctCell(r.change_pct, colorLimit('today', state.view.scale))}
         ${pctCell(r.week_pct, colorLimit('week'))}
         ${pctCell(livePeriods.byGroup[r.name]?.perf_20 ?? null, 15)}
