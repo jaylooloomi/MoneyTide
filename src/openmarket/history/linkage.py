@@ -169,6 +169,24 @@ def peak_minute_from_bars(bars: list[tuple]) -> int | None:
     return next(minutes(b[0]) for b in bars if b[1] == best)
 
 
+# TWSE / TPEx stock tick sizes (升降單位) by price band
+TICKS = ((10, 0.01), (50, 0.05), (100, 0.1), (500, 0.5), (1000, 1.0), (float("inf"), 5.0))
+
+
+def tick_size(price: float) -> float:
+    return next(t for top, t in TICKS if price < top)
+
+
+def limit_up_pct(prev_close: float | None) -> float | None:
+    """% change at the limit-up price: prev close × 1.1 rounded down to its tick (so 9.5–10%, not 10)."""
+    if not prev_close:
+        return None
+    raw = prev_close * 1.1
+    tick = tick_size(raw)
+    price = int(raw / tick + 1e-9) * tick
+    return round((price / prev_close - 1) * 100, 2)
+
+
 def race_points(points: list[tuple], prev_close: float | None) -> list[list[float]]:
     """(HH:MM[:SS], high, close) bars or (ts, price, price) polls → [[minute since 09:00, close %, high %]]:
     the last close and the highest high per minute. K's animated timeline replays these from 09:00 to

@@ -1,7 +1,7 @@
 // K · 日內最高點時間＋漲幅 (animated): the group's top members replayed minute by minute from 09:00 to
 // 13:30 on a time axis. Each row draws its change-% path up to the playhead, a dot on the highest point
 // so far (09:00–13:00 window, earliest wins), and the current change; rows re-rank by that change, and
-// equal changes (two stocks locked limit-up) keep the one that got there first in front.
+// a stock locked limit-up stays ahead of every later limit-up (and of everyone not at the limit).
 // Pure frame builders on top (node --test); the animated panel below.
 
 import { colorFor, escapeHtml, fmtPct, limitTag } from './transform.js';
@@ -15,17 +15,21 @@ export const RACE_SPEEDS = { slow: ['慢', 160], mid: ['中', 70], fast: ['快',
 /**
  * points {code: [[minute, close %, high %]]} → per code, for m = 0…RACE_END:
  * values[m] the last close % (null before the first trade), since[m] the minute that value was reached,
- * highs[m] the high % of minute m itself (null without data).
+ * highs[m] the high % of minute m itself (null without data), and lockedAt[m] the minute the current
+ * limit-up streak began (null when not at limit-up at m).
  */
-export function raceFrames(points, codes) {
+export function raceFrames(points, codes, limits = {}) {
   const out = {};
   for (const c of codes) {
+    const locked = isLimitUp(limits[c]);
     const at = new Map((points?.[c] || []).map(([m, v, h]) => [m, [v, h ?? v]]));
     const values = new Array(RACE_END + 1).fill(null);
     const since = new Array(RACE_END + 1).fill(null);
     const highs = new Array(RACE_END + 1).fill(null);
+    const lockedAt = new Array(RACE_END + 1).fill(null);
     let v = null;
     let s = null;
+    let lock = null;
     for (let m = 0; m <= RACE_END; m++) {
       const p = at.get(m);
       if (p) {
@@ -37,18 +41,39 @@ export function raceFrames(points, codes) {
       }
       values[m] = v;
       since[m] = s;
+      // limit-up streak: opening the limit loses it, locking again starts a new one
+      lock = locked(v) ? (lock ?? m) : null;
+      lockedAt[m] = lock;
     }
-    out[c] = { values, since, highs };
+    out[c] = { values, since, highs, lockedAt };
   }
   return out;
 }
 
-/** Codes in race order at minute m: change desc, then whoever reached that change first; no trade yet last. */
+/**
+ * At-limit-up test for one stock: its exact limit-up % (prev close × 1.1 down to the tick, from the
+ * server) when known, else the app-wide ≥ 9.5% rule.
+ */
+export function isLimitUp(limitPct) {
+  return (v) => v !== null && v !== undefined && (limitPct ? v >= limitPct - 0.005 : limitTag(v) === '漲停');
+}
+
+/**
+ * Codes in race order at minute m. Stocks at limit-up come first, the earliest lock in front (a later
+ * limit-up never passes it, even with a higher % from tick rounding); then change desc, ties to
+ * whoever reached that change first; no trade yet last.
+ */
 export function raceOrder(codes, frames, m) {
   return [...codes].sort((a, b) => {
     const va = frames[a].values[m];
     const vb = frames[b].values[m];
     if (va === null || vb === null) return (va === null) - (vb === null);
+    const la = frames[a].lockedAt[m];
+    const lb = frames[b].lockedAt[m];
+    if (la !== null || lb !== null) {
+      if (la === null || lb === null) return (la === null) - (lb === null);
+      if (la !== lb) return la - lb;
+    }
     if (Math.abs(va - vb) >= 0.005) return vb - va;
     return frames[a].since[m] - frames[b].since[m];
   });
@@ -100,7 +125,8 @@ const TICKS = [['09:00', 0], ['10:00', 60], ['11:00', 120], ['12:00', 180], ['13
 export function mountRace(box, d, { onStock } = {}) {
   const codes = d.members.map((m) => m.code);
   const byCode = new Map(d.members.map((m) => [m.code, m]));
-  const frames = raceFrames(d.race?.points, codes);
+  const limits = Object.fromEntries(d.members.map((m) => [m.code, m.limit_up_pct]));
+  const frames = raceFrames(d.race?.points, codes, limits);
   if (!codes.some((c) => frames[c].values[RACE_END] !== null)) {
     box.innerHTML = '<p class="hint">這一天沒有分時資料。</p>';
     return () => {};
@@ -174,7 +200,7 @@ export function mountRace(box, d, { onStock } = {}) {
         dot.style.top = `${y(peak.v)}px`;
         dot.style.background = colorFor(peak.v, 7);
       }
-      const tag = limitTag(v);
+      const tag = f.lockedAt[m] !== null ? '漲停' : limitTag(v) === '跌停' ? '跌停' : '';
       el.querySelector('.rt-now').innerHTML =
         v === null ? '<span class="muted">未成交</span>' : `<b class="${v > 0 ? 'up' : v < 0 ? 'down' : ''}">${fmtPct(v)}</b>${tag ? ` <b class="race-tag">${tag}</b>` : ''}`;
       el.querySelector('.rt-peak').textContent = peak ? `高點 ${fmtClock(peak.m)} ${fmtPct(peak.v)}` : '';

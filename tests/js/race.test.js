@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { RACE_END, fmtClock, pathPoints, peakSoFar, raceDomain, raceFrames, raceOrder } from '../../static/js/race.js';
+import { RACE_END, fmtClock, isLimitUp, pathPoints, peakSoFar, raceDomain, raceFrames, raceOrder } from '../../static/js/race.js';
 
 test('raceFrames forward-fills closes, remembers when a value was reached, keeps highs per minute', () => {
   const f = raceFrames({ A: [[0, 1, 2], [5, 10, 10], [6, 10, 10], [30, 9, 9.5]] }, ['A', 'B']);
@@ -36,4 +36,30 @@ test('raceDomain covers zero, closes and highs; clock labels', () => {
   assert.deepEqual(raceDomain(raceFrames({ A: [[0, 0.2]] }, ['A'])), [0, 1]);
   assert.equal(fmtClock(0), '09:00');
   assert.equal(fmtClock(270), '13:30');
+});
+
+test('raceOrder: the first stock locked limit-up stays first even when a later one shows a higher %', () => {
+  // A locks at 09:30 (+9.94%); B reaches the limit at 12:00 with +10.00% (tick rounding)
+  const f = raceFrames({ A: [[0, 3], [30, 9.94]], B: [[0, 5], [180, 10.0]], C: [[0, 8]] }, ['A', 'B', 'C']);
+  assert.deepEqual(raceOrder(['A', 'B', 'C'], f, 20), ['C', 'B', 'A']);
+  assert.deepEqual(raceOrder(['A', 'B', 'C'], f, 40), ['A', 'C', 'B']); // a limit-up beats +8%
+  assert.deepEqual(raceOrder(['A', 'B', 'C'], f, 200), ['A', 'B', 'C']); // B is higher but locked later
+  assert.deepEqual([f.A.lockedAt[29], f.A.lockedAt[30], f.A.lockedAt[270]], [null, 30, 30]);
+});
+
+test('raceOrder: opening the limit loses the place; re-locking counts from the new lock', () => {
+  const f = raceFrames({ A: [[0, 9.9], [60, 8], [150, 9.9]], B: [[0, 2], [100, 9.95]] }, ['A', 'B']);
+  assert.deepEqual(raceOrder(['A', 'B'], f, 50), ['A', 'B']);
+  assert.deepEqual(raceOrder(['A', 'B'], f, 120), ['B', 'A']); // A opened at 10:00, B locked at 10:40
+  assert.deepEqual(raceOrder(['A', 'B'], f, 200), ['B', 'A']); // A re-locked at 11:30, after B
+  assert.equal(f.A.lockedAt[200], 150);
+});
+
+test('isLimitUp uses the exact limit-up % per stock, else the 9.5% rule', () => {
+  const at = isLimitUp(9.95);
+  assert.equal(at(9.7), false); // +9.70% is not limit-up when the limit is +9.95%
+  assert.equal(at(9.95), true);
+  assert.equal(isLimitUp(null)(9.6), true);
+  const f = raceFrames({ A: [[0, 9.7], [10, 9.95]] }, ['A'], { A: 9.95 });
+  assert.deepEqual([f.A.lockedAt[5], f.A.lockedAt[10]], [null, 10]);
 });

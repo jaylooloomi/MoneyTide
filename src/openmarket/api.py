@@ -21,7 +21,7 @@ from .config import STATIC_DIR, TAIPEI, USER_AGENT, AppConfig
 from .explain import explain_day
 from .history.linkage import (
     INTRADAY_HIGH_R, INTRADAY_LOW_R, bucket_closes, daily_linkage, fmt_minute, pair_matrix, peak_minute_from_bars, peak_minute_from_ticks,
-    peak_stats, race_points, returns, top_members, verdict_r, verdict_timing,
+    limit_up_pct, peak_stats, race_points, returns, top_members, verdict_r, verdict_timing,
 )
 from .intraday import IntradayRecorder
 from .sources.yahoo_intraday import ONE_MINUTE_DAYS, fetch_bars, fetch_day_1m
@@ -526,7 +526,10 @@ def create_app(
         return {
             "date": day,
             "group": group,
-            "members": [{"code": m["code"], "name": m["name"], "market_cap": m["market_cap"], "change_pct": m["change_pct"]} for m in members],
+            "members": [
+                {"code": m["code"], "name": m["name"], "market_cap": m["market_cap"], "change_pct": m["change_pct"], "limit_up_pct": limit_up_pct(m.get("prev_close"))}
+                for m in members
+            ],
             "daily": daily,
             "intraday": {"sessions": [{"date": s.isoformat(), "source": sources.get(s, "none")} for s in sessions], "r": r_intraday, "matrix": matrix},
             "peaks": [{"code": c, "time": fmt_minute(p)} for c, p in zip(codes, peak_list)],

@@ -589,7 +589,7 @@ export async function showHistory() {
     setupColResizer(); // and the A/B width ratio
     await loadDays();
     await applyHashDate(); // bonus-12
-    await loadRotation();
+    loadRotation(); // C can be slow on a cold start: the panels below must not wait for it
     loadIndex(); // bonus-04
     loadCalendar(); // bonus-14 (creates F synchronously, so G lands after it)
     indexPanel = mountIndexPanel($('#historyView'), (date) => {

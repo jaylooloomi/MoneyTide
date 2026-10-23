@@ -169,6 +169,16 @@ def test_fetch_day_1m_asks_for_one_session():
     assert q["interval"] == "1m" and int(q["period2"]) - int(q["period1"]) == (4 * 60 + 31) * 60
 
 
+def test_limit_up_pct_follows_the_tick_table():
+    from openmarket.history.linkage import limit_up_pct
+
+    assert limit_up_pct(100) == 10.0  # 110 is on the 0.5 tick
+    assert limit_up_pct(352.5) == 9.93  # 387.75 → 387.5
+    assert limit_up_pct(9.68) == 9.5  # 10.648 → 10.60 (0.05 tick above 10)
+    assert limit_up_pct(1015) == 9.85  # 1116.5 → 1115
+    assert limit_up_pct(None) is None
+
+
 def test_race_points_last_value_per_minute_within_the_session():
     from openmarket.history.linkage import race_points
 
