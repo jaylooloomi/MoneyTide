@@ -21,6 +21,7 @@ import {
 } from './transform.js';
 import { showHistory } from './history.js';
 import { mountCountyMap } from './countymap.js';
+import { mountWordCloud } from './wordcloud.js';
 import { mountLiveAiButton } from './ainews.js';
 import { GROUP_LABELS, MIN_FILTERS, TODAY_SCALES, breadthBarHtml, findStock, marketBreadth, regroupStocks, withRelVolume } from './transform.js';
 import { addToGroup, getGroups, loadGroups, onGroupsChange, openGroupPanel, setStockNames } from './groups.js';
@@ -37,11 +38,13 @@ const RVOL_RETRY_MS = 5 * 60_000;
 const liveSearch = { shown: [], listFor: null };
 // money flow: share baselines per grouping from the history store (declared before main() runs)
 const liveFlow = { baselines: {}, loading: {} };
-// ③: main area shows the heatmap or the county money map (declared before main() runs)
-const liveMap = { on: false, ctl: null };
+// ③: main area shows the heatmap, the county money map or the group word cloud (declared before main() runs)
+const liveMap = { view: 'heat', ctl: null, words: null };
+const WORD_GROUPING_LABELS = { industry: '官方產業', custom: '自訂族群', concept: '概念股', chain: '細產業', news: '新聞族群' };
 let liveAi = null; // ⑤ AI 解讀 button
 try {
-  liveMap.on = localStorage.getItem('openmarket.live.view') === 'map';
+  const view = localStorage.getItem('openmarket.live.view');
+  if (view === 'map' || view === 'words') liveMap.view = view;
 } catch {
   /* default */
 }
@@ -248,7 +251,7 @@ function render() {
   renderMatrix(withFlows(withPeriods(aggregateIndustries(stocks, { stocksOnly: liveGrouping.by === 'industry' })), stocks, snap)); // bonus-11: 20-day column; ①; money flow
   renderLiveBreadth(filtered); // bonus-05 (each stock once, whatever the grouping)
   renderLiveSearch(snap, stocks); // bonus-23
-  renderLiveMap(filtered); // ③
+  renderLiveMap(filtered, stocks); // ③ map: each stock once; word cloud: the current grouping
   liveAi ??= mountLiveAiButton($('#liveControls'), () => !!state.snapshot?.market_open); // ⑤
   liveAi.sync();
   renderWatch(snap ? snap.stocks : []);
@@ -1032,8 +1035,18 @@ function renderGroupLabelSelect() {
   sel.value = state.view.groupLabel in GROUP_LABELS ? state.view.groupLabel : 'cap';
 }
 
-// ---- ③: county money map in the live main area ---------------------------------------------
-function renderLiveMap(stocks) {
+// ---- ③: county money map / group word cloud in the live main area ----------------------------
+function liveOverlay(id, inner) {
+  const box = document.createElement('div');
+  box.id = id;
+  box.style.cssText = 'position:absolute;inset:0;display:flex;flex-direction:column;background:var(--bg)';
+  box.innerHTML = inner;
+  box.hidden = true;
+  document.querySelector('#liveView .chart-wrap').appendChild(box);
+  return box;
+}
+
+function renderLiveMap(stocks, grouped) {
   let seg = $('#liveViewMode');
   if (!seg) {
     seg = document.createElement('div');
@@ -1041,42 +1054,60 @@ function renderLiveMap(stocks) {
     seg.id = 'liveViewMode';
     seg.setAttribute('role', 'group');
     seg.setAttribute('aria-label', '主畫面');
-    seg.innerHTML = '<button data-value="heat">熱力圖</button><button data-value="map" title="依公司總部所在縣市彙總">台灣地圖</button>';
+    seg.innerHTML =
+      '<button data-value="heat">熱力圖</button><button data-value="map" title="依公司總部所在縣市彙總">台灣地圖</button>' +
+      '<button data-value="words" title="目前分組的族群名稱：字越大成交值越大，紅漲綠跌">關鍵字圖</button>';
     $('#liveControls').prepend(seg);
-    const wrap = document.querySelector('#liveView .chart-wrap');
-    const box = document.createElement('div');
-    box.id = 'liveMapBox';
-    box.style.cssText = 'position:absolute;inset:0;display:flex;flex-direction:column;background:var(--bg)';
-    box.innerHTML = '<div class="panel-h" style="gap:8px"><span id="liveMapCtl"></span><span class="muted" id="liveMapNote"></span></div><div id="liveMap" style="flex:1;min-height:0"></div>';
-    box.hidden = true;
-    wrap.appendChild(box);
+    liveOverlay('liveMapBox', '<div class="panel-h" style="gap:8px"><span id="liveMapCtl"></span><span class="muted" id="liveMapNote"></span></div><div id="liveMap" style="flex:1;min-height:0"></div>');
     liveMap.ctl = mountCountyMap($('#liveMap'), { controls: $('#liveMapCtl'), note: $('#liveMapNote'), prefKey: 'openmarket.live.mapMetric' });
+    liveOverlay('liveWordsBox', '<div class="panel-h" style="gap:8px"><span id="liveWordsCtl"></span><span class="muted" id="liveWordsNote"></span></div><div id="liveWords" style="flex:1;min-height:0"></div>');
+    liveMap.words = mountWordCloud($('#liveWords'), {
+      controls: $('#liveWordsCtl'),
+      note: $('#liveWordsNote'),
+      prefKey: 'openmarket.live.wordMetric',
+      onGroup: (name) => {
+        // a word zooms the heatmap into its group
+        setLiveView('heat');
+        zoomTo(name);
+      },
+    });
     seg.addEventListener('click', (e) => {
       const b = e.target.closest('button[data-value]');
-      if (!b) return;
-      liveMap.on = b.dataset.value === 'map';
-      try {
-        localStorage.setItem('openmarket.live.view', liveMap.on ? 'map' : 'heat');
-      } catch {
-        /* ignore */
-      }
-      render();
+      if (b) setLiveView(b.dataset.value);
     });
   }
   for (const b of seg.querySelectorAll('button')) {
-    const on = (b.dataset.value === 'map') === liveMap.on;
+    const on = b.dataset.value === liveMap.view;
     b.classList.toggle('on', on);
     b.setAttribute('aria-pressed', String(on));
   }
-  const box = $('#liveMapBox');
-  const wasHidden = box.hidden;
-  box.hidden = !liveMap.on;
-  if (!liveMap.on) {
-    if (!wasHidden) chart.resize();
+  const mapBox = $('#liveMapBox');
+  const wordsBox = $('#liveWordsBox');
+  const wasHeat = mapBox.hidden && wordsBox.hidden;
+  const mapWasHidden = mapBox.hidden;
+  const wordsWereHidden = wordsBox.hidden;
+  mapBox.hidden = liveMap.view !== 'map';
+  wordsBox.hidden = liveMap.view !== 'words';
+  if (liveMap.view === 'heat') {
+    if (!wasHeat) chart.resize();
     return;
   }
-  liveMap.ctl.render(stocks, '今日即時');
-  if (wasHidden) liveMap.ctl.show();
+  if (liveMap.view === 'map') {
+    liveMap.ctl.render(stocks, '今日即時');
+    if (mapWasHidden) liveMap.ctl.show();
+  } else {
+    liveMap.words.render(grouped, { caption: `今日即時 · ${WORD_GROUPING_LABELS[liveGrouping.by]}`, force: wordsWereHidden });
+  }
+}
+
+function setLiveView(view) {
+  liveMap.view = view;
+  try {
+    localStorage.setItem('openmarket.live.view', view);
+  } catch {
+    /* ignore */
+  }
+  render();
 }
 
 // ---- money flow in the live matrix: share z (vs the stored 20-day baseline), CLV flow, turnover rate --

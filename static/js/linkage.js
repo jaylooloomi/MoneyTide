@@ -40,7 +40,11 @@ export function timelineHtml(peaks, members) {
       return `<div class="tl-row"><span class="tl-name" title="${escapeHtml(p.code)}">${i === 0 ? '👑' : ''}${escapeHtml(m?.name || p.code)}</span><span class="tl-track"><span class="tl-dot" style="left:${left}%;background:${colorFor(m?.change_pct, 7)}" title="${escapeHtml(p.time)}"></span></span><span class="tl-time">${escapeHtml(p.time)}</span></div>`;
     })
     .join('');
-  return `<div class="tl"><div class="tl-axis"><span>09:00</span><span>10:00</span><span>11:00</span><span>12:00</span><span>13:30</span></div>${rows}</div>`;
+  // ticks at their real minute (12:00 → 13:30 is 90 minutes, not one even step)
+  const ticks = [['09:00', 0], ['10:00', 60], ['11:00', 120], ['12:00', 180], ['13:30', 270]]
+    .map(([label, min]) => `<span style="left:${(min / SESSION_MINUTES) * 100}%">${label}</span>`)
+    .join('');
+  return `<div class="tl"><div class="tl-axis">${ticks}</div>${rows}</div>`;
 }
 
 export function summaryHtml(d) {

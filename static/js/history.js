@@ -19,6 +19,7 @@ import { breadthBarHtml, breadthShare, marketBreadth } from './transform.js';
 import { getGroups, loadGroups, onGroupsChange, openGroupPanel, setStockNames } from './groups.js';
 import { mountIndexPanel } from './indexchart.js';
 import { mountCountyMap } from './countymap.js';
+import { mountWordCloud } from './wordcloud.js';
 import { mountHistoryAiPanel } from './ainews.js';
 import { mountNewsPanel } from './newsthemes.js';
 import { mountLinkagePanel } from './linkage.js';
@@ -53,7 +54,7 @@ let indexPanel = null; // G: TAIEX + TPEx timeline (indexchart.js)
 let aiPanel = null; // I: AI news explanations (ainews.js)
 let newsPanel = null; // J: news-driven hot groups (newsthemes.js)
 let linkPanel = null; // K: group linkage (linkage.js)
-const countyPanel = { ctl: null, ticket: 0, cache: new Map() }; // H: county money map (countymap.js)
+const countyPanel = { ctl: null, words: null, view: 'map', ticket: 0, cache: new Map() }; // H: county money map (countymap.js) or group word cloud (wordcloud.js)
 
 function loadPrefs() {
   try {
@@ -1249,17 +1250,55 @@ function mountCountyPanel() {
   sec.className = 'panel';
   sec.style.gridColumn = '1 / -1';
   sec.innerHTML = `<div class="panel-h"><b>H · 台灣地圖</b>
-      <span class="muted">依公司總部所在縣市彙總全市場普通股（地址來自證交所、櫃買中心公司基本資料）；可拖曳縮放</span>
-      <span id="hMapCtl"></span><span class="muted" id="hMapNote" style="margin-left:auto"></span></div>
-    <div id="hMap" style="height:620px"></div>`;
+      <div class="seg" id="hMapView"><button data-value="map">縣市地圖</button><button data-value="words" title="A 目前分組的族群名稱：字越大成交值越大，紅漲綠跌">關鍵字圖</button></div>
+      <span class="muted" id="hMapHint">依公司總部所在縣市彙總全市場普通股（地址來自證交所、櫃買中心公司基本資料）；可拖曳縮放</span>
+      <span id="hMapCtl"></span><span id="hWordsCtl" hidden></span><span class="muted" id="hMapNote" style="margin-left:auto"></span><span class="muted" id="hWordsNote" style="margin-left:auto" hidden></span></div>
+    <div id="hMap" style="height:620px"></div><div id="hWords" style="height:620px" hidden></div>`;
   $('#historyView').appendChild(sec);
   countyPanel.ctl = mountCountyMap($('#hMap'), { controls: $('#hMapCtl'), note: $('#hMapNote'), prefKey: 'openmarket.history.mapMetric' });
+  countyPanel.words = mountWordCloud($('#hWords'), {
+    controls: $('#hWordsCtl'),
+    note: $('#hWordsNote'),
+    prefKey: 'openmarket.history.wordMetric',
+    onGroup: (name) => {
+      zoomTo(name); // A is sticky at the top: the zoom shows right away
+    },
+  });
+  try {
+    if (localStorage.getItem('openmarket.history.hView') === 'words') countyPanel.view = 'words';
+  } catch {
+    /* default */
+  }
+  $('#hMapView').addEventListener('click', (e) => {
+    const b = e.target.closest('button[data-value]');
+    if (!b) return;
+    countyPanel.view = b.dataset.value;
+    try {
+      localStorage.setItem('openmarket.history.hView', countyPanel.view);
+    } catch {
+      /* ignore */
+    }
+    renderCountyPanel();
+  });
+}
+
+function syncCountyView() {
+  const words = countyPanel.view === 'words';
+  for (const b of document.querySelectorAll('#hMapView button')) b.classList.toggle('on', (b.dataset.value === 'words') === words);
+  for (const id of ['hMap', 'hMapCtl', 'hMapNote', 'hMapHint']) $('#' + id).hidden = words;
+  for (const id of ['hWords', 'hWordsCtl', 'hWordsNote']) $('#' + id).hidden = !words;
 }
 
 /** The map always covers the whole market: under other groupings A holds members only. */
 async function renderCountyPanel() {
   if (!countyPanel.ctl || !st.date) return;
   const date = st.date;
+  syncCountyView();
+  if (countyPanel.view === 'words') {
+    // the word cloud follows A's grouping (st.stocks: industry := group name)
+    countyPanel.words.render(st.stocks, { caption: date, date });
+    return;
+  }
   if (st.grouping === 'industry') {
     countyPanel.ctl.render(st.stocks, date);
     return;

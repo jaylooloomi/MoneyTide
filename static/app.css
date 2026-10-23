@@ -274,7 +274,10 @@ body.resizing-cols { cursor: ew-resize; user-select: none; }
 .link-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(330px, 1fr)); gap: 12px; align-items: start; }
 table.link-matrix td, table.link-matrix th { padding: 2px 4px; font-size: 11px; text-align: center; }
 .tl { font-size: 12px; }
-.tl-axis { display: flex; justify-content: space-between; margin: 2px 52px 4px 84px; color: var(--muted); font-size: 10px; }
+.tl-axis { position: relative; height: 13px; margin: 2px 52px 4px 84px; color: var(--muted); font-size: 10px; }
+.tl-axis span { position: absolute; transform: translateX(-50%); white-space: nowrap; }
+.tl-axis span:first-child { transform: none; }
+.tl-axis span:last-child { transform: translateX(-100%); }
 .tl-row { display: flex; align-items: center; gap: 6px; height: 20px; }
 .tl-name { width: 78px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
 .tl-track { position: relative; flex: 1; height: 2px; background: #3a3e48; }
