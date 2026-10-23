@@ -22,7 +22,7 @@ def _port_free(host: str, port: int) -> bool:
 
 
 def _is_openmarket(url: str) -> bool:
-    """True when the process on our port is already an Open Market server."""
+    """True when the process on our port is already a MoneyTide server."""
     try:
         with urllib.request.urlopen(f"{url}/api/settings", timeout=2) as resp:
             return resp.status == 200 and "poll_seconds" in json.load(resp)
@@ -54,7 +54,7 @@ def main() -> None:
     url = f"http://{config.host}:{config.port}"
     if not _port_free(config.host, config.port):
         if _is_openmarket(url):
-            print(f"Open Market 已在執行中 → {url}")
+            print(f"MoneyTide 錢潮已在執行中 → {url}")
             if not args.no_browser:
                 webbrowser.open(url)
             return
@@ -63,7 +63,7 @@ def main() -> None:
         threading.Thread(
             target=_open_when_listening, args=(config.host, config.port, url), daemon=True
         ).start()
-    print(f"Open Market → {url}")
+    print(f"MoneyTide 錢潮 → {url}")
     uvicorn.run(create_app(config), host=config.host, port=config.port, log_level="info")
 
 

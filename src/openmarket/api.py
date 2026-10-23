@@ -208,7 +208,7 @@ def create_app(
             if app.state.ptt_client is not None:
                 await app.state.ptt_client.aclose()
 
-    app = FastAPI(title="Open Market", lifespan=lifespan)
+    app = FastAPI(title="MoneyTide", lifespan=lifespan)
     app.state.poller = poller
     app.state.history = history_store or HistoryStore(config.data_dir / "history.sqlite")
     app.state.collector = None
