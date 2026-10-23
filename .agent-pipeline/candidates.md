@@ -82,7 +82,7 @@
 
 # 加分候選（第 6 輪）
 
-## H1 · B 族群排行標出「N 今天找到共同注資」的族群
+## H1 · B 族群排行標出「N 今天找到共同注資」的族群（✅ 已完成 bonus-08）
 因為原始需求是**多維度看資金往哪個族群流、是不是同一筆錢**，所以頂尖做法會順便做**在使用者瀏覽的清單上直接標旗（watchlist／monitor 的 unusual activity 標記）**；目前的成果**沒有**——N 的結論只在 N 區，B 排行看不到「這族群今天有被找到同步拉抬」。
 - 參考：Futu Market Monitor「show the unusual activities of the stocks in your watchlists」（https://support.futunn.com/en/topic106）；Acuity Market Reader 熱力圖用亮度標出異常移動（https://knowledgebase.acuitytrading.com/en/acuity-client-knowledge-base/platform-navigation-visual-tools-and-output-formats）
 - 預估：history.js（B 列名稱旁加小圖示；讀 N 已存的當天找法1 結果，不觸發計算）＋finder.js 匯出查詢小函式＋測試；3 檔、約 80 行。

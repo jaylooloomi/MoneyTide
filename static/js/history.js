@@ -22,7 +22,7 @@ import { mountCountyMap } from './countymap.js';
 import { mountWordCloud } from './wordcloud.js';
 import { mountHistoryAiPanel } from './ainews.js';
 import { mountNewsPanel } from './newsthemes.js';
-import { mountFinderPanel } from './finder.js';
+import { finderMarkIndex, finderMarkTitle, mountFinderPanel } from './finder.js';
 import { mountLinkagePanel } from './linkage.js';
 
 const PREFS_KEY = 'openmarket.history.v1';
@@ -56,6 +56,7 @@ let aiPanel = null; // I: AI news explanations (ainews.js)
 let newsPanel = null; // J: news-driven hot groups (newsthemes.js)
 let linkPanel = null; // K: group linkage (linkage.js)
 let finderPanel = null; // N: 資金連動搜尋 (finder.js)
+const finderMarks = { date: null, byKey: new Map(), ticket: 0 }; // B's 🔗: N's stored 找法1 result for the day
 const countyPanel = { ctl: null, words: null, view: 'map', ticket: 0, cache: new Map() }; // H: county money map (countymap.js) or group word cloud (wordcloud.js)
 
 function loadPrefs() {
@@ -238,6 +239,7 @@ async function loadGroups_() {
     st.groups = data.groups.map((g) => ({ ...g, leader_pct: g.leader?.change_pct ?? null })); // bonus-09
     loadPeriods({ cachedOnly: true }); // bonus-10: fetch is deferred until A/B/D have loaded
     loadFlows(); // money flow columns
+    loadFinderMarks(); // 🔗 from N's stored result (never starts a search)
   } catch {
     if (t !== tickets.groups) return;
     st.groups = [];
@@ -257,7 +259,7 @@ function renderGroups() {
   table.tBodies[0].innerHTML = sortRows(filterGroupRows(st.groups), st.groupSort.key, st.groupSort.dir) // bonus-20
     .map(
       (g) => `<tr data-group="${escapeHtml(g.name)}"${g.name === st.zoom ? ' class="hl"' : ''}>
-        <td class="l"><span class="clip" title="${escapeHtml(g.name)}">${g.z20 >= IGNITE_Z ? '<span title="成交比重暴增（Z ≥ 2）">🔥</span>' : ''}${escapeHtml(g.name)}</span></td>
+        <td class="l"><span class="clip" title="${escapeHtml(g.name)}">${g.z20 >= IGNITE_Z ? '<span title="成交比重暴增（Z ≥ 2）">🔥</span>' : ''}${finderMark(g.name)}${escapeHtml(g.name)}</span></td>
         ${rankCell(g)}
         <td class="muted">${g.count}</td>
         ${pct(g.avg_pct, 3)}
@@ -279,6 +281,26 @@ function renderGroups() {
 function ampCell(v) {
   if (v === null || v === undefined) return '<td class="muted">—</td>';
   return `<td style="background:rgba(255,179,0,${Math.min(v / 10, 1) * 0.55})">${v.toFixed(2)}%</td>`;
+}
+
+// ---- B 🔗: groups where N (找法1, default thresholds) found stocks one pool of money moved together ----
+function finderMark(name) {
+  const found = finderMarks.date === st.date ? finderMarks.byKey.get(`${GROUPING_LABEL[st.grouping]}|${name}`) : null;
+  return found ? `<span class="fd-mark" title="${escapeHtml(finderMarkTitle(found))}">🔗</span>` : '';
+}
+
+async function loadFinderMarks() {
+  const t = ++finderMarks.ticket;
+  const date = st.date;
+  try {
+    const data = await getJson(`/api/history/finder?date=${date}&method=known&stored_only=1`);
+    if (t !== finderMarks.ticket) return;
+    finderMarks.date = date;
+    finderMarks.byKey = finderMarkIndex(data);
+    renderGroups();
+  } catch {
+    /* no marks */
+  }
 }
 
 // ---- C: rotation ------------------------------------------------------------

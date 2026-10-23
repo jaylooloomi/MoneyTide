@@ -212,6 +212,28 @@ export function presetOf(params) {
   return null;
 }
 
+// ---- B's 🔗: N's stored 找法1 cards indexed by the group they came from -----------------
+
+/** {`${grouping label}|${group}`: [found group]} from N's stored cards (a card can name several sources). */
+export function finderMarkIndex(result) {
+  const out = new Map();
+  for (const g of result?.groups || []) {
+    for (const s of g.sources || []) {
+      const k = `${s.label}|${s.group}`;
+      if (!out.has(k)) out.set(k, []);
+      out.get(k).push(g);
+    }
+  }
+  return out;
+}
+
+export function finderMarkTitle(found) {
+  const r = (v) => (v == null ? '—' : v.toFixed(2));
+  return `N 資金連動搜尋（找法1）在這個族群找到共同注資：\n${found
+    .map((g) => `${g.members.map((m) => m.name).join('、')}（日R ${r(g.daily_r)}、分時R ${r(g.intraday_r)}、高點差 ${g.peak_spread ?? '—'} 分）`)
+    .join('\n')}`;
+}
+
 // ---- panel --------------------------------------------------------------------------------------
 
 const PREF_KEY = 'openmarket.history.finder';

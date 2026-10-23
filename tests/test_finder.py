@@ -156,6 +156,25 @@ def test_params_key_changes_with_any_threshold():
     assert FinderParams().key() == FinderParams().key()
 
 
+def test_finder_api_stored_only_never_starts_a_search(tmp_path):
+    from datetime import datetime
+
+    from fastapi.testclient import TestClient
+
+    from openmarket.api import create_app
+    from openmarket.config import AppConfig
+    from openmarket.history.store import HistoryStore
+
+    s = HistoryStore(tmp_path / "h.sqlite")
+    d = date(2026, 3, 2)
+    s.save_day(d, [{"code": "A", "name": "a", "market": "上市", "industry": "X", "kind": "stock", "close": 10, "prev_close": 10, "change": 0, "change_pct": 0}], datetime(2026, 3, 2, 15))
+    app = create_app(AppConfig(data_dir=tmp_path), start_polling=False, start_history=False, start_concepts=False, history_store=s)
+    with TestClient(app, base_url="http://127.0.0.1") as client:
+        body = client.get("/api/history/finder", params={"date": d.isoformat(), "method": "known", "stored_only": 1, "groupings": "industry"}).json()
+        assert body["stored"] is False and body["groups"] == []
+        assert s.finder(d, "known", FinderParams(groupings=("industry",)).key() + "|industry") is None  # nothing computed or saved
+
+
 def test_store_batch_bars_and_results(tmp_path):
     from datetime import datetime
 

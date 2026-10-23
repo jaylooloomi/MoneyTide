@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { PRESETS, cardHtml, csvExport, defaultGroupName, filterHtml, funnelText, presetOf, filterOptions, matchesFilter, progressView, queryOf, statsText } from '../../static/js/finder.js';
+import { PRESETS, cardHtml, finderMarkIndex, finderMarkTitle, csvExport, defaultGroupName, filterHtml, funnelText, presetOf, filterOptions, matchesFilter, progressView, queryOf, statsText } from '../../static/js/finder.js';
 
 test('queryOf sends only the fields of the chosen method; blank 起漲差 means not required', () => {
   const p = { daily_r: 0.75, daily_window: 20, new_daily_r: 0.85, pool_top: 30, intraday_r: 0.5, peak_gap: 8, start_gap: '', require_burst: true, groupings: ['custom', 'news'], pool_sources: ['gain'] };
@@ -135,4 +135,19 @@ test('presets only set the linkage thresholds; the current values map back to on
   assert.equal(loose.min_volume_lots, 500);
   assert.equal(presetOf({ ...mine, intraday_r: 0.45 }), null); // a hand edit = 自訂
   assert.equal(presetOf({ ...mine, intraday_r: '0.5' }), 'standard'); // form values may be strings
+});
+
+test('finderMarkIndex / finderMarkTitle: B marks the groups N found, by source grouping and name', () => {
+  const res = { groups: [
+    { members: [{ name: '甲' }, { name: '乙' }], daily_r: 0.86, intraday_r: 0.61, peak_spread: 3, sources: [{ label: '官方產業', group: '半導體業' }, { label: '自訂族群', group: 'IC' }] },
+    { members: [{ name: '丙' }, { name: '丁' }], daily_r: 0.9, intraday_r: null, peak_spread: 0, sources: [{ label: '官方產業', group: '半導體業' }] },
+  ] };
+  const idx = finderMarkIndex(res);
+  assert.equal(idx.get('官方產業|半導體業').length, 2);
+  assert.equal(idx.get('自訂族群|IC').length, 1);
+  assert.equal(idx.get('細產業|半導體業'), undefined);
+  const title = finderMarkTitle(idx.get('官方產業|半導體業'));
+  assert.match(title, /甲、乙（日R 0\.86、分時R 0\.61、高點差 3 分）/);
+  assert.match(title, /丙、丁（日R 0\.90、分時R —/);
+  assert.equal(finderMarkIndex(null).size, 0);
 });

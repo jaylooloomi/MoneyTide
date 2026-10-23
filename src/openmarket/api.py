@@ -688,7 +688,7 @@ def create_app(
                 raise HTTPException(422, f"{f.name}: {raw!r}") from exc
         return dataclasses.replace(base, **values)
 
-    async def finder_result(d: date, method: str, p: FinderParams, refresh: bool = False) -> dict:
+    async def finder_result(d: date, method: str, p: FinderParams, refresh: bool = False, stored_only: bool = False) -> dict:
         store = app.state.history
         groupings, missing = finder_groupings(p.groupings, d)
         key = p.key() + "|" + ",".join(sorted(groupings))
@@ -696,6 +696,8 @@ def create_app(
             hit = await asyncio.to_thread(store.finder, d, method, key)
             if hit is not None:
                 return {**hit, "cached": True, "missing_groupings": missing}
+        if stored_only:  # another panel peeking (B's 🔗): never start a search for it
+            return {"date": d.isoformat(), "method": method, "groups": [], "stored": False, "cached": False, "missing_groupings": missing}
         k = (d, method, key)
         task = finder_running.get(k)
         if task is None:
@@ -738,11 +740,14 @@ def create_app(
             await asyncio.sleep(600)
 
     @app.get("/api/history/finder")
-    async def finder_api(request: Request, day: str = Query(..., alias="date"), method: str = Query("known", pattern="^(known|new)$"), refresh: bool = False) -> dict:
+    async def finder_api(
+        request: Request, day: str = Query(..., alias="date"), method: str = Query("known", pattern="^(known|new)$"),
+        refresh: bool = False, stored_only: bool = False,
+    ) -> dict:
         d = _day(day)
         if not app.state.history.day_rows(d):
             raise HTTPException(404, f"no data for {day}")
-        return await finder_result(d, method, finder_params(request.query_params), refresh)
+        return await finder_result(d, method, finder_params(request.query_params), refresh, stored_only)
 
     @app.get("/api/history/finder/progress")
     def finder_progress_api(request: Request, day: str = Query(..., alias="date"), method: str = Query("known", pattern="^(known|new)$")) -> dict:
