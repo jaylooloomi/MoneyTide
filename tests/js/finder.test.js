@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { cardHtml, csvExport, defaultGroupName, filterHtml, funnelText, filterOptions, matchesFilter, progressView, queryOf, statsText } from '../../static/js/finder.js';
+import { PRESETS, cardHtml, csvExport, defaultGroupName, filterHtml, funnelText, presetOf, filterOptions, matchesFilter, progressView, queryOf, statsText } from '../../static/js/finder.js';
 
 test('queryOf sends only the fields of the chosen method; blank 起漲差 means not required', () => {
   const p = { daily_r: 0.75, daily_window: 20, new_daily_r: 0.85, pool_top: 30, intraday_r: 0.5, peak_gap: 8, start_gap: '', require_burst: true, groupings: ['custom', 'news'], pool_sources: ['gain'] };
@@ -124,4 +124,15 @@ test('funnelText: what removed the pairs, most first, then how many passed', () 
   const d = { stats: { groups: 2, funnel: { pairs: 40, no_bars: 3, passed: 5, rejected: { 分時相關不足: 20, 高點時間差太大: 12 } } } };
   assert.equal(funnelText(d), '漏斗：進入分時比對 40 對 → 刷掉：分時相關不足 20、高點時間差太大 12、沒有分 K 3 → 三關都過 5 對 → 2 群');
   assert.equal(funnelText({ stats: {} }), ''); // older stored results
+});
+
+test('presets only set the linkage thresholds; the current values map back to one or to 自訂', () => {
+  const mine = { min_amplitude: 4, min_volume_lots: 500, daily_r: 0.8, new_daily_r: 0.8, intraday_r: 0.5, peak_gap: 8 };
+  assert.equal(presetOf(mine), 'standard');
+  const loose = { ...mine, ...PRESETS.loose.values };
+  assert.equal(presetOf(loose), 'loose');
+  assert.equal(loose.min_amplitude, 4); // untouched
+  assert.equal(loose.min_volume_lots, 500);
+  assert.equal(presetOf({ ...mine, intraday_r: 0.45 }), null); // a hand edit = 自訂
+  assert.equal(presetOf({ ...mine, intraday_r: '0.5' }), 'standard'); // form values may be strings
 });

@@ -56,7 +56,7 @@
 - 參考：TradingView screener「standard levels … Custom section for alternative values」（https://www.tradingview.com/blog/en/new-screeners-stock-crypto-coins-etf-42346）；Chaikin 預設篩選從 universe 一路篩下（https://help.chaikinanalytics.com/en_US/screener/360041564913-Preset-Screens）
 - 預估：finder.py（confirm 彙總 reason 次數、run_search 放進 stats）＋finder.js（統計列下一行小字）＋測試；3 檔、約 60 行。
 
-## E2 · N 條件預設組：嚴格／標準／寬鬆 一鍵切換
+## E2 · N 條件預設組：嚴格／標準／寬鬆 一鍵切換（✅ 已完成 bonus-06）
 因為原始需求是**門檻要保留彈性、常常要調**，所以頂尖做法會順便做**預設篩選組（presets）＋自訂**；目前的成果**只有部分**——只有逐欄輸入和「恢復預設」。
 - 參考：TradingView「standard levels … Custom section」（https://www.tradingview.com/blog/en/new-screeners-stock-crypto-coins-etf-42346）；fffinstill screener presets（https://fffinstill.com/learning/concepts/screener-presets）；Chaikin preset screens（https://help.chaikinanalytics.com/en_US/screener/360041564913-Preset-Screens）
 - 預估：finder.js（三個按鈕套用一組參數）＋測試；2 檔、約 50 行。

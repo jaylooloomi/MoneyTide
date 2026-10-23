@@ -193,6 +193,25 @@ export function progressView(p) {
   return { pct: 95, text: `③ 分時相關與高點比對${sec}` };
 }
 
+/**
+ * One-click threshold sets. They only touch the linkage thresholds (daily R, intraday R, high gap);
+ * 振幅, 成交量, groupings and pool settings stay as the user set them. 寬鬆 mostly loosens intraday R,
+ * the test that removes the most pairs (10/22 funnel: 143 of 197).
+ */
+export const PRESETS = {
+  strict: { label: '嚴格', values: { daily_r: 0.85, new_daily_r: 0.85, intraday_r: 0.6, peak_gap: 5 } },
+  standard: { label: '標準', values: { daily_r: 0.8, new_daily_r: 0.8, intraday_r: 0.5, peak_gap: 8 } },
+  loose: { label: '寬鬆', values: { daily_r: 0.7, new_daily_r: 0.75, intraday_r: 0.35, peak_gap: 15 } },
+};
+
+/** The preset the current values match exactly, or null (自訂). */
+export function presetOf(params) {
+  for (const [k, p] of Object.entries(PRESETS)) {
+    if (Object.entries(p.values).every(([f, v]) => Number(params[f]) === v)) return k;
+  }
+  return null;
+}
+
 // ---- panel --------------------------------------------------------------------------------------
 
 const PREF_KEY = 'openmarket.history.finder';
@@ -284,7 +303,11 @@ export function mountFinderPanel(container, { onStock }) {
       pref.method === 'known'
         ? `<span class="fd-list">分類：${Object.entries(GROUPINGS).map(([k, l]) => `<label><input type="checkbox" data-list="groupings" value="${k}"${p.groupings.includes(k) ? ' checked' : ''}>${l}</label>`).join('')}</span>`
         : `<span class="fd-list">候選池：${Object.entries(SOURCES).map(([k, l]) => `<label><input type="checkbox" data-list="pool_sources" value="${k}"${p.pool_sources.includes(k) ? ' checked' : ''}>${l}</label>`).join('')}</span>`;
-    form.innerHTML = `${fields}${lists}<button type="button" class="icon wide" data-act="defaults">恢復預設</button>`;
+    const now = presetOf(p);
+    const presets = `<span class="fd-presets seg" title="只改日相關、分時相關、高點差三個門檻">${Object.entries(PRESETS)
+      .map(([k, x]) => `<button type="button" data-preset="${k}"${k === now ? ' class="on"' : ''}>${x.label}</button>`)
+      .join('')}${now ? '' : '<button type="button" class="on" disabled>自訂</button>'}</span>`;
+    form.innerHTML = `${presets}${fields}${lists}<button type="button" class="icon wide" data-act="defaults">恢復預設</button>`;
   }
   form.addEventListener('change', (e) => {
     const el = e.target;
@@ -301,11 +324,18 @@ export function mountFinderPanel(container, { onStock }) {
       else if (el.value.trim() !== '' && Number.isFinite(Number(el.value))) p[k] = Number(el.value);
     }
     save();
+    drawMethod(); // the preset buttons follow the edited values (a hand edit becomes 自訂)
     schedule(true);
   });
   form.addEventListener('click', (e) => {
-    if (e.target.dataset.act !== 'defaults') return;
-    pref.params = { ...DEFAULTS };
+    const preset = e.target.closest('button[data-preset]')?.dataset.preset;
+    if (preset) {
+      Object.assign(pref.params, PRESETS[preset].values);
+    } else if (e.target.dataset.act === 'defaults') {
+      pref.params = { ...DEFAULTS };
+    } else {
+      return;
+    }
     save();
     drawMethod();
     schedule(true);

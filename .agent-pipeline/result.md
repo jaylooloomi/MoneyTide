@@ -14,6 +14,7 @@
 | 03 | 找法2 成交量門檻（≥300 張） | 6.2（scores-03.md） | TradingView screener volume 篩選；你為找法1 指定的「至少>300張」 | 找法2 的「條件」多「成交量 ≥（張）」，預設 300；候選池先濾掉小量股。10/22：3 組 0.1～0.75 億的小量配對消失，只留華新科+金山電（260 億）。改 finder.py、finder.js、兩邊測試 | `uv run pytest`（240 ✅）、`npm test`（78 ✅）；10/22 實跑 | ✅ | ① 改用成交值門檻（張數跟找法1 一致，比較好懂）② 跟找法1 共用同一個欄位（兩種找法要能分開調） |
 | 04 | N 結果匯出 CSV | 3.8（scores-04.md） | TradingView screener 下載 .csv | N 標題列「CSV」：匯出目前顯示的卡片（依篩選按鈕），一列一檔成分股＋群組指標＋當天條件；檔名含找法、日期、篩選。改 finder.js、finder.test.js | `npm test`（79 ✅）；瀏覽器擷取檔案：10/22 細產業 → 表頭＋6 列 | ✅ | ① 加進 history.js 的 CSV_EXPORTS（N 在那之後才掛上，按鈕掛不到）② 一列一群組（成員擠在一格，Excel 不好篩） |
 | 05 | N 漏斗統計 | 7.0（scores-06.md） | TradingView screener standard/custom levels；Chaikin preset screens | 統計列下多一行漏斗。10/22 找法1：「進入分時比對 197 對 → 刷掉：分時相關不足 143、開盤即高點（假同步） 46、高點時間差太大 2 → 三關都過 6 對 → 6 群」——**分時相關 ≥0.5 是最嚴的一關**。改 finder.py（confirm 彙總、FINDER_VERSION→4）、finder.js、app.css、兩邊測試 | `uv run pytest`（240 ✅）、`npm test`（80 ✅）；10/22 瀏覽器實測 | ✅ | ① 前端自己數（拿不到被刷掉的配對）② 只顯示通過數（看不出哪個條件最嚴） |
+| 06 | N 條件預設組 嚴格／標準／寬鬆 | 2.0（scores-07.md） | TradingView screener standard/custom levels；fffinstill、Chaikin presets | 「條件」最前面一排：嚴格（0.85／0.6／5 分）、標準（0.8／0.5／8 分）、寬鬆（0.7／0.35／15 分）；只改日相關、分時相關、高點差，其他設定不動；手動改值就顯示「自訂」。10/22 找法1：標準 6 群 → 寬鬆 38 群。改 finder.js、app.css、finder.test.js | `npm test`（81 ✅）；瀏覽器實測切寬鬆再切回標準 | ✅ | ① 預設組也改振幅／成交量／分類（會蓋掉你自己設的條件）② 存成後端設定（不必要，偏好本來就存在瀏覽器） |
 
 ## 判斷不值得做
 - C4 N 卡片可排序（1.5，scores-04.md）：每天篩完通常只剩幾張卡，排序幫助不大，還會改到現有預設順序。
