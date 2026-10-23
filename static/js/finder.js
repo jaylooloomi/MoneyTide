@@ -78,18 +78,46 @@ export function cardHtml(g, i) {
   </div>`;
 }
 
+const KINDS = ['已知族群', '已知族群的延伸', '跨族群新組合'];
+
+/**
+ * Filter chips over the found groups (no recompute): 找法1 by the grouping a group came from (a group
+ * found in several groupings counts under each), 找法2 by kind. → [{key, label, n}], 全部 first.
+ */
+export function filterOptions(d) {
+  const groups = d?.groups || [];
+  const opts = [{ key: 'all', label: '全部', n: groups.length }];
+  if (d?.method === 'new') {
+    for (const k of KINDS) opts.push({ key: k, label: k === '已知族群的延伸' ? '延伸' : k, n: groups.filter((g) => g.kind === k).length });
+  } else {
+    for (const label of d?.groupings || []) opts.push({ key: label, label, n: groups.filter((g) => g.sources?.some((s) => s.label === label)).length });
+  }
+  return opts;
+}
+
+export function matchesFilter(g, key, method) {
+  if (!key || key === 'all') return true;
+  return method === 'new' ? g.kind === key : !!g.sources?.some((s) => s.label === key);
+}
+
+export function filterHtml(d, current) {
+  return `<div class="fd-filter seg">${filterOptions(d)
+    .map((o) => `<button type="button" data-filter="${escapeHtml(o.key)}"${o.key === current ? ' class="on"' : ''}${o.n ? '' : ' disabled'}>${escapeHtml(o.label)} <small>${o.n}</small></button>`)
+    .join('')}</div>`;
+}
+
 export function statsText(d) {
   const s = d.stats || {};
   const sec = s.seconds?.total ?? Object.values(s.seconds || {}).reduce((a, x) => a + x, 0);
   const parts = [
-    d.method === 'new' ? `候選池 ${s.pool} 檔` : `分類 ${d.groupings?.join('、') || ''}`,
+    d.method === 'new' ? `候選池 ${s.pool} 檔` : '',
     `日相關通過 ${s.candidates} 組`,
     `抓分 K ${s.fetched} 檔`,
     `找到 ${s.groups} 群`,
     d.cached ? '（已存結果）' : `（${sec.toFixed(1)} 秒）`,
   ];
   if (d.missing_groupings?.length) parts.push(`尚未載入：${d.missing_groupings.map((g) => GROUPINGS[g] || g).join('、')}`);
-  return parts.join('　·　');
+  return parts.filter(Boolean).join('　·　');
 }
 
 /** Progress of a running search → {pct, text}: 日相關 0–15%, 抓分 K 15–90% (by stock), 比對 90–100%. */
@@ -118,11 +146,12 @@ export function mountFinderPanel(container, { onStock }) {
   const sec = document.createElement('section');
   sec.id = 'hFinderPanel';
   sec.className = 'panel hN';
-  const pref = { method: 'known', params: { ...DEFAULTS } };
+  const pref = { method: 'known', params: { ...DEFAULTS }, filter: { known: 'all', new: 'all' } };
   try {
     const saved = JSON.parse(localStorage.getItem(PREF_KEY) || '{}');
     if (saved.method in METHODS) pref.method = saved.method;
     Object.assign(pref.params, saved.params || {});
+    Object.assign(pref.filter, saved.filter || {});
   } catch {
     /* defaults */
   }
@@ -245,10 +274,7 @@ export function mountFinderPanel(container, { onStock }) {
       if (!resp.ok) throw new Error(data.detail || `HTTP ${resp.status}`);
       state.data = data;
       sec.querySelector('#hFinderStats').textContent = statsText(data);
-      body.innerHTML = data.groups.length
-        ? `<div class="fd-cards">${data.groups.map(cardHtml).join('')}</div><p class="hint" style="margin:6px 0 0">點卡片看這群股票的連動動畫與走勢</p>`
-        : '<p class="hint">這一天沒有符合全部條件的群組。可以在「條件」放寬門檻。</p>';
-      closeDetail();
+      drawCards();
     } catch (err) {
       if (t !== state.ticket) return;
       body.innerHTML = `<p class="hint">${escapeHtml(err.message)}</p>`;
@@ -259,6 +285,30 @@ export function mountFinderPanel(container, { onStock }) {
       }
     }
   }
+
+  // cards of the stored result, filtered by the chips (switching a chip never recomputes)
+  function drawCards() {
+    const data = state.data;
+    if (!data) return;
+    if (!data.groups.length) {
+      body.innerHTML = '<p class="hint">這一天沒有符合全部條件的群組。可以在「條件」放寬門檻。</p>';
+      closeDetail();
+      return;
+    }
+    let f = pref.filter[data.method] || 'all';
+    if (!filterOptions(data).some((o) => o.key === f && o.n)) f = 'all';
+    const cards = data.groups.map((g, i) => (matchesFilter(g, f, data.method) ? cardHtml(g, i) : '')).join('');
+    body.innerHTML = `${filterHtml(data, f)}<div class="fd-cards">${cards}</div><p class="hint" style="margin:6px 0 0">點卡片看這群股票的連動動畫與走勢</p>`;
+    closeDetail();
+  }
+  body.addEventListener('click', (e) => {
+    const b = e.target.closest('button[data-filter]');
+    if (!b || !state.data) return;
+    e.stopPropagation();
+    pref.filter[state.data.method] = b.dataset.filter;
+    save();
+    drawCards();
+  });
 
   function closeDetail() {
     state.detailTicket += 1;

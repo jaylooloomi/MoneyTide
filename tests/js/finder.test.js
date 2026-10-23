@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { cardHtml, progressView, queryOf, statsText } from '../../static/js/finder.js';
+import { cardHtml, filterHtml, filterOptions, matchesFilter, progressView, queryOf, statsText } from '../../static/js/finder.js';
 
 test('queryOf sends only the fields of the chosen method; blank 起漲差 means not required', () => {
   const p = { daily_r: 0.75, daily_window: 20, new_daily_r: 0.85, pool_top: 30, intraday_r: 0.5, peak_gap: 8, start_gap: '', require_burst: true, groupings: ['custom', 'news'], pool_sources: ['gain'] };
@@ -61,4 +61,24 @@ test('progressView: stages map onto one bar', () => {
   assert.equal(mid.pct, 15 + 38);
   assert.match(mid.text, /抓分 K 50／100 檔　4 秒/);
   assert.equal(progressView({ running: true, stage: 'intraday' }).pct, 95);
+});
+
+test('filter chips: 找法1 by source grouping (a group can count twice), 找法2 by kind', () => {
+  const known = {
+    method: 'known',
+    groupings: ['官方產業', '自訂族群', '細產業'],
+    groups: [
+      { kind: '已知族群', sources: [{ label: '官方產業' }, { label: '自訂族群' }] },
+      { kind: '已知族群', sources: [{ label: '細產業' }] },
+      { kind: '已知族群', sources: [{ label: '官方產業' }] },
+    ],
+  };
+  assert.deepEqual(filterOptions(known).map((o) => [o.key, o.n]), [['all', 3], ['官方產業', 2], ['自訂族群', 1], ['細產業', 1]]);
+  assert.equal(known.groups.filter((g) => matchesFilter(g, '細產業', 'known')).length, 1);
+  assert.equal(known.groups.filter((g) => matchesFilter(g, 'all', 'known')).length, 3);
+  const fresh = { method: 'new', groups: [{ kind: '跨族群新組合' }, { kind: '已知族群' }, { kind: '跨族群新組合' }] };
+  assert.deepEqual(filterOptions(fresh).map((o) => [o.label, o.n]), [['全部', 3], ['已知族群', 1], ['延伸', 0], ['跨族群新組合', 2]]);
+  const html = filterHtml(fresh, '跨族群新組合');
+  assert.match(html, /data-filter="跨族群新組合" class="on"/);
+  assert.match(html, /data-filter="已知族群的延伸" disabled/);
 });

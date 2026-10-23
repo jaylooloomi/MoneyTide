@@ -373,3 +373,6 @@ table.link-heat td.self { background: #3a3e48; }
 .fd-bar { height: 8px; border-radius: 4px; background: #1a2233; overflow: hidden; }
 .fd-bar span { display: block; height: 100%; width: 0; background: linear-gradient(90deg, #4f8cff, #7fd3ff); transition: width .4s ease; }
 .fd-ptext { margin-top: 6px; color: #cfe0ff; font-size: 13px; text-align: center; font-variant-numeric: tabular-nums; }
+.fd-filter { margin-bottom: 8px; flex-wrap: wrap; }
+.fd-filter button small { opacity: .7; margin-left: 2px; }
+.fd-filter button:disabled { opacity: .35; cursor: default; }
