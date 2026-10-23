@@ -314,3 +314,17 @@ table.link-matrix td, table.link-matrix th { padding: 2px 4px; font-size: 11px; 
 .rt-dot { position: absolute; width: 10px; height: 10px; margin: -5px 0 0 -5px; border-radius: 50%; border: 1px solid #fff; box-shadow: 0 0 4px #000; }
 .rt-now { width: 84px; flex: none; text-align: right; font-size: 13px; font-variant-numeric: tabular-nums; }
 .rt-peak { width: 100px; flex: none; color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+/* K · the picked member's session beside the animation */
+.race-wrap { display: flex; gap: 14px; align-items: flex-start; flex-wrap: wrap; }
+.race-main { flex: 1 1 620px; min-width: 0; max-width: 1100px; }
+.race-side { flex: 1 1 520px; min-width: 360px; max-width: 760px; border: 1px solid var(--line, #2a2e37); border-radius: 6px; padding: 6px 8px; }
+.rt-row.on { background: #ffffff0d; outline: 1px solid #ffd40066; border-radius: 3px; }
+.ic-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 4px; }
+.ic-head .ic-card { margin-left: auto; }
+.ic-body { display: flex; gap: 8px; }
+.ic-chart { flex: 1; min-width: 0; height: 330px; }
+.ic-side { width: 150px; flex: none; }
+.ic-info { width: 100%; font-size: 12px; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+.ic-info td { padding: 2px 4px; border-bottom: 1px solid #23262e; }
+.ic-info td:last-child { text-align: right; }

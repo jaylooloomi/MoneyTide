@@ -4,6 +4,7 @@
 // a stock locked limit-up stays ahead of every later limit-up (and of everyone not at the limit).
 // Pure frame builders on top (node --test); the animated panel below.
 
+import { mountIntraday } from './intradaychart.js';
 import { colorFor, escapeHtml, fmtPct, limitTag } from './transform.js';
 
 export const RACE_END = 270; // minutes after 09:00 → 13:30
@@ -143,7 +144,7 @@ export function mountRace(box, d, { onStock } = {}) {
     /* default */
   }
   const pctX = (m) => (m / RACE_END) * 100;
-  box.innerHTML = `<div class="race-ctl">
+  box.innerHTML = `<div class="race-wrap"><div class="race-main"><div class="race-ctl">
       <button type="button" class="icon" data-act="play" title="從 09:00 播放／暫停">▶</button>
       <button type="button" class="icon" data-act="restart" title="從 09:00 重新開始">⏮</button>
       <b class="race-clock">13:30</b>
@@ -151,7 +152,7 @@ export function mountRace(box, d, { onStock } = {}) {
       <div class="seg race-speed">${Object.entries(RACE_SPEEDS)
         .map(([k, [label]]) => `<button type="button" data-speed="${k}"${k === speed ? ' class="on"' : ''}>${label}</button>`)
         .join('')}</div>
-      <small class="muted">${step}；● ＝到目前為止的最高點；同漲幅先到的排前面</small>
+      <small class="muted">${step}；● ＝到目前為止的最高點；先鎖漲停的排前面；點一列看右邊的走勢圖</small>
     </div>
     <div class="rt">
       <div class="rt-axis">${TICKS.map(([label, m]) => `<span style="left:${pctX(m)}%">${label}</span>`).join('')}</div>
@@ -160,7 +161,7 @@ export function mountRace(box, d, { onStock } = {}) {
         ${codes
           .map((c) => {
             const m = byCode.get(c);
-            return `<div class="rt-row" data-code="${escapeHtml(c)}" title="${escapeHtml(c)} ${escapeHtml(m.name)}：點開資訊卡">
+            return `<div class="rt-row" data-code="${escapeHtml(c)}" title="${escapeHtml(c)} ${escapeHtml(m.name)}：點一下看右邊的走勢圖">
               <span class="rt-rank"></span><span class="rt-name">${c === leader ? '👑' : ''}${escapeHtml(m.name)}</span>
               <span class="rt-track">
                 <svg viewBox="0 0 ${RACE_END} ${ROW_H}" preserveAspectRatio="none"><line class="rt-zero" x1="0" x2="${RACE_END}" y1="${y(0)}" y2="${y(0)}"/><polyline class="rt-path"/></svg>
@@ -170,19 +171,26 @@ export function mountRace(box, d, { onStock } = {}) {
           })
           .join('')}
       </div>
-    </div>`;
+    </div></div><div class="race-side"></div></div>`;
+  const chart = mountIntraday(box.querySelector('.race-side'), { date: d.date, onCard: onStock });
   const rows = new Map([...box.querySelectorAll('.rt-row')].map((el) => [el.dataset.code, el]));
   const clock = box.querySelector('.race-clock');
   const seek = box.querySelector('.race-seek');
   const head = box.querySelector('.rt-head');
   const playBtn = box.querySelector('[data-act="play"]');
-  const state = { m: RACE_END, timer: null };
+  const state = { m: RACE_END, timer: null, picked: null };
+  function pick(code) {
+    state.picked = code;
+    for (const [c, el] of rows) el.classList.toggle('on', c === code);
+    chart.load(code, byCode.get(code)?.name).then(() => chart.sync(state.m));
+  }
 
   function show(m) {
     state.m = m;
     clock.textContent = fmtClock(m);
     seek.value = String(m);
     head.style.left = `${pctX(m)}%`;
+    chart.sync(m);
     raceOrder(codes, frames, m).forEach((c, i) => {
       const el = rows.get(c);
       const f = frames[c];
@@ -243,12 +251,13 @@ export function mountRace(box, d, { onStock } = {}) {
       return;
     }
     const row = e.target.closest('.rt-row');
-    if (row) onStock?.(row.dataset.code);
+    if (row) pick(row.dataset.code);
   });
   seek.addEventListener('input', () => {
     stop();
     show(Number(seek.value));
   });
+  pick(leader); // the leader's chart until another row is clicked
   show(RACE_END); // the finished day first: the same picture as the static timeline; ▶ replays from 09:00
   return stop;
 }

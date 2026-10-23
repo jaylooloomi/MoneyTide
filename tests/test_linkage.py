@@ -63,7 +63,7 @@ def test_buckets_and_returns_stay_within_a_session():
 def test_yahoo_parse_and_symbol():
     days = parse_chart(json.loads((FIX / "yahoo_5m_2330_TW.json").read_text()))
     last = days[max(days)]
-    assert last[0][0] == "09:00" and len(last) >= 50 and all(len(b) == 4 for b in last)
+    assert last[0][0] == "09:00" and len(last) >= 50 and all(len(b) == 6 for b in last)
     assert symbol_for("6488", "上櫃") == "6488.TWO" and symbol_for("2330", "上市") == "2330.TW"
 
 
@@ -124,11 +124,11 @@ def test_linkage_api_uses_cached_bars(store, tmp_path):
     sessions = store.days_list[-3:]
     now = datetime.now(TAIPEI)
     for code, base in (("A", 100), ("B", 50), ("C", 20)):
-        bars = {s: [(f"{9 + k // 12:02d}:{(k % 12) * 5:02d}", base * (1 + 0.01 * ((k % 7) - 3)) + 1, base, base * (1 + 0.01 * ((k % 7) - 3))) for k in range(54)] for s in sessions}
+        bars = {s: [(f"{9 + k // 12:02d}:{(k % 12) * 5:02d}", base * (1 + 0.01 * ((k % 7) - 3)) + 1, base, base * (1 + 0.01 * ((k % 7) - 3)), base, 1000) for k in range(54)] for s in sessions}
         store.save_yahoo_bars(code, bars, now)  # fresh: the endpoint must not call Yahoo
         # 1-minute bars of the shown day: peaks at 09:00, 10:07, 12:59 (to the minute); the 13:10 spike is after the 09:00–13:00 window
         peak = {"A": "09:00", "B": "10:07", "C": "12:59"}[code]
-        store.save_yahoo_1m(code, d, [("09:00", base, base, base), (peak, base * 2, base, base * 2), ("13:10", base * 3, base, base * 3)])
+        store.save_yahoo_1m(code, d, [("09:00", base, base, base, base, 1), (peak, base * 2, base, base * 2, base, 1), ("13:10", base * 3, base, base * 3, base, 1)])
     app = create_app(AppConfig(data_dir=tmp_path), start_polling=False, start_history=False, start_concepts=False, history_store=store)
     with TestClient(app, base_url="http://127.0.0.1") as client:
         body = client.get("/api/history/linkage", params={"date": d.isoformat(), "group": "G"}).json()
@@ -185,3 +185,36 @@ def test_race_points_last_value_per_minute_within_the_session():
     pts = [("08:59:00", 99, 99), ("09:00:05", 103, 101), ("09:00:50", 102, 102), ("09:07", 110, 108), ("13:30:00", 105, 105), ("13:40:00", 1, 1)]
     assert race_points(pts, 100) == [[0, 2.0, 3.0], [7, 8.0, 10.0], [270, 5.0, 5.0]]  # close: last; high: max
     assert race_points(pts, None) == []
+
+
+def test_limit_down_and_bar_helpers():
+    from openmarket.history.linkage import limit_down_pct, minute_bars, tick_bars, with_close_bar
+
+    assert limit_down_pct(100) == -10.0
+    assert limit_down_pct(352.5) == -9.93  # 317.25 → 317.5 (rounded up to the 0.5 tick)
+    assert minute_bars([("09:00", 11, 9, 10), ("09:01", 12, 10, 11, 10.5, 2000), ("13:40", 1, 1, 1, 1, 1)]) == [
+        [0, 10, 11, 9, 10, None],  # an old 4-field bar: open = close, no volume
+        [1, 10.5, 12, 10, 11, 2000],
+    ]
+    assert tick_bars([("09:00:05", 10), ("09:00:40", 12), ("09:00:55", 11), ("09:02:00", 9)]) == [[0, 10, 12, 10, 11, None], [2, 9, 9, 9, 9, None]]
+    day = {"close": 12, "volume_shares": 5000}
+    assert with_close_bar([[0, 10, 11, 9, 10, 1000], [269, 11, 11, 11, 11, 3000]], day)[-1] == [270, 12, 12, 12, 12, 1000]
+    assert with_close_bar([[0, 10, 11, 9, 10, None]], day)[-1][5] is None  # unknown bar volume: unknown rest
+    assert with_close_bar([], day) == []
+
+
+def test_intraday_endpoint_uses_cached_minute_bars(store, tmp_path):
+    from fastapi.testclient import TestClient
+
+    from openmarket.api import create_app
+    from openmarket.config import AppConfig
+
+    d = store.days_list[-1]
+    store.save_yahoo_1m("A", d, [("09:00", 101, 99, 100, 100, 1000), ("09:01", 103, 100, 102, 100, 3000)])
+    app = create_app(AppConfig(data_dir=tmp_path), start_polling=False, start_history=False, start_concepts=False, history_store=store)
+    with TestClient(app, base_url="http://127.0.0.1") as client:
+        body = client.get("/api/history/intraday", params={"code": "A", "date": d.isoformat()}).json()
+        assert body["source"] == "yahoo" and body["step_min"] == 1
+        assert body["bars"][:2] == [[0, 100, 101, 99, 100, 1000], [1, 100, 103, 100, 102, 3000]]
+        assert body["bars"][-1][0] == 270 and body["limit_up_pct"] is not None
+        assert client.get("/api/history/intraday", params={"code": "nope", "date": d.isoformat()}).status_code == 404

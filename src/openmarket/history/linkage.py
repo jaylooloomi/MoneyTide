@@ -12,6 +12,7 @@
 
 from __future__ import annotations
 
+import math
 from collections.abc import Iterable, Mapping
 from datetime import date
 
@@ -185,6 +186,55 @@ def limit_up_pct(prev_close: float | None) -> float | None:
     tick = tick_size(raw)
     price = int(raw / tick + 1e-9) * tick
     return round((price / prev_close - 1) * 100, 2)
+
+
+def limit_down_pct(prev_close: float | None) -> float | None:
+    """% change at the limit-down price: prev close × 0.9 rounded up to its tick."""
+    if not prev_close:
+        return None
+    raw = prev_close * 0.9
+    tick = tick_size(raw)
+    price = math.ceil(raw / tick - 1e-9) * tick
+    return round((price / prev_close - 1) * 100, 2)
+
+
+def minute_bars(bars: list[tuple]) -> list[list]:
+    """Yahoo bars (HH:MM, high, low, close[, open, volume]) → [[minute, open, high, low, close, volume]]."""
+    out = []
+    for b in bars:
+        m = minutes(b[0])
+        if not 0 <= m <= 270:
+            continue
+        o = b[4] if len(b) > 4 and b[4] is not None else b[3]
+        out.append([m, o, b[1], b[2], b[3], b[5] if len(b) > 5 else None])
+    return out
+
+
+def tick_bars(points: list[tuple[str, float]]) -> list[list]:
+    """Recorded polls → per-minute [[minute, open, high, low, close, None]] (polls carry no volume)."""
+    by: dict[int, list] = {}
+    for ts, p in points:
+        m = minutes(ts)
+        if not 0 <= m <= 270 or not p:
+            continue
+        b = by.get(m)
+        if b is None:
+            by[m] = [m, p, p, p, p, None]
+        else:
+            b[2], b[3], b[4] = max(b[2], p), min(b[3], p), p
+    return [by[m] for m in sorted(by)]
+
+
+def with_close_bar(bars: list[list], day_row: dict) -> list[list]:
+    """End on 13:30 with the official close; its volume is what the bars left out of the day's total."""
+    close = day_row.get("close")
+    if not bars or close is None:
+        return bars
+    bars = [b for b in bars if b[0] < 270]
+    vols = [b[5] for b in bars]
+    total = day_row.get("volume_shares")
+    rest = total - sum(vols) if total is not None and all(v is not None for v in vols) else None
+    return bars + [[270, close, close, close, close, rest if rest is not None and rest > 0 else (0 if rest is not None else None)]]
 
 
 def race_points(points: list[tuple], prev_close: float | None) -> list[list[float]]:

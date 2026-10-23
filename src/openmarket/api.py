@@ -21,7 +21,7 @@ from .config import STATIC_DIR, TAIPEI, USER_AGENT, AppConfig
 from .explain import explain_day
 from .history.linkage import (
     INTRADAY_HIGH_R, INTRADAY_LOW_R, bucket_closes, daily_linkage, fmt_minute, pair_matrix, peak_minute_from_bars, peak_minute_from_ticks,
-    limit_up_pct, peak_stats, race_points, returns, top_members, verdict_r, verdict_timing,
+    limit_down_pct, limit_up_pct, minute_bars, peak_stats, tick_bars, with_close_bar, race_points, returns, top_members, verdict_r, verdict_timing,
 )
 from .intraday import IntradayRecorder
 from .sources.yahoo_intraday import ONE_MINUTE_DAYS, fetch_bars, fetch_day_1m
@@ -421,7 +421,9 @@ def create_app(
         missing = [s for s in sessions if s not in have]
         fetched = store.yahoo_fetched_at(code)
         fresh = fetched and (datetime.now(fetched.tzinfo) - fetched).total_seconds() < YAHOO_REFRESH_HOURS * 3600
-        if missing and not fresh:
+        # bars cached before open/volume were kept (4 fields) are fetched again, fresh or not
+        old_format = any(bars and len(bars[0]) < 6 for bars in have.values())
+        if (missing and not fresh) or old_format:
             try:
                 by_day = await fetch_bars(http, code, market)
                 store.save_yahoo_bars(code, by_day, datetime.now(TAIPEI))
@@ -434,7 +436,8 @@ def create_app(
         """1-minute bars for the peak time, cached once the session is over; None when unavailable."""
         store = app.state.history
         cached = store.yahoo_1m(code, day)
-        if cached is not None:
+        # bars cached before open/volume were kept (4 fields) are fetched again
+        if cached is not None and (not cached or len(cached[0]) >= 6):
             return cached or None, ""
         now = datetime.now(TAIPEI)
         if (now.date() - day).days > ONE_MINUTE_DAYS:
@@ -539,6 +542,46 @@ def create_app(
             "leader_lag_min": lag,
             "verdict": {"daily": verdict_r(daily.get("r20")), "intraday": verdict_r(r_intraday, INTRADAY_HIGH_R, INTRADAY_LOW_R), "timing": verdict_timing(std)},
             "notes": notes,
+        }
+
+    @app.get("/api/history/intraday")
+    async def stock_intraday(code: str, day: str = Query(..., alias="date")) -> dict:
+        """One stock's session minute by minute for K's chart beside the animation: Yahoo 1-minute bars
+        (last ~30 days), else the 5-minute bars, else the app's own polls (no volume)."""
+        try:
+            d = date.fromisoformat(day)
+        except ValueError as exc:
+            raise HTTPException(422, f"invalid date {day!r}") from exc
+        store = app.state.history
+        rows = [r for r in store.stock_rows(code, d, 1) if r["date"] == d.isoformat()]
+        if not rows:
+            raise HTTPException(404, f"no data for {code} on {day}")
+        r = rows[0]
+        bars, step, source, note = [], 1, "none", ""
+        async with httpx.AsyncClient(timeout=20, headers={"User-Agent": USER_AGENT}, follow_redirects=True) as http:
+            mb, err = await minute_bars_for(http, code, r["market"], d)
+            if mb:
+                bars, source = minute_bars(mb), "yahoo"
+            else:
+                got, err5 = await bars_for(http, code, r["market"], [d])
+                if got.get(d):
+                    bars, step, source = minute_bars(got[d]), 5, "yahoo"
+                elif d in store.tick_dates():
+                    ticks = await asyncio.to_thread(store.ticks, d, {code})
+                    bars, source = tick_bars(ticks.get(code, [])), "recorded"
+                note = err or err5
+        return {
+            "code": code,
+            "name": r["name"],
+            "date": d.isoformat(),
+            "prev_close": r["prev_close"],
+            "limit_up_pct": limit_up_pct(r["prev_close"]),
+            "limit_down_pct": limit_down_pct(r["prev_close"]),
+            "day": {k: r[k] for k in ("open", "high", "low", "close", "change", "change_pct", "volume_shares", "turnover_yuan")},
+            "step_min": step,
+            "source": source,
+            "bars": with_close_bar(bars, r),
+            "note": note,
         }
 
     @app.get("/api/counties/status")

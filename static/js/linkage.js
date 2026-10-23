@@ -62,7 +62,7 @@ export function mountLinkagePanel(container, { onStock }) {
         <div><div class="muted">日相關（<span class="link-win">${state.win}</span> 日漲跌幅）</div><div class="link-daily">${matrixHtml(names, d.daily[`matrix${state.win}`])}</div></div>
         <div><div class="muted">分時相關（最近 ${d.intraday.sessions.length} 個交易日 5 分 K）</div>${matrixHtml(names, d.intraday.matrix)}</div>
       </div>
-      <div class="race"><div class="muted" title="日內最高點＝每檔在 09:00–13:00 之間價格最高的那個時間點（同價取最早）">${escapeHtml(d.date)} 日內最高點時間＋漲幅（按 ▶ 從 09:00 播到 13:30，依當下漲跌幅排名；👑 龍頭；點股票看卡片）</div><div class="race-box"></div></div>`;
+      <div class="race"><div class="muted" title="日內最高點＝每檔在 09:00–13:00 之間價格最高的那個時間點（同價取最早）">${escapeHtml(d.date)} 日內最高點時間＋漲幅（按 ▶ 從 09:00 播到 13:30，依當下漲跌幅排名；👑 龍頭；點一列看那檔的分時走勢）</div><div class="race-box"></div></div>`;
     state.stopRace = mountRace(body.querySelector('.race-box'), d, { onStock });
   };
   sec.querySelector('#hLinkWin').addEventListener('click', (e) => {

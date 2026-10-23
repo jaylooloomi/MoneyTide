@@ -28,21 +28,27 @@ def symbol_for(code: str, market: str) -> str:
     return f"{code}.{'TWO' if market == '上櫃' else 'TW'}"
 
 
-def parse_chart(payload: dict) -> dict[date, list[tuple[str, float, float, float]]]:
-    """{day: [(HH:MM bar start, high, low, close)]} in Taipei time; empty bars are skipped."""
+def parse_chart(payload: dict) -> dict[date, list[tuple]]:
+    """{day: [(HH:MM bar start, high, low, close, open, volume shares)]} in Taipei time; empty bars are
+    skipped. open / volume are None when Yahoo leaves them out (older cached bars have 4 fields)."""
     try:
         res = payload["chart"]["result"][0]
         stamps = res.get("timestamp") or []
         q = res["indicators"]["quote"][0]
     except (KeyError, IndexError, TypeError) as exc:
         raise ParseError("Yahoo chart payload without result") from exc
-    out: dict[date, list[tuple[str, float, float, float]]] = {}
+    out: dict[date, list[tuple]] = {}
+    opens = q.get("open") or [None] * len(stamps)
+    vols = q.get("volume") or [None] * len(stamps)
     for i, ts in enumerate(stamps):
         h, lo, c = q["high"][i], q["low"][i], q["close"][i]
         if h is None or lo is None or c is None:
             continue
         t = datetime.fromtimestamp(ts, TAIPEI)
-        out.setdefault(t.date(), []).append((t.strftime("%H:%M"), float(h), float(lo), float(c)))
+        o, v = opens[i], vols[i]
+        out.setdefault(t.date(), []).append(
+            (t.strftime("%H:%M"), float(h), float(lo), float(c), float(o) if o is not None else None, float(v) if v is not None else None)
+        )
     return out
 
 
