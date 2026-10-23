@@ -18,6 +18,7 @@ import { MIN_FILTERS, groupMembers, limitTag, passesMin, toCsv } from './transfo
 import { breadthBarHtml, breadthShare, marketBreadth } from './transform.js';
 import { getGroups, loadGroups, onGroupsChange, openGroupPanel, setStockNames } from './groups.js';
 import { mountIndexPanel } from './indexchart.js';
+import { mountCountyMap } from './countymap.js';
 
 const PREFS_KEY = 'openmarket.history.v1';
 const $ = (sel) => document.querySelector(sel);
@@ -46,6 +47,7 @@ const csvData = { rotation: null, movers: null }; // bonus-07: last data shown i
 let started = false;
 let daysTimer = null;
 let indexPanel = null; // G: TAIEX + TPEx timeline (indexchart.js)
+const countyPanel = { ctl: null, ticket: 0, cache: new Map() }; // H: county money map (countymap.js)
 
 function loadPrefs() {
   try {
@@ -186,6 +188,7 @@ function renderChart() {
   renderHistBreadth(); // bonus-05
   renderHistColorSeg(); // bonus-13
   if (members.group) renderMembers(); // bonus-15
+  renderCountyPanel(); // H follows the day shown in A
 }
 
 function zoomTo(name) {
@@ -551,6 +554,8 @@ export async function showHistory() {
     });
     await indexPanel.load();
     indexPanel.mark(st.date);
+    mountCountyPanel();
+    renderCountyPanel();
     return;
   }
   chart.resize();
@@ -1202,4 +1207,42 @@ function renderHistMinSelect() {
     });
   }
   sel.value = histMin.key;
+}
+
+// ---- ③ H: county money map for the selected day ---------------------------------------------
+function mountCountyPanel() {
+  if (countyPanel.ctl) return;
+  const sec = document.createElement('section');
+  sec.id = 'hMapPanel';
+  sec.className = 'panel';
+  sec.style.gridColumn = '1 / -1';
+  sec.innerHTML = `<div class="panel-h"><b>H · 台灣地圖</b>
+      <span class="muted">依公司總部所在縣市彙總全市場普通股（地址來自證交所、櫃買中心公司基本資料）；可拖曳縮放</span>
+      <span id="hMapCtl"></span><span class="muted" id="hMapNote" style="margin-left:auto"></span></div>
+    <div id="hMap" style="height:620px"></div>`;
+  $('#historyView').appendChild(sec);
+  countyPanel.ctl = mountCountyMap($('#hMap'), { controls: $('#hMapCtl'), note: $('#hMapNote'), prefKey: 'openmarket.history.mapMetric' });
+}
+
+/** The map always covers the whole market: under other groupings A holds members only. */
+async function renderCountyPanel() {
+  if (!countyPanel.ctl || !st.date) return;
+  const date = st.date;
+  if (st.grouping === 'industry') {
+    countyPanel.ctl.render(st.stocks, date);
+    return;
+  }
+  const t = ++countyPanel.ticket;
+  let stocks = countyPanel.cache.get(date);
+  if (!stocks) {
+    try {
+      stocks = (await getJson(`/api/history/day/${date}`)).stocks;
+    } catch {
+      return;
+    }
+    countyPanel.cache.clear(); // keep one day: the map follows the selected date
+    countyPanel.cache.set(date, stocks);
+  }
+  if (t !== countyPanel.ticket || date !== st.date) return;
+  countyPanel.ctl.render(stocks, date);
 }

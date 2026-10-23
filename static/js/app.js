@@ -20,6 +20,7 @@ import {
   watchRows,
 } from './transform.js';
 import { showHistory } from './history.js';
+import { mountCountyMap } from './countymap.js';
 import { GROUP_LABELS, MIN_FILTERS, TODAY_SCALES, breadthBarHtml, findStock, marketBreadth, regroupStocks, withRelVolume } from './transform.js';
 import { addToGroup, getGroups, loadGroups, onGroupsChange, openGroupPanel, setStockNames } from './groups.js';
 
@@ -33,6 +34,13 @@ const liveRvol = { avg: null, day: null, loading: false, failedAt: 0 };
 const RVOL_RETRY_MS = 5 * 60_000;
 // bonus-23: declared up here because main() renders before the module finishes evaluating
 const liveSearch = { shown: [], listFor: null };
+// ③: main area shows the heatmap or the county money map (declared before main() runs)
+const liveMap = { on: false, ctl: null };
+try {
+  liveMap.on = localStorage.getItem('openmarket.live.view') === 'map';
+} catch {
+  /* default */
+}
 try {
   const saved = JSON.parse(localStorage.getItem('openmarket.live.grouping') || '""');
   if (['industry', 'custom', 'concept', 'chain'].includes(saved)) liveGrouping.by = saved;
@@ -236,6 +244,7 @@ function render() {
   renderMatrix(withPeriods(aggregateIndustries(stocks, { stocksOnly: liveGrouping.by === 'industry' }))); // bonus-11: 20-day column; ①
   renderLiveBreadth(filtered); // bonus-05 (each stock once, whatever the grouping)
   renderLiveSearch(snap, stocks); // bonus-23
+  renderLiveMap(filtered); // ③
   renderWatch(snap ? snap.stocks : []);
   renderCard();
 }
@@ -1014,4 +1023,51 @@ function renderGroupLabelSelect() {
     });
   }
   sel.value = state.view.groupLabel in GROUP_LABELS ? state.view.groupLabel : 'cap';
+}
+
+// ---- ③: county money map in the live main area ---------------------------------------------
+function renderLiveMap(stocks) {
+  let seg = $('#liveViewMode');
+  if (!seg) {
+    seg = document.createElement('div');
+    seg.className = 'seg';
+    seg.id = 'liveViewMode';
+    seg.setAttribute('role', 'group');
+    seg.setAttribute('aria-label', '主畫面');
+    seg.innerHTML = '<button data-value="heat">熱力圖</button><button data-value="map" title="依公司總部所在縣市彙總">台灣地圖</button>';
+    $('#liveControls').prepend(seg);
+    const wrap = document.querySelector('#liveView .chart-wrap');
+    const box = document.createElement('div');
+    box.id = 'liveMapBox';
+    box.style.cssText = 'position:absolute;inset:0;display:flex;flex-direction:column;background:var(--bg)';
+    box.innerHTML = '<div class="panel-h" style="gap:8px"><span id="liveMapCtl"></span><span class="muted" id="liveMapNote"></span></div><div id="liveMap" style="flex:1;min-height:0"></div>';
+    box.hidden = true;
+    wrap.appendChild(box);
+    liveMap.ctl = mountCountyMap($('#liveMap'), { controls: $('#liveMapCtl'), note: $('#liveMapNote'), prefKey: 'openmarket.live.mapMetric' });
+    seg.addEventListener('click', (e) => {
+      const b = e.target.closest('button[data-value]');
+      if (!b) return;
+      liveMap.on = b.dataset.value === 'map';
+      try {
+        localStorage.setItem('openmarket.live.view', liveMap.on ? 'map' : 'heat');
+      } catch {
+        /* ignore */
+      }
+      render();
+    });
+  }
+  for (const b of seg.querySelectorAll('button')) {
+    const on = (b.dataset.value === 'map') === liveMap.on;
+    b.classList.toggle('on', on);
+    b.setAttribute('aria-pressed', String(on));
+  }
+  const box = $('#liveMapBox');
+  const wasHidden = box.hidden;
+  box.hidden = !liveMap.on;
+  if (!liveMap.on) {
+    if (!wasHidden) chart.resize();
+    return;
+  }
+  liveMap.ctl.render(stocks, '今日即時');
+  if (wasHidden) liveMap.ctl.show();
 }

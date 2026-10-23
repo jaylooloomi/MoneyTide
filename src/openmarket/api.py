@@ -26,6 +26,7 @@ from .sources.histock import fetch_quotes
 from .sources.http import make_client
 from .sources.official import fetch_tpex_day, fetch_twse_day
 from .sources.official_index import fetch_index_month
+from .sources.company_address import fetch_county_groups
 from .sources.tpex_chains import fetch_chains
 from .sources.yahoo_concepts import fetch_concepts
 from .sources.shares import fetch_shares
@@ -62,6 +63,7 @@ def create_app(
     concepts: ConceptLoader | None = None,
     start_concepts: bool = True,  # also starts the 細產業 (TPEx chain) loader
     chains: ConceptLoader | None = None,
+    counties: ConceptLoader | None = None,
     static_dir: Path = STATIC_DIR,
     allowed_hosts: tuple[str, ...] = ("127.0.0.1", "localhost"),
 ) -> FastAPI:
@@ -133,6 +135,15 @@ def create_app(
             )
         if start_concepts and app.state.chains is not None:
             tasks.append(asyncio.create_task(app.state.chains.run()))
+        if start_concepts and app.state.counties is None:
+            if client is None:
+                client = make_client()
+            app.state.counties = ConceptLoader(  # head-office county per company (map view)
+                cache=JsonCache(config.data_dir / "counties_cache.json"),
+                fetch=lambda progress: fetch_county_groups(client, progress=progress),
+            )
+        if start_concepts and app.state.counties is not None:
+            tasks.append(asyncio.create_task(app.state.counties.run()))
         try:
             yield
         finally:
@@ -149,6 +160,7 @@ def create_app(
     app.state.collector = None
     app.state.concepts = concepts
     app.state.chains = chains
+    app.state.counties = counties
     app.include_router(create_history_router(lambda: app.state.history, lambda: app.state.collector, get_grouping))
     # Local-only app: reject other Host headers (DNS rebinding could otherwise reach the PUT routes).
     app.add_middleware(TrustedHostMiddleware, allowed_hosts=list(allowed_hosts))
@@ -224,6 +236,11 @@ def create_app(
         loader = app.state.concepts
         return loader.status() if loader is not None else {"ready": False, "count": 0, "running": False, "done": 0, "total": 0, "error": "", "saved_at": None}
 
+    @app.get("/api/counties/status")
+    def counties_status() -> dict:
+        loader = app.state.counties
+        return loader.status() if loader is not None else {"ready": False, "count": 0, "running": False, "done": 0, "total": 0, "error": "", "saved_at": None}
+
     @app.get("/api/chains/status")
     def chains_status() -> dict:
         loader = app.state.chains
@@ -253,7 +270,12 @@ def create_app(
             if loader is None or not loader.mapping:
                 raise HTTPException(404, "細產業分類尚未載入完成")
             return {"name": name, "mapping": loader.mapping}
-        raise HTTPException(422, "grouping must be custom, concept or chain")
+        if name == "county":  # code → [head-office county] for the map view
+            loader = app.state.counties
+            if loader is None or not loader.mapping:
+                raise HTTPException(404, "公司地址資料尚未載入完成")
+            return {"name": name, "mapping": loader.mapping}
+        raise HTTPException(422, "grouping must be custom, concept, chain or county")
 
     @app.get("/api/groups")
     def list_groups() -> dict:
