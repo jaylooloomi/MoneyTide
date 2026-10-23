@@ -345,3 +345,22 @@ def test_inst_summary_in_lots_and_amount():
     assert g["inst_net"] == 1_500_000.0 and g["members"][1]["inst_net"] == -500_000.0
     assert empty["inst"] is None  # 法人 not published for these yet
     assert "inst" not in groups[0]  # copies, the stored result is untouched
+
+
+def test_inst_streak_counts_same_sign_days_of_the_group():
+    from openmarket.history.finder import inst_streak
+
+    d = [date(2026, 10, 22), date(2026, 10, 21), date(2026, 10, 20), date(2026, 10, 19)]  # newest first
+    by_day = {
+        d[0]: {"A": 100.0, "B": -30.0},  # group +70
+        d[1]: {"A": 50.0},  # +50 (B missing that day: the members that have data)
+        d[2]: {"A": -10.0, "B": 40.0},  # +30
+        d[3]: {"A": -100.0, "B": 0.0},  # −100: the streak ends
+    }
+    groups = [{"members": [{"code": "A"}, {"code": "B"}]}, {"members": [{"code": "X"}]}]
+    g, none = inst_streak(groups, by_day, d)
+    assert g["inst_streak"] == {"days": 3, "side": "buy"} and none["inst_streak"] is None
+    sold = inst_streak([{"members": [{"code": "A"}]}], {d[0]: {"A": -1.0}, d[1]: {"A": -2.0}, d[2]: {"A": 3.0}}, d)[0]
+    assert sold["inst_streak"] == {"days": 2, "side": "sell"}
+    assert inst_streak(groups, by_day, d[:1])[0]["inst_streak"] is None  # one day is not a streak
+    assert inst_streak(groups, by_day, [])[0]["inst_streak"] is None  # the shown day has no 法人 yet

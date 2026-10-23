@@ -47,6 +47,9 @@ test('cardHtml: kind, closest grouping, members (outside one marked), facts and 
   assert.match(cardHtml({ ...G, inst_net: -4.5e6 }, 2), /法人 −4,500 張/);
   const inst = cardHtml({ ...G, inst: { lots: 12345, amount_100m: -3.456, buyers: 1, sellers: 2 } }, 2);
   assert.match(inst, /法人 <b class="up">\+1\.2 萬張<\/b>（≈ −3\.5 億）.*買超 1／賣超 2 檔/);
+  assert.match(cardHtml({ ...G, inst_streak: { days: 4, side: 'buy' } }, 2), /<b class="up"[^>]*>法人連買 4 天<\/b>/);
+  assert.match(cardHtml({ ...G, inst_streak: { days: 2, side: 'sell' } }, 2), /法人連賣 2 天/);
+  assert.doesNotMatch(cardHtml(G, 2), /法人連/);
   const per = cardHtml({ ...G, members: G.members.map((m, k) => ({ ...m, inst_net: k ? -2_345_678 : 1_000_400 })) }, 2);
   assert.match(per, /title="[^"]*法人 \+1,000 張/);
   assert.match(per, /title="[^"]*法人 −2,346 張/);

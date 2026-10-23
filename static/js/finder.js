@@ -97,6 +97,7 @@ export function cardHtml(g, i) {
     g.start_spread != null ? `起漲差 ${g.start_spread} 分` : '',
     g.together_bursts?.length ? `同時爆量 ${g.together_bursts.slice(0, 3).join('、')}` : '',
     instText(g),
+    g.inst_streak ? `<b class="${g.inst_streak.side === 'buy' ? 'up' : 'down'}" title="組合合計三大法人買賣超，連續同方向的天數">法人連${g.inst_streak.side === 'buy' ? '買' : '賣'} ${g.inst_streak.days} 天</b>` : '',
     g.resolution === 5 ? '<span class="muted">5 分 K</span>' : '',
   ]
     .filter(Boolean)

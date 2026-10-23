@@ -517,6 +517,27 @@ def inst_summary(groups: list[dict], inst: Mapping[str, float], rows_by_code: Ma
     return out
 
 
+INST_STREAK_DAYS = 20  # 法人連買／連賣: how many 法人 days back a streak is counted at most
+
+
+def inst_streak(groups: list[dict], by_day: Mapping[date, Mapping[str, float]], days: list[date]) -> list[dict]:
+    """法人連買／連賣: on how many consecutive 法人 days (`days` newest first, the shown day first) the
+    group's summed 三大法人 net kept the same sign. Adds `inst_streak` {days, side: buy|sell} (None
+    under 2 days, or when the shown day has no 法人 yet) to copies of the groups."""
+    out = []
+    for g in groups:
+        codes = [m["code"] for m in g["members"]]
+        side, n = None, 0
+        for d in days:
+            nets = [v for c in codes if (v := by_day.get(d, {}).get(c)) is not None]
+            s = (sum(nets) > 0) - (sum(nets) < 0) if nets else 0
+            if s == 0 or (side is not None and s != side):
+                break
+            side, n = s, n + 1
+        out.append({**g, "inst_streak": {"days": n, "side": "buy" if side > 0 else "sell"} if n >= 2 else None})
+    return out
+
+
 # ---- persistence across days --------------------------------------------------------------------
 
 SAME_GROUP = 0.5  # Jaccard overlap at which two days' groups count as the same combination
