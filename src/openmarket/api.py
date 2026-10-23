@@ -7,6 +7,7 @@ import logging
 import mimetypes
 from dataclasses import asdict
 from datetime import date, datetime, time
+from itertools import takewhile
 from collections.abc import AsyncIterator, Mapping
 from pathlib import Path
 
@@ -711,8 +712,10 @@ def create_app(
             by_code = {r["code"]: r for r in store.day_rows(d)}
             groups = inst_summary(groups, store.inst_net([d]).get(d, {}), by_code)
             # 法人連買／連賣 over the latest 法人 days up to d
-            inst_days = sorted((x for x in store.inst_dates() if x <= d), reverse=True)[:INST_STREAK_DAYS]
-            groups = inst_streak(groups, store.inst_net(inst_days), inst_days if inst_days and inst_days[0] == d else [])
+            # on trading days, stopping at the first one without 法人: a gap must not join two runs
+            have = store.inst_dates()
+            inst_days = list(takewhile(lambda x: x in have, store.trading_dates(up_to=d, limit=INST_STREAK_DAYS)))
+            groups = inst_streak(groups, store.inst_net(inst_days), inst_days)
             return {**res, "groups": finder_news_themes(groups, news)}
 
         if not refresh:

@@ -30,7 +30,7 @@ from itertools import combinations
 from .linkage import align_bars, amplitude_pct, limit_up_price, minutes, pearson, turnover_rate
 from .store import HistoryStore
 
-FINDER_VERSION = 5  # part of the cache key: bump when the search logic changes, so stored results are redone
+FINDER_VERSION = 6  # part of the cache key: bump when the search logic changes, so stored results are redone (5 was used by a reverted experiment)
 PEAK_END = 240  # the intraday high is taken over 09:00–13:00
 OPEN_MINUTES = 2  # a high at 09:00–09:02 is the open, not a signal (unless locked limit-up)
 BUCKETS = 54  # 5-minute buckets 09:00–13:25
@@ -499,14 +499,16 @@ def inst_summary(groups: list[dict], inst: Mapping[str, float], rows_by_code: Ma
         if not nets:
             out.append({**g, "inst": None})
             continue
-        amount = sum(v * (rows_by_code.get(c, {}).get("close") or 0) for c, v in nets.items())
+        closes = {c: rows_by_code.get(c, {}).get("close") for c in nets}
+        # 億元 only when every member with 法人 has a close: a missing one would understate it silently
+        amount = sum(v * closes[c] for c, v in nets.items()) if all(closes.values()) else None
         out.append({
             **g,
             "members": [{**m, "inst_net": inst.get(m["code"])} for m in g["members"]],
             "inst_net": sum(nets.values()),
             "inst": {
                 "lots": round(sum(nets.values()) / 1000),
-                "amount_100m": round(amount / 1e8, 2),
+                "amount_100m": None if amount is None else round(amount / 1e8, 2),
                 "buyers": sum(1 for v in nets.values() if v > 0),
                 "sellers": sum(1 for v in nets.values() if v < 0),
             },

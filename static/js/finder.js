@@ -66,7 +66,8 @@ export function instText(g) {
   if (i) {
     const cls = i.lots > 0 ? 'up' : i.lots < 0 ? 'down' : '';
     const who = `<span class="muted">（買超 ${i.buyers}／賣超 ${i.sellers} 檔）</span>`;
-    return `法人 <b class="${cls}">${sign(i.lots)}${lots(i.lots)}</b>（≈ ${sign(i.amount_100m)}${Math.abs(i.amount_100m).toFixed(1)} 億）${who}`;
+    const amount = i.amount_100m == null ? '' : `（≈ ${sign(i.amount_100m)}${Math.abs(i.amount_100m).toFixed(1)} 億）`;
+    return `法人 <b class="${cls}">${sign(i.lots)}${lots(i.lots)}</b>${amount}${who}`;
   }
   return g.inst_net ? `法人 ${sign(g.inst_net)}${lots(Math.round(g.inst_net / 1000))}` : '';
 }

@@ -345,6 +345,8 @@ def test_inst_summary_in_lots_and_amount():
     assert g["inst_net"] == 1_500_000.0 and g["members"][1]["inst_net"] == -500_000.0
     assert empty["inst"] is None  # 法人 not published for these yet
     assert "inst" not in groups[0]  # copies, the stored result is untouched
+    no_close = inst_summary(groups[:1], inst, {"A": {"close": 100.0}, "B": {}, "C": {"close": 10.0}})[0]
+    assert no_close["inst"]["amount_100m"] is None and no_close["inst"]["lots"] == 1500
 
 
 def test_inst_streak_counts_same_sign_days_of_the_group():
