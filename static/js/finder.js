@@ -274,7 +274,7 @@ const DEFAULTS = {
   groupings: Object.keys(GROUPINGS), pool_sources: Object.keys(SOURCES),
 };
 
-export function mountFinderPanel(container, { onStock }) {
+export function mountFinderPanel(container, { onStock, onResult }) {
   const sec = document.createElement('section');
   sec.id = 'hFinderPanel';
   sec.className = 'panel hN';
@@ -429,6 +429,7 @@ export function mountFinderPanel(container, { onStock }) {
       if (t !== state.ticket) return;
       if (!resp.ok) throw new Error(data.detail || `HTTP ${resp.status}`);
       state.data = data;
+      if (!data.cached) onResult?.(); // a newly computed result (stored now) — let other panels re-read
       sec.querySelector('#hFinderStats').textContent = statsText(data);
       sec.querySelector('#hFinderFunnel').textContent = funnelText(data);
       drawCards();

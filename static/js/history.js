@@ -328,10 +328,12 @@ async function loadFinderDigest() {
     $('#hStatus').before(btn);
   }
   const t = ++digestTicket;
+  const date = st.date;
+  btn.hidden = true; // never leave the previous day's digest up while this one loads (or fails)
   try {
-    const q = (m) => getJson(`/api/history/finder?date=${st.date}&method=${m}&stored_only=1`).catch(() => null);
+    const q = (m) => getJson(`/api/history/finder?date=${date}&method=${m}&stored_only=1`).catch(() => null);
     const [known, fresh] = await Promise.all([q('known'), q('new')]);
-    if (t !== digestTicket) return;
+    if (t !== digestTicket || date !== st.date) return;
     const text = digestText(known, fresh);
     btn.textContent = text;
     btn.hidden = !text;
@@ -717,7 +719,14 @@ export async function showHistory() {
     newsPanel = mountNewsPanel($('#historyView'), { getDate: () => st.date, onPick: pickNewsTheme, onStock: openHistCard });
     newsPanel.load();
     linkPanel = mountLinkagePanel($('#historyView'), { onStock: openHistCard });
-    finderPanel = mountFinderPanel($('#historyView'), { onStock: openHistCard });
+    finderPanel = mountFinderPanel($('#historyView'), {
+      onStock: openHistCard,
+      onResult: () => {
+        // N just stored a result: B's 🔗 and the 💡 digest may change
+        loadFinderMarks();
+        loadFinderDigest();
+      },
+    });
     finderPanel.refresh(st.date);
     setTimeout(() => {
       // once K/N/J have their content, C's real position decides (it loads when scrolled near)
