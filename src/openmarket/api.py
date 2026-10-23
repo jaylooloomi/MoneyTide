@@ -22,7 +22,7 @@ from .config import STATIC_DIR, TAIPEI, USER_AGENT, AppConfig
 from .explain import explain_day
 from .history.linkage import (
     INTRADAY_HIGH_R, INTRADAY_LOW_R, bucket_closes, daily_linkage, fmt_minute, pair_matrix, peak_minute_from_bars, peak_minute_from_ticks,
-    align_bars, amplitude_pct, limit_down_pct, limit_up_pct, minute_bars, turnover_rate, peak_stats, tick_bars, with_close_bar, race_points, returns, top_members, verdict_r, verdict_timing,
+    align_bars, amplitude_pct, limit_down_pct, limit_up_pct, minute_bars, turnover_rate, peak_stats, tick_bars, with_close_bar, race_points, returns, locked_level, top_members, verdict_r, verdict_timing,
 )
 from .history.finder import FinderParams, persistence, run_search
 from .history.finder import news_themes as finder_news_themes  # api.py has its own news_themes route
@@ -517,11 +517,14 @@ def create_app(
                 await asyncio.gather(*(one(m) for m in members))
             benchmarks = await index_race(http, d)
         axis = list(range(0, 55))
+        rows_by_session = {s: {r["code"]: r for r in rs} for s, rs in (await asyncio.to_thread(store.rows, sessions)).items()}
         series = []
         for c in codes:
             r: list = []
             for s in sessions:
-                r.extend(returns(per_code_sessions[c].get(s, {}), axis))
+                closes = per_code_sessions[c].get(s, {})
+                # locked limit-up stretches left out, as in N (a flat locked line says nothing)
+                r.extend(returns(closes, axis, locked_level(closes, rows_by_session.get(s, {}).get(c))))
             series.append(r)
         matrix, r_intraday = pair_matrix(series, min_points=20)
         for m in members:  # 13:30 = the official close (no Yahoo bar covers the closing auction)

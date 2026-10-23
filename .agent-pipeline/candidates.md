@@ -148,3 +148,10 @@
 因為原始需求是**找出同一筆資金怎麼進場（先買哪檔、再帶動哪檔）**，所以頂尖做法會順便做**lead-lag：在幾個位移量上算分時相關，相關最高的位移就是領先時間**；目前的成果**只有部分**——N 只比「日內最高點」的時間差（一個點），沒有用整段分時走勢判斷誰帶頭。
 - 參考：Huth & Abergel：流動性高的股票通常領先、lead-lag 隨時段變化（https://www.arxiv.org/pdf/1111.7103）；OFR Working Paper 2015-15 Lead-Lag Correlations（https://www.financialresearch.gov/working-papers/files/OFRwp-2015-15_Lead-Lag-Correlations.pdf）
 - 預估：finder.py（pair_check 多算位移 −3…+3 根 5 分 K 的相關，取最大）＋describe＋finder.js 一行「領先：A 早 10 分」＋測試；3～4 檔、約 100 行。
+
+# 加分候選（第 13 輪）
+
+## O1 · K 的分時相關也排除鎖漲停的平線（與 N 一致）
+因為原始需求是**用分時相關判斷是否共同注資（你也同意「漲停會破壞分時相關」）**，所以頂尖做法會順便做**計算相關前處理漲跌停限制造成的失真**；目前的成果**只有部分**——N 的分時相關已排除鎖漲停的平線，但 K 的分時相關矩陣沒有，同一對股票在 K、N 可能得到不同的 R，最強的漲停股在 K 反而看起來「不連動」。
+- 參考：台灣股市研究「limit observations distort the true relationship among stock returns … price-limit effect has a stronger impact on the correlation than the trading volume」（https://ah.lib.nccu.edu.tw/bitstream/140.119/73973/1/S0927538X98000110.pdf）；Kim & Rhee (1997) 價格限制的延遲價格發現（https://www.bayes.citystgeorges.ac.uk/__data/assets/pdf_file/0007/29077/Price_Limits.pdf）
+- 預估：linkage.py returns() 或 api.py linkage_payload（每個交易日依當日漲停價把兩端都在漲停的 5 分 K 報酬設為空）＋測試；2～3 檔、約 40 行。

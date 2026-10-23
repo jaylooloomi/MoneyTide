@@ -60,6 +60,22 @@ def test_buckets_and_returns_stay_within_a_session():
     assert r[0] == pytest.approx((102 / 101 - 1) * 100) and r[2] is None
 
 
+def test_returns_skip_a_locked_limit_up_line():
+    from openmarket.history.linkage import locked_level
+
+    closes = {0: 100.0, 1: 105.0, 2: 110.0, 3: 110.0, 4: 110.0}
+    row = {"prev_close": 100.0, "high": 110.0}  # limit-up 110: locked from bucket 2
+    lvl = locked_level(closes, row)
+    assert lvl == 110.0
+    r = returns(closes, [0, 1, 2, 3, 4], lvl)
+    assert r[1] == pytest.approx((110 / 105 - 1) * 100) and r[2] is None and r[3] is None
+    # Yahoo back-adjusted scale: the top close still marks the lock
+    scaled = {k: v * 0.97 for k, v in closes.items()}
+    assert returns(scaled, [0, 1, 2, 3, 4], locked_level(scaled, row))[2] is None
+    assert locked_level(closes, {"prev_close": 100.0, "high": 106.0}) is None  # never reached limit-up
+    assert locked_level(closes, None) is None and returns(closes, [0, 1, 2, 3, 4])[2] == 0
+
+
 def test_yahoo_parse_and_symbol():
     days = parse_chart(json.loads((FIX / "yahoo_5m_2330_TW.json").read_text()))
     last = days[max(days)]
