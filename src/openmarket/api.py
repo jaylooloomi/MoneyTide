@@ -718,6 +718,14 @@ def create_app(
             have = store.inst_dates()
             inst_days = list(takewhile(lambda x: x in have, store.trading_dates(up_to=d, limit=INST_STREAK_DAYS)))
             groups = inst_streak(groups, store.inst_net(inst_days), inst_days)
+            # 外資／投信／自營 summed over the members, in 張 (their motives differ: 投信 themes, 外資 weights)
+            split = store.inst_split(d)
+
+            def by_kind(g: dict) -> dict | None:
+                rows = [split[m["code"]] for m in g["members"] if m["code"] in split]
+                return {k: round(sum(r[i] for r in rows) / 1000) for i, k in enumerate(("foreign", "trust", "dealer"))} if rows else None
+
+            groups = [{**g, "inst_split": by_kind(g)} for g in groups]
             return {**res, "groups": finder_news_themes(groups, news)}
 
         if not refresh:

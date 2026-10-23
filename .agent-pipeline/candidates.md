@@ -210,3 +210,10 @@
 因為原始需求是 **資金動機的判斷要可信**，所以頂尖做法會順便做 **回應組裝路徑的整合測試**；目前的成果 **只有部分**：inst_summary／inst_streak 有單元測試，但 api with_history 把它們串起來的地方沒有（bonus-20 的審查就是在這層抓到「缺日被接成連續」）。
 - 參考：Google Testing Blog「Test Sizes」(medium tests)；Martin Fowler「Practical Test Pyramid」。
 - 預估：tests/test_finder.py 加一個用 tmp store 的端點測試（存一個 finder 結果＋三天法人、中間缺一天 → 連買只算到缺日前），約 40 行、1 檔。
+
+## 第 18 輪調研
+
+## T1 · N 卡片法人拆成「外資／投信／自營」
+因為原始需求是 **尋找資金＝背後的動機**，所以頂尖做法會順便做 **把法人拆成外資、投信、自營商**（三者動機不同：投信常是作帳／主題佈局，外資看大盤權值，自營多短線避險）；目前的成果 **只有部分**：卡片只有三大法人合計。資料其實已入庫（inst_daily 的 foreign_net／trust_net／dealer_net 欄位，10/22 華經：外資 +1,991 張、投信 0、自營 +19 張），只是沒讀出來。
+- 參考：TWSE T86「三大法人買賣超日報」分欄；CMoney「投信連買」「外資連買」選股；Goodinfo! 法人買賣超（外資／投信／自營分欄）。
+- 預估：store 加 inst_split(day)（讀既有欄位，不改表）；finder.py 加 inst_split_summary（組合合計三欄，張）；api with_history 附上；finder.js 在法人那格的 tooltip／下一行顯示「外資 +2,000／投信 0／自營 +19 張」；測試。5 檔、約 60 行。

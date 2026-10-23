@@ -429,6 +429,14 @@ class HistoryStore:
                 out[date.fromisoformat(d)][code] = net or 0.0
         return out
 
+    def inst_split(self, day: date) -> dict[str, tuple[float, float, float]]:
+        """{code: (外資, 投信, 自營) net shares} for one day."""
+        with self._conn() as c:
+            return {
+                code: (f or 0.0, t or 0.0, d or 0.0)
+                for code, f, t, d in c.execute("SELECT code, foreign_net, trust_net, dealer_net FROM inst_daily WHERE date = ?", (day.isoformat(),))
+            }
+
     def inst_version(self, day: date | None = None) -> int:
         return self._inst_version if day is None else self._inst_day_version.get(day, 0)
 

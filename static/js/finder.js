@@ -80,6 +80,15 @@ export function instShareText(g) {
   return `<span title="法人淨${amt >= 0 ? '買' : '賣'}超金額 ÷ 組合成交值：越高越像法人在推，越低代表主要是法人以外的資金">法人占成交 <b>${pct < 0.1 ? '<0.1' : pct.toFixed(1)}%</b></span>`;
 }
 
+/** 外資／投信／自營 of the group in 張 (g.inst_split, attached when served). */
+export function instSplitText(g) {
+  const s = g.inst_split;
+  if (!s) return '';
+  const n = (v) => `${v > 0 ? '+' : v < 0 ? '−' : ''}${Math.abs(v).toLocaleString()}`;
+  const part = (label, v) => `${label} <b class="${v > 0 ? 'up' : v < 0 ? 'down' : ''}">${n(v)}</b>`;
+  return `<span class="muted" title="三大法人拆開看：投信常是主題／作帳佈局，外資偏權值與大盤，自營多短線避險">（${part('外資', s.foreign)}／${part('投信', s.trust)}／${part('自營', s.dealer)} 張）</span>`;
+}
+
 export function cardHtml(g, i) {
   const title =
     g.sources?.length
@@ -107,6 +116,7 @@ export function cardHtml(g, i) {
     g.together_bursts?.length ? `同時爆量 ${g.together_bursts.slice(0, 3).join('、')}` : '',
     instText(g),
     instShareText(g),
+    instSplitText(g),
     g.inst_streak ? `<b class="${g.inst_streak.side === 'buy' ? 'up' : 'down'}" title="組合合計三大法人買賣超，連續同方向的天數">法人連${g.inst_streak.side === 'buy' ? '買' : '賣'} ${g.inst_streak.days} 天</b>` : '',
     g.resolution === 5 ? '<span class="muted">5 分 K</span>' : '',
   ]

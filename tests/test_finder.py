@@ -397,3 +397,29 @@ def test_finder_api_attaches_inst_and_stops_the_streak_at_a_day_without_inst(tmp
     assert [m["inst_net"] for m in g["members"]] == [2_000_000, -500_000]
     assert g["inst_streak"] == {"days": 2, "side": "buy"}  # 3/5 and 3/4 only: 3/3 has no 法人, so 3/2 does not count
     assert s.finder(days[3], "known", key)["groups"][0].get("inst") is None  # attached when served, never stored
+
+
+def test_finder_api_splits_inst_into_foreign_trust_dealer(tmp_path):
+    from datetime import datetime
+
+    from fastapi.testclient import TestClient
+
+    from openmarket.api import create_app
+    from openmarket.config import AppConfig
+    from openmarket.history.store import HistoryStore
+    from openmarket.sources.institutional import InstRow
+
+    s = HistoryStore(tmp_path / "h.sqlite")
+    d = date(2026, 3, 2)
+    row = lambda c: {"code": c, "name": c.lower(), "market": "上市", "industry": "X", "kind": "stock", "close": 10.0, "prev_close": 10.0, "change": 0, "change_pct": 0}  # noqa: E731
+    s.save_day(d, [row("A"), row("B"), row("C")], datetime(2026, 3, 2, 15))
+    s.save_inst_day(d, [InstRow("A", 1_500_000, -200_000, 10_000, 1_310_000), InstRow("B", 500_400, 0, -30_000, 470_400)], datetime(2026, 3, 2, 17))
+    assert s.inst_split(d)["A"] == (1_500_000, -200_000, 10_000)
+    key = FinderParams(groupings=("industry",)).key() + "|industry"
+    members = lambda *cs: [{"code": c, "name": c.lower()} for c in cs]  # noqa: E731
+    s.save_finder(d, "known", key, {"date": d.isoformat(), "method": "known", "groups": [{"members": members("A", "B")}, {"members": members("C")}], "stats": {}})
+    app = create_app(AppConfig(data_dir=tmp_path), start_polling=False, start_history=False, start_concepts=False, history_store=s)
+    with TestClient(app, base_url="http://127.0.0.1") as client:
+        ab, c = client.get("/api/history/finder", params={"date": d.isoformat(), "method": "known", "stored_only": 1, "groupings": "industry"}).json()["groups"]
+    assert ab["inst_split"] == {"foreign": 2000, "trust": -200, "dealer": -20}
+    assert c["inst_split"] is None  # no 法人 rows for C
