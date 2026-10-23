@@ -19,6 +19,12 @@ from pydantic import BaseModel
 from .ai import AIConfig
 from .config import STATIC_DIR, TAIPEI, USER_AGENT, AppConfig
 from .explain import explain_day
+from .history.linkage import (
+    INTRADAY_HIGH_R, INTRADAY_LOW_R, bucket_closes, daily_linkage, fmt_minute, pair_matrix, peak_minute_from_bars, peak_minute_from_ticks,
+    peak_stats, returns, top_members, verdict_r, verdict_timing,
+)
+from .intraday import IntradayRecorder
+from .sources.yahoo_intraday import fetch_bars
 from .news_themes import NewsThemeCollector, heat_bursts, themes_for_day, themes_mapping
 from .concepts import ConceptLoader
 from .groups import GroupStore
@@ -161,6 +167,8 @@ def create_app(
                 fetch_ptt=lambda since: fetch_titles_since(ptt_client, since, asyncio.sleep),
             )
             tasks.append(asyncio.create_task(app.state.news.run()))
+            app.state.recorder = IntradayRecorder(store=app.state.history, get_poller=lambda: app.state.poller)
+            tasks.append(asyncio.create_task(app.state.recorder.run()))
         if start_concepts and app.state.concepts is None:
             if client is None:
                 client = make_client()
@@ -402,6 +410,94 @@ def create_app(
         for t in out:
             t["burst"] = t["name"] in hot or any(a in hot for a in t["aliases"])
         return {"date": day, "news_date": used.isoformat() if used else None, "method": method, "themes": out, "bursts": bursts}
+
+    # ---- linkage: does the group move together? (spec 2026-10-23-linkage-design.md) ---------------
+
+    YAHOO_REFRESH_HOURS = 6
+
+    async def bars_for(http: httpx.AsyncClient, code: str, market: str, sessions: list[date]) -> tuple[dict, str]:
+        store = app.state.history
+        have = store.yahoo_bars(code, sessions)
+        missing = [s for s in sessions if s not in have]
+        fetched = store.yahoo_fetched_at(code)
+        fresh = fetched and (datetime.now(fetched.tzinfo) - fetched).total_seconds() < YAHOO_REFRESH_HOURS * 3600
+        if missing and not fresh:
+            try:
+                by_day = await fetch_bars(http, code, market)
+                store.save_yahoo_bars(code, by_day, datetime.now(TAIPEI))
+                have = store.yahoo_bars(code, sessions)
+            except Exception as exc:  # Yahoo is unofficial: degrade, never fail the panel
+                return have, f"Yahoo 失敗：{type(exc).__name__}"
+        return have, ""
+
+    @app.get("/api/history/linkage")
+    async def linkage(group: str, day: str = Query(..., alias="date"), grouping: str = "industry") -> dict:
+        try:
+            d = date.fromisoformat(day)
+        except ValueError as exc:
+            raise HTTPException(422, f"invalid date {day!r}") from exc
+        store = app.state.history
+        g = get_grouping(f"news@{d.isoformat()}" if grouping == "news" else grouping)
+        if g is None:
+            raise HTTPException(422, f"grouping {grouping!r} is not available")
+        rows = store.day_rows(d)
+        if not rows:
+            raise HTTPException(404, f"no data for {day}")
+        members = top_members(rows, g, group)
+        if len(members) < 2:
+            raise HTTPException(404, "這個族群少於 2 檔普通股，無法計算連動性")
+        codes = [m["code"] for m in members]
+        daily = await asyncio.to_thread(daily_linkage, store, d, codes)
+        recorded = store.tick_dates()
+        sessions = sorted(store.trading_dates(up_to=d, limit=3))
+        notes = []
+        per_code_sessions: dict[str, dict[date, dict]] = {c: {} for c in codes}
+        peaks: dict[str, int | None] = {c: None for c in codes}
+        sources = {}
+        async with httpx.AsyncClient(timeout=20, headers={"User-Agent": USER_AGENT}, follow_redirects=True) as http:
+            for s in sessions:
+                if s in recorded:
+                    ticks = await asyncio.to_thread(store.ticks, s, set(codes))
+                    sources[s] = "recorded"
+                    for c in codes:
+                        per_code_sessions[c][s] = bucket_closes(ticks[c])
+                        if s == d:
+                            peaks[c] = peak_minute_from_ticks(ticks[c])
+            yahoo_sessions = [s for s in sessions if s not in recorded]
+            if yahoo_sessions:
+                for m in members:
+                    bars, err = await bars_for(http, m["code"], m["market"], yahoo_sessions)
+                    if err and err not in notes:
+                        notes.append(err)
+                    for s in yahoo_sessions:
+                        b = bars.get(s, [])
+                        if b:
+                            sources.setdefault(s, "yahoo")
+                        per_code_sessions[m["code"]][s] = {int(x[0][:2]) * 12 + int(x[0][3:5]) // 5 - 108: x[3] for x in b}
+                        if s == d:
+                            peaks[m["code"]] = peak_minute_from_bars(b)
+        axis = list(range(0, 55))
+        series = []
+        for c in codes:
+            r: list = []
+            for s in sessions:
+                r.extend(returns(per_code_sessions[c].get(s, {}), axis))
+            series.append(r)
+        matrix, r_intraday = pair_matrix(series, min_points=20)
+        peak_list = [peaks[c] for c in codes]
+        std, lag = peak_stats(peak_list)
+        return {
+            "date": day,
+            "group": group,
+            "members": [{"code": m["code"], "name": m["name"], "market_cap": m["market_cap"], "change_pct": m["change_pct"]} for m in members],
+            "daily": daily,
+            "intraday": {"sessions": [{"date": s.isoformat(), "source": sources.get(s, "none")} for s in sessions], "r": r_intraday, "matrix": matrix},
+            "peaks": [{"code": c, "time": fmt_minute(p)} for c, p in zip(codes, peak_list)],
+            "peak_std_min": std,
+            "leader_lag_min": lag,
+            "verdict": {"daily": verdict_r(daily.get("r20")), "intraday": verdict_r(r_intraday, INTRADAY_HIGH_R, INTRADAY_LOW_R), "timing": verdict_timing(std)},
+            "notes": notes,
+        }
 
     @app.get("/api/counties/status")
     def counties_status() -> dict:

@@ -46,6 +46,19 @@ CREATE TABLE IF NOT EXISTS inst_day (
     rows INTEGER NOT NULL DEFAULT 0,
     fetched_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS intraday_tick (
+    date TEXT NOT NULL,
+    ts TEXT NOT NULL,
+    data BLOB NOT NULL,
+    PRIMARY KEY (date, ts)
+);
+CREATE TABLE IF NOT EXISTS yahoo_5m (
+    code TEXT NOT NULL,
+    date TEXT NOT NULL,
+    bars TEXT NOT NULL,
+    fetched_at TEXT NOT NULL,
+    PRIMARY KEY (code, date)
+);
 CREATE TABLE IF NOT EXISTS ptt_day (
     date TEXT PRIMARY KEY,
     titles TEXT NOT NULL,
@@ -89,7 +102,8 @@ class HistoryStore:
         # results derived from immutable past days (e.g. per-day group averages); cleared on writes
         self.derived_cache: dict = {}
         self._news_version = 0  # bumped on news writes; part of the hot-themes cache key
-        self._inst_version = 0  # bumped on institutional writes; part of the money-flow cache key
+        self._inst_version = 0  # bumped on institutional writes
+        self._inst_day_version: dict[date, int] = {}  # per day: only that day's money-flow cache goes stale
         path.parent.mkdir(parents=True, exist_ok=True)
         with self._conn() as c:
             c.executescript(SCHEMA)
@@ -381,6 +395,7 @@ class HistoryStore:
                 (day.isoformat(), len(rows or []), fetched_at.isoformat()),
             )
         self._inst_version += 1
+        self._inst_day_version[day] = self._inst_day_version.get(day, 0) + 1
 
     def inst_dates(self) -> set[date]:
         with self._conn() as c:
@@ -399,8 +414,8 @@ class HistoryStore:
                 out[date.fromisoformat(d)][code] = net or 0.0
         return out
 
-    def inst_version(self) -> int:
-        return self._inst_version
+    def inst_version(self, day: date | None = None) -> int:
+        return self._inst_version if day is None else self._inst_day_version.get(day, 0)
 
 
     # ---- PTT 股版 titles per day (heat bursts) ------------------------------------------------
@@ -434,3 +449,62 @@ class HistoryStore:
         with self._conn() as c:
             row = c.execute("SELECT titles FROM ptt_day WHERE date = ?", (day.isoformat(),)).fetchone()
         return json.loads(row["titles"]) if row else []
+
+
+    # ---- intraday: the app's own recorded polls (zlib JSON {code: price}) and Yahoo 5-minute bars --
+
+    def save_tick(self, day: date, ts: str, prices: dict[str, float], keep_days: int = 20) -> None:
+        import json
+        import zlib
+
+        blob = zlib.compress(json.dumps(prices, separators=(",", ":")).encode("utf-8"))
+        with self._lock, self._conn() as c:
+            c.execute("INSERT OR REPLACE INTO intraday_tick (date, ts, data) VALUES (?, ?, ?)", (day.isoformat(), ts, blob))
+            old = [r["date"] for r in c.execute("SELECT DISTINCT date FROM intraday_tick ORDER BY date DESC LIMIT -1 OFFSET ?", (keep_days,))]
+            if old:
+                c.executemany("DELETE FROM intraday_tick WHERE date = ?", [(d,) for d in old])
+
+    def tick_dates(self) -> set[date]:
+        with self._conn() as c:
+            return {date.fromisoformat(r["date"]) for r in c.execute("SELECT DISTINCT date FROM intraday_tick")}
+
+    def ticks(self, day: date, codes: set[str]) -> dict[str, list[tuple[str, float]]]:
+        """{code: [(HH:MM:SS, price)]} for `codes`, in time order."""
+        import json
+        import zlib
+
+        out: dict[str, list[tuple[str, float]]] = {c: [] for c in codes}
+        with self._conn() as c:
+            for r in c.execute("SELECT ts, data FROM intraday_tick WHERE date = ? ORDER BY ts", (day.isoformat(),)):
+                prices = json.loads(zlib.decompress(r["data"]))
+                for code in codes:
+                    p = prices.get(code)
+                    if p is not None:
+                        out[code].append((r["ts"], p))
+        return out
+
+    def save_yahoo_bars(self, code: str, by_day: dict[date, list], fetched_at: datetime) -> None:
+        import json
+
+        with self._lock, self._conn() as c:
+            c.executemany(
+                "INSERT OR REPLACE INTO yahoo_5m (code, date, bars, fetched_at) VALUES (?, ?, ?, ?)",
+                [(code, d.isoformat(), json.dumps(b), fetched_at.isoformat()) for d, b in by_day.items()],
+            )
+
+    def yahoo_bars(self, code: str, days: list[date]) -> dict[date, list]:
+        import json
+
+        if not days:
+            return {}
+        marks = ", ".join("?" for _ in days)
+        with self._conn() as c:
+            return {
+                date.fromisoformat(r["date"]): [tuple(x) for x in json.loads(r["bars"])]
+                for r in c.execute(f"SELECT date, bars FROM yahoo_5m WHERE code = ? AND date IN ({marks})", [code, *[d.isoformat() for d in days]])
+            }
+
+    def yahoo_fetched_at(self, code: str) -> datetime | None:
+        with self._conn() as c:
+            row = c.execute("SELECT MAX(fetched_at) AS f FROM yahoo_5m WHERE code = ?", (code,)).fetchone()
+        return datetime.fromisoformat(row["f"]) if row and row["f"] else None

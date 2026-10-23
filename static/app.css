@@ -154,11 +154,11 @@ button { font: inherit; color: inherit; cursor: pointer; }
   display: grid; gap: 8px;
   grid-template-columns: minmax(0, var(--ha-fr, 3fr)) minmax(320px, var(--hb-fr, 2fr)); /* A/B width: draggable */
   /* max-content: auto rows collapse to ~0 inside this fixed-height scroll container */
-  grid-template-rows: var(--hab-h, 480px) max-content max-content max-content; /* A/B height: draggable */
+  grid-template-rows: var(--hab-h, 480px) max-content max-content max-content max-content; /* A/B height: draggable */
   grid-auto-rows: max-content;
-  grid-template-areas: "a b" "j j" "c c" "d d";
+  grid-template-areas: "a b" "j j" "k k" "c c" "d d";
 }
-.hA { grid-area: a; } .hB { grid-area: b; } .hC { grid-area: c; } .hD { grid-area: d; } .hJ { grid-area: j; }
+.hA { grid-area: a; } .hB { grid-area: b; } .hC { grid-area: c; } .hD { grid-area: d; } .hJ { grid-area: j; } .hK { grid-area: k; }
 /* A and B stay pinned while the panels below scroll under them; the shadow hides the grid gap */
 .hA, .hB { position: sticky; top: 0; z-index: 5; box-shadow: 0 0 0 8px var(--bg); }
 .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; display: flex; flex-direction: column; min-height: 0; min-width: 0; }
@@ -181,7 +181,7 @@ table.rot td.sel { outline: 1px solid #fff; }
 .tag { padding: 2px 7px; border-radius: 3px; color: #fff; font-size: 12px; text-decoration: none; white-space: nowrap; }
 .tag small { opacity: .85; margin-left: 4px; }
 @media (max-width: 1100px) {
-  .hist { grid-template-columns: 1fr; grid-template-rows: var(--hab-h, 420px) var(--hab-h, 420px) max-content max-content max-content; grid-template-areas: "a" "b" "j" "c" "d"; }
+  .hist { grid-template-columns: 1fr; grid-template-rows: var(--hab-h, 420px) var(--hab-h, 420px) max-content max-content max-content max-content; grid-template-areas: "a" "b" "j" "k" "c" "d"; }
   .hA, .hB { position: relative; box-shadow: none; } /* stacked, pinning both would fill the screen */
   .panel-resizer-v { display: none; }
 }
@@ -267,3 +267,16 @@ body.resizing-cols { cursor: ew-resize; user-select: none; }
 .clip { display: inline-block; max-width: 12em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom; }
 
 .burst-tag { display: inline-block; margin-left: 4px; padding: 0 5px; border-radius: 3px; background: #b8501a; color: #fff; font-size: 11px; font-weight: 600; }
+
+/* K · 族群連動性 */
+.link-summary { display: flex; flex-wrap: wrap; gap: 6px 22px; margin-bottom: 8px; }
+.link-badge { display: inline-block; padding: 0 6px; border-radius: 3px; color: #fff; font-size: 11px; }
+.link-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(330px, 1fr)); gap: 12px; align-items: start; }
+table.link-matrix td, table.link-matrix th { padding: 2px 4px; font-size: 11px; text-align: center; }
+.tl { font-size: 12px; }
+.tl-axis { display: flex; justify-content: space-between; margin: 2px 52px 4px 84px; color: var(--muted); font-size: 10px; }
+.tl-row { display: flex; align-items: center; gap: 6px; height: 20px; }
+.tl-name { width: 78px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
+.tl-track { position: relative; flex: 1; height: 2px; background: #3a3e48; }
+.tl-dot { position: absolute; top: -5px; width: 12px; height: 12px; margin-left: -6px; border-radius: 50%; border: 1px solid #0f1115; }
+.tl-time { width: 46px; color: var(--muted); font-variant-numeric: tabular-nums; }

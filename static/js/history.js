@@ -21,6 +21,7 @@ import { mountIndexPanel } from './indexchart.js';
 import { mountCountyMap } from './countymap.js';
 import { mountHistoryAiPanel } from './ainews.js';
 import { mountNewsPanel } from './newsthemes.js';
+import { mountLinkagePanel } from './linkage.js';
 
 const PREFS_KEY = 'openmarket.history.v1';
 const $ = (sel) => document.querySelector(sel);
@@ -51,6 +52,7 @@ let daysTimer = null;
 let indexPanel = null; // G: TAIEX + TPEx timeline (indexchart.js)
 let aiPanel = null; // I: AI news explanations (ainews.js)
 let newsPanel = null; // J: news-driven hot groups (newsthemes.js)
+let linkPanel = null; // K: group linkage (linkage.js)
 const countyPanel = { ctl: null, ticket: 0, cache: new Map() }; // H: county money map (countymap.js)
 
 function loadPrefs() {
@@ -152,6 +154,7 @@ async function selectDate(date) {
   indexPanel?.mark(st.date); // G
   aiPanel?.load(); // I: cached explanations for the day
   newsPanel?.load(); // J: that day's hot groups
+  linkPanel?.refresh(st.date, st.grouping); // K follows the day
 }
 
 // ---- A: day heatmap ---------------------------------------------------------
@@ -447,6 +450,7 @@ function bind() {
     st.zoom = null;
     idx.picked = []; // E: names picked under another grouping would not exist here
     members.group = null; // bonus-15: the picked group may not exist in the new grouping
+    linkPanel?.hide();
     savePrefs();
     reloadGrouped();
   });
@@ -581,6 +585,7 @@ export async function showHistory() {
     aiPanel.load();
     newsPanel = mountNewsPanel($('#historyView'), { getDate: () => st.date, onPick: pickNewsTheme, onStock: openHistCard });
     newsPanel.load();
+    linkPanel = mountLinkagePanel($('#historyView'), { onStock: openHistCard });
     return;
   }
   chart.resize();
@@ -1145,6 +1150,7 @@ document.addEventListener('click', (e) => {
   if (!tr || e.target.closest('a.leader')) return;
   members.group = tr.dataset.group;
   renderMembers();
+  linkPanel?.show(members.group, st.date, st.grouping); // K: linkage of the picked group
 }, true); // capture: the B handler re-renders the rows, detaching the clicked one
 
 
@@ -1427,7 +1433,7 @@ const IGNITE_Z = 2;
 const flowState = { ticket: 0, igniteOnly: false };
 
 function flowCells(g) {
-  if (g.z20 === undefined) return '<td class="muted">…</td>'.repeat(4);
+  if (g.z20 === undefined) return '<td class="muted">…</td>'.repeat(5);
   const z = g.z20 === null ? '<td class="muted">—</td>' : `<td class="c" style="background:${colorFor(g.z20, 3)}" title="5 日 Z ${g.z5 === null ? '—' : g.z5.toFixed(1)}，比重 ${g.share.toFixed(2)}%">${g.z20.toFixed(1)}</td>`;
   const mf = g.mf === null ? '<td class="muted">—</td>' : `<td class="c" style="background:${colorFor(g.mf, 60)}">${g.mf.toFixed(0)}</td>`;
   const tr = g.turnover_rate === null ? '<td class="muted">—</td>' : `<td>${g.turnover_rate.toFixed(2)}%</td>`;
@@ -1435,7 +1441,10 @@ function flowCells(g) {
     g.inst_net === null
       ? '<td class="muted" title="這天還沒有法人資料（盤後公布，或背景回補中）">—</td>'
       : `<td class="c" style="background:${colorFor(g.inst_ratio, 0.3)}" title="佔族群市值 ${g.inst_ratio === null ? '—' : g.inst_ratio.toFixed(3) + '%'}">${(g.inst_net / 1e8).toFixed(1)}</td>`;
-  return z + mf + tr + inst;
+  const r = g.r20 === null || g.r20 === undefined
+    ? '<td class="muted">—</td>'
+    : `<td class="c" style="background:${colorFor((g.r20 - 0.3) * 100, 50)}" title="${g.r20 > 0.7 ? '群體圍攻' : g.r20 < 0.3 ? '單兵作戰' : '中度連動'}">${g.r20.toFixed(2)}</td>`;
+  return z + mf + tr + inst + r;
 }
 
 async function loadFlows() {
@@ -1451,7 +1460,7 @@ async function loadFlows() {
   const by = data.groups || {};
   for (const g of st.groups) {
     const f = by[g.name];
-    Object.assign(g, f ? { ...f } : { share: null, z5: null, z20: null, mf: null, turnover_rate: null, inst_net: null, inst_ratio: null });
+    Object.assign(g, f ? { ...f } : { share: null, z5: null, z20: null, mf: null, turnover_rate: null, inst_net: null, inst_ratio: null, r20: null });
   }
   renderGroups();
 }

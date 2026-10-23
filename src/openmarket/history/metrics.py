@@ -420,9 +420,9 @@ def flow_day(rows: list[dict], grouping: Grouping, inst: dict[str, float]) -> di
 
 def daily_group_flows(store: HistoryStore, dates: list[date], grouping: Grouping) -> list[dict]:
     key = getattr(grouping, "cache_key", None)
-    version = store.inst_version()
     cache = store.derived_cache
-    hits = {d: cache.get(("flows", key, d, version)) for d in dates} if key is not None else {}
+    # per-day institutional version: backfilling one day must not invalidate every other day
+    hits = {d: cache.get(("flows", key, d, store.inst_version(d))) for d in dates} if key is not None else {}
     missing = [d for d in dates if hits.get(d) is None]
     rows = store.rows(missing) if missing else {}
     inst = store.inst_net(missing) if missing else {}
@@ -432,7 +432,7 @@ def daily_group_flows(store: HistoryStore, dates: list[date], grouping: Grouping
         if day is None:
             day = flow_day(rows[d], grouping, inst.get(d, {}))
             if key is not None:
-                cache[("flows", key, d, version)] = day
+                cache[("flows", key, d, store.inst_version(d))] = day
         out.append(day)
     return out
 

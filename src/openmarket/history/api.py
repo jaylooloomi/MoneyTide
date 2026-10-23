@@ -8,6 +8,7 @@ from fastapi import APIRouter, HTTPException, Query
 from ..config import TAIPEI
 
 from .ingest import INDEX_MARKETS, HistoryCollector, index_window
+from .linkage import group_r20
 from .metrics import METRICS, Grouping, day_stocks, flow_baseline, group_flows, group_stats, industry_grouping, movers, rotation, stock_history, group_index, group_periods, group_rank_change
 from .store import HistoryStore
 
@@ -128,7 +129,12 @@ def create_history_router(
     @r.get("/flows")
     def flows(day: str = Query(..., alias="date"), grouping: str = "industry") -> dict:
         d = _date(day)
-        return {"date": day, "groups": group_flows(get_store(), d, grouping_of(grouping, d))}
+        g = grouping_of(grouping, d)
+        out = group_flows(get_store(), d, g)
+        r20 = group_r20(get_store(), d, g)  # linkage: mean pairwise 20-day R of the top members
+        for name, v in out.items():
+            v["r20"] = r20.get(name)
+        return {"date": day, "groups": out}
 
     @r.get("/flow-baseline")
     def baseline(grouping: str = "industry") -> dict:
