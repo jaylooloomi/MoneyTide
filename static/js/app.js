@@ -324,7 +324,7 @@ function renderNote() {
   const t = state.tree;
   const notes = [];
   if (t) {
-    if (t.hiddenNoSize) notes.push(`${t.hiddenNoSize} 檔${state.view.sizeBy === 'cap' ? '缺市值' : '無成交值'}未顯示`);
+    if (t.hiddenNoSize) notes.push(`${t.hiddenNoSize} 檔${state.view.sizeBy === 'cap' || state.view.sizeBy === 'capped' ? '缺市值' : '無成交值'}未顯示`);
     if (t.hiddenEtf) notes.push(`市值模式不顯示 ETF（${t.hiddenEtf} 檔，無股本資料），可切換「成交值」`);
   }
   const snap = state.snapshot;

@@ -377,3 +377,22 @@ test('strength ratios: official industries count common stocks only, codes once'
   const plain = buildTreemapData(members, { sizeBy: 'cap', colorBy: 'today' });
   assert.match(upperLabelFormatter({ data: plain.data[0] }), /%$/);
 });
+
+test('capped market cap: no stock above 15% of its group', async () => {
+  const { capShares, buildTreemapData } = await import('../../static/js/transform.js');
+  const v = capShares([1000, 10, 10, 10, 10, 10, 10, 10, 10, 10]);
+  const total = v.reduce((a, x) => a + x, 0);
+  assert.ok(Math.max(...v) <= total * 0.15 + 1e-6);
+  assert.equal(v[1], 10); // small ones untouched
+  const w = capShares([1000, 50, 10, 10, 10, 10, 10, 10, 10, 10]);
+  const wt = w.reduce((a, x) => a + x, 0);
+  assert.ok(Math.max(...w) <= wt * 0.15 + 1e-6); // the second-largest is capped too once the total shrinks
+  assert.ok(v[0] > v[1]); // the giant is still the largest
+  assert.deepEqual(capShares([5, 1, 1]), [1, 1, 1]); // 3 × 15% < 100%: equal
+  assert.deepEqual(capShares([]), []);
+  const s = (code, market_cap) => ({ code, name: code, industry: 'G', kind: 'stock', market_cap, change_pct: 0 });
+  const stocks = [s('big', 1e6), ...Array.from({ length: 9 }, (_, i) => s(`s${i}`, 10))];
+  const kids = buildTreemapData(stocks, { sizeBy: 'capped', colorBy: 'today' }).data[0].children;
+  const sum = kids.reduce((a, c) => a + c.value, 0);
+  assert.ok(kids[0].value <= sum * 0.15 + 1e-6);
+});

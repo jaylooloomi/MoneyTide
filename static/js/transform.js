@@ -187,6 +187,7 @@ export function watchRows(stocks, codes) {
 // ---- treemap ----------------------------------------------------------------
 
 // cap / turnover, or 'equal' (TradingView-style "mono" size: every stock one tile, colour only)
+// 'capped': market cap, but no stock takes more than CAP_SHARE of its group (applied per group below)
 const sizeOf = (s, sizeBy) => (sizeBy === 'equal' ? 1 : sizeBy === 'turnover' ? s.turnover_100m : s.market_cap);
 
 /**
@@ -204,7 +205,7 @@ export function buildTreemapData(stocks, view) {
   for (const s of stocks) {
     const size = sizeOf(s, view.sizeBy);
     if (!(size > 0)) {
-      if (view.sizeBy === 'cap' && s.kind === 'etf') hiddenEtf += 1;
+      if ((view.sizeBy === 'cap' || view.sizeBy === 'capped') && s.kind === 'etf') hiddenEtf += 1;
       else hiddenNoSize += 1;
       continue;
     }
@@ -224,6 +225,7 @@ export function buildTreemapData(stocks, view) {
   }
   const data = [];
   for (const [name, children] of groups) {
+    if (view.sizeBy === 'capped') capShares(children.map((c) => c.value), CAP_SHARE).forEach((v, i) => (children[i].value = v));
     data.push({
       id: 'ind:' + name,
       name,
@@ -516,4 +518,29 @@ export function groupLabelText(r, mode) {
   if (mode === 'strong') return r && has(r.strong_ratio) ? `≥5% ${r.strong_ratio.toFixed(0)}%` : '≥5% —';
   if (mode === 'limit') return r && has(r.limit_ratio) ? `漲停 ${r.limit_ratio.toFixed(0)}%` : '漲停 —';
   return undefined;
+}
+
+// ---- market cap with a per-stock ceiling inside each group -------------------------------
+export const CAP_SHARE = 0.15;
+
+/** Water-filling: shrink the largest values until none exceeds `share` of the new total.
+ *  Groups too small to satisfy it (n × share < 1) come out equal-sized. */
+export function capShares(values, share = CAP_SHARE) {
+  const n = values.length;
+  if (!n) return [];
+  if (n * share <= 1) return values.map(() => 1);
+  const out = values.map((v) => (v > 0 ? v : 0));
+  for (let k = 0; k < 100; k += 1) {
+    const total = out.reduce((a, v) => a + v, 0);
+    const limit = total * share;
+    let changed = false;
+    for (let i = 0; i < n; i += 1) {
+      if (out[i] > limit * (1 + 1e-9)) {
+        out[i] = limit;
+        changed = true;
+      }
+    }
+    if (!changed) break;
+  }
+  return out;
 }
