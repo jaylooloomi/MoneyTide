@@ -134,3 +134,17 @@
 因為原始需求是**每天先看資金往哪裡**，所以頂尖做法會順便做**常駐的訊號摘要列**；目前的成果**只有部分**——bonus-12 只在歷史頁；收盤後停在即時頁看不到。
 - 參考：moomoo Market Monitor float bar（https://www.moomoo.com/us/support/topic3_70）
 - 預估：app.js（收盤後讀最新已存日期的 stored_only 結果，工具列一顆按鈕）；1～2 檔、約 40 行。
+
+# 加分候選（第 11 輪）
+
+## M1 · 審查夜班所有程式改動並修正確認的缺陷（✅ 已完成 bonus-14）
+因為原始需求是**N／K 的結果要可信（拿來判斷是不是同一筆資金）**，所以頂尖做法會順便做**合併前逐項 code review，找出邊界條件與整合錯誤**；目前的成果**只有部分**——每項都有單元測試，但今晚的實測已抓到兩個測試沒抓到的整合錯誤（api.py 同名函式遮住匯入、黏性面板下的捲動位移），表示還可能有類似問題。
+- 參考：Google Engineering Practices「What to look for in a code review」（https://google.github.io/eng-practices/review/reviewer/looking-for.html）
+- 預估：審查 4b489b8..HEAD 的 src／static，只修有具體失敗情境的問題；每個修正獨立 commit，≤ 5 檔、≤ 300 行。
+
+# 加分候選（第 12 輪，預先調研）
+
+## N1 · N 卡片標「誰先動」：組合內的領先者與落後分鐘數
+因為原始需求是**找出同一筆資金怎麼進場（先買哪檔、再帶動哪檔）**，所以頂尖做法會順便做**lead-lag：在幾個位移量上算分時相關，相關最高的位移就是領先時間**；目前的成果**只有部分**——N 只比「日內最高點」的時間差（一個點），沒有用整段分時走勢判斷誰帶頭。
+- 參考：Huth & Abergel：流動性高的股票通常領先、lead-lag 隨時段變化（https://www.arxiv.org/pdf/1111.7103）；OFR Working Paper 2015-15 Lead-Lag Correlations（https://www.financialresearch.gov/working-papers/files/OFRwp-2015-15_Lead-Lag-Correlations.pdf）
+- 預估：finder.py（pair_check 多算位移 −3…+3 根 5 分 K 的相關，取最大）＋describe＋finder.js 一行「領先：A 早 10 分」＋測試；3～4 檔、約 100 行。
