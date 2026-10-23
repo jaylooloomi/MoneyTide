@@ -25,6 +25,7 @@ from .history.linkage import (
     align_bars, amplitude_pct, limit_down_pct, limit_up_pct, minute_bars, turnover_rate, peak_stats, tick_bars, with_close_bar, race_points, returns, top_members, verdict_r, verdict_timing,
 )
 from .history.finder import FinderParams, persistence, run_search
+from .history.finder import news_themes as finder_news_themes  # api.py has its own news_themes route
 from .intraday import IntradayRecorder
 from .sources.yahoo_intraday import INDEX_SYMBOLS, ONE_MINUTE_DAYS, fetch_bars, fetch_day_1m, fetch_span_1m
 from .news_themes import NewsThemeCollector, heat_bursts, themes_for_day, themes_mapping
@@ -696,7 +697,10 @@ def create_app(
             # 🔁 the same combination on the earlier days of the window (stored results only, never computed)
             earlier_days = store.trading_dates(up_to=d, limit=FINDER_PRECOMPUTE_DAYS)[1:]
             earlier = {e.isoformat(): r for e in earlier_days if (r := store.finder(e, method, key)) is not None}
-            return {**res, "groups": persistence(res.get("groups", []), earlier)}
+            groups = persistence(res.get("groups", []), earlier)
+            # 📰 the news keywords naming each member (the latest 3 news days up to d), attached, not stored
+            news = [store.news_day(x) for x in store.news_dates_sorted(up_to=d, limit=3)]
+            return {**res, "groups": finder_news_themes(groups, news)}
 
         if not refresh:
             hit = await asyncio.to_thread(store.finder, d, method, key)

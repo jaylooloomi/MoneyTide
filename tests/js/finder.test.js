@@ -52,6 +52,10 @@ test('cardHtml: kind, closest grouping, members (outside one marked), facts and 
   assert.match(cardHtml({ ...G, seen_days: ['2026-10-20', '2026-10-21'], checked_days: 4 }, 5), /🔁 近 5 天第 3 次/);
   assert.match(cardHtml({ ...G, seen_days: [], checked_days: 4 }, 6), /🆕 首次/);
   assert.doesNotMatch(cardHtml({ ...G, seen_days: [], checked_days: 0 }, 7), /fd-seen/); // nothing to compare with
+  const th = cardHtml({ ...G, themes: [{ term: '被動元件', count: 2 }, { term: 'AI', count: 1 }], members: [{ ...G.members[0], themes: ['被動元件', 'AI'] }, G.members[1]] }, 8);
+  assert.match(th, /📰 題材：被動元件（2）、AI（1）/);
+  assert.match(th, /title="1 甲[^"]*📰 被動元件、AI/);
+  assert.doesNotMatch(html, /fd-themes/);
   assert.match(cardHtml({ ...G, sources: [{ label: '概念股', group: 'AI' }] }, 1), /概念股：AI/);
 });
 

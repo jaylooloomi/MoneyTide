@@ -164,6 +164,18 @@ def test_persistence_same_combination_on_earlier_days():
     assert "seen_days" not in today[0]  # the input is not changed
 
 
+def test_news_themes_per_member_and_group():
+    from openmarket.history.finder import news_themes
+
+    news = [
+        {"被動元件": {"codes": {"2327": 3, "2492": 1}}, "AI": {"codes": {"2327": 1}}},
+        {"被動元件": {"codes": {"2492": 2}}, "漲價": {"codes": {"2492": 1, "6173": 1}}, "其他": {"codes": {}}, "音量🔊": {"codes": {"2327": 9}}},
+    ]
+    (g,) = news_themes([{"members": [{"code": "2327"}, {"code": "2492"}, {"code": "9999"}]}], news)
+    assert [m["themes"] for m in g["members"]] == [["被動元件", "AI"], ["被動元件", "漲價"], []]
+    assert g["themes"] == [{"term": "被動元件", "count": 2}, {"term": "AI", "count": 1}, {"term": "漲價", "count": 1}]
+
+
 def test_co_mentions():
     names = {"2327": "國巨*", "2492": "華新科", "6173": "信昌電"}
     titles = ["被動元件大漲 國巨、華新科領軍", "國巨法說會", "信昌電與華新科同步攻頂", "國巨、華新科領軍"]
@@ -270,3 +282,28 @@ def test_pair_r_fast_path_matches_pearson():
     assert pr("A", "B") == pytest.approx(series_r(s["A"], s["B"], 3))
     assert pr("B", "A") == pr("A", "B")
     assert pr("A", "C") == pytest.approx(series_r(s["A"], s["C"], 3))  # the gap path
+
+
+def test_finder_api_stored_result_gets_history_and_themes(tmp_path):
+    """Through the endpoint: a stored result comes back with 🔁 and 📰 attached (catches name clashes in api.py)."""
+    from datetime import datetime
+
+    from fastapi.testclient import TestClient
+
+    from openmarket.api import create_app
+    from openmarket.config import AppConfig
+    from openmarket.history.store import HistoryStore
+
+    s = HistoryStore(tmp_path / "h.sqlite")
+    d = date(2026, 3, 2)
+    s.save_day(d, [{"code": "A", "name": "a", "market": "上市", "industry": "X", "kind": "stock", "close": 10, "prev_close": 10, "change": 0, "change_pct": 0}], datetime(2026, 3, 2, 15))
+    s.save_news_day(d, {"題材甲": {"mentions": 2, "codes": {"A": 2}, "titles": []}}, 2)
+    p = FinderParams(groupings=("industry",))
+    s.save_finder(d, "known", p.key() + "|industry", {"date": d.isoformat(), "method": "known", "groups": [{"members": [{"code": "A", "name": "a"}, {"code": "B", "name": "b"}]}], "stats": {}})
+    app = create_app(AppConfig(data_dir=tmp_path), start_polling=False, start_history=False, start_concepts=False, history_store=s)
+    with TestClient(app, base_url="http://127.0.0.1") as client:
+        r = client.get("/api/history/finder", params={"date": d.isoformat(), "method": "known", "groupings": "industry"})
+        assert r.status_code == 200
+        (g,) = r.json()["groups"]
+        assert g["checked_days"] == 0 and g["themes"] == [{"term": "題材甲", "count": 1}]
+        assert g["members"][0]["themes"] == ["題材甲"]

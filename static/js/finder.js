@@ -70,7 +70,8 @@ export function cardHtml(g, i) {
     .map((m) => {
       const extra = [m.peak ? `高點 ${m.peak}` : '', m.locked_at ? `🔒${m.locked_at}` : '', m.start ? `起漲 ${m.start}` : ''].filter(Boolean).join('　');
       const pool = g.pool?.[m.code]?.length ? `（${g.pool[m.code].join('、')}）` : '';
-      return `<span class="fd-chip${outside.has(m.code) ? ' out' : ''}" style="background:${colorFor(m.change_pct, 7)}" title="${escapeHtml(m.code)} ${escapeHtml(m.name)}${pool}　${extra}${m.turnover_rate != null ? `　週轉率 ${m.turnover_rate.toFixed(1)}%` : ''}${outside.has(m.code) ? '　（不在最接近的分類裡）' : ''}">${escapeHtml(m.name)} <small>${fmtPct(m.change_pct)}</small>${m.locked_at ? ' 🔒' : ''}</span>`;
+      const themes = m.themes?.length ? `　📰 ${m.themes.join('、')}` : '';
+      return `<span class="fd-chip${outside.has(m.code) ? ' out' : ''}" style="background:${colorFor(m.change_pct, 7)}" title="${escapeHtml(m.code)} ${escapeHtml(m.name)}${pool}　${extra}${m.turnover_rate != null ? `　週轉率 ${m.turnover_rate.toFixed(1)}%` : ''}${escapeHtml(themes)}${outside.has(m.code) ? '　（不在最接近的分類裡）' : ''}">${escapeHtml(m.name)} <small>${fmtPct(m.change_pct)}</small>${m.locked_at ? ' 🔒' : ''}</span>`;
     })
     .join('');
   const money = g.turnover_100m != null
@@ -88,6 +89,9 @@ export function cardHtml(g, i) {
     .filter(Boolean)
     .join('　');
   const news = g.news?.length ? `<div class="fd-news">📰 ${g.news.map((t) => escapeHtml(t)).join('<br>📰 ')}</div>` : '';
+  const themes = g.themes?.length
+    ? `<div class="fd-themes" title="近 3 個新聞日提到這幾檔的題材關鍵字（括號＝提到幾檔）">📰 題材：${g.themes.map((t) => `${escapeHtml(t.term)}${g.members.length > 1 ? `（${t.count}）` : ''}`).join('、')}</div>`
+    : '';
   const seen = g.seen_days?.length
     ? `<span class="fd-seen" title="前幾天也找到同一組合（成員重疊過半）：${g.seen_days.map((x) => x.slice(5)).join('、')}">🔁 近 ${g.checked_days + 1} 天第 ${g.seen_days.length + 1} 次</span>`
     : g.checked_days
@@ -98,7 +102,7 @@ export function cardHtml(g, i) {
       <span class="fd-title">${title}</span>${seen}<span class="muted">${g.members.length} 檔</span>
       <button type="button" class="icon fd-save" data-save="${i}" title="把這群股票存成自訂族群，之後在 B／C／K 追蹤">＋族群</button></div>
     <div class="fd-chips">${chips}</div>${money}
-    <div class="fd-facts">${facts}</div>${news}
+    <div class="fd-facts">${facts}</div>${themes}${news}
   </div>`;
 }
 

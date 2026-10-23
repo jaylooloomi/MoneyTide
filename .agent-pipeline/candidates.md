@@ -98,3 +98,15 @@
 因為原始需求是**看族群裡哪幾檔是被同一筆錢拉**，所以頂尖做法會順便做**在使用者正在看的視圖直接標出異常成員**；目前的成果**只有部分**——bonus-08 在 B 列標了 🔗，但點進 K 看族群時，不知道是哪幾檔。
 - 參考：Futu Market Monitor（https://support.futunn.com/en/topic106）；Acuity Market Reader 以亮度標異常（https://knowledgebase.acuitytrading.com/en/acuity-client-knowledge-base/platform-navigation-visual-tools-and-output-formats）
 - 預估：history.js（把 finderMarks 傳給 K）＋linkage.js／race.js（成員名稱旁加 🔗）＋測試；3～4 檔、約 50 行。
+
+# 加分候選（第 8 輪）
+
+## J6 · 兩種找法都找到同一組合 → 「雙重確認」標記
+因為原始需求是**判斷是不是同一筆資金**，所以頂尖做法會順便做**多個掃描同時成立時加權（confluence）**；目前的成果**沒有**——找法1、找法2 的結果互不知道。
+- 參考：TradingView Augury Grid 多時框同時成立加分（https://ar.tradingview.com/script/H2REdDlY-Augury-Grid-Multi-Timeframe-Scanner/）；Confluence Hunter（https://de.tradingview.com/script/uCbNwVse-Confluence-Hunter/）。注意：兩種找法用同一套漏斗，可能只是重複計算同一證據。
+- 預估：api.py（讀同一天另一找法的已存結果比對）＋finder.js 徽章＋測試；3 檔、約 50 行。
+
+## J7 · N 卡片每檔成員列出當天新聞題材（「為什麼在動」）（✅ 已完成 bonus-10）
+因為原始需求是**找資金背後的動機**，所以頂尖做法會順便做**每檔股票旁邊直接標它的新聞題材／催化劑**；目前的成果**只有部分**——卡片只在「同一則標題同時提到兩檔」時才列新聞，大部分組合沒有任何動機線索；但新聞資料其實已經記了每個關鍵字提到哪些代號（news_day 的 codes）。
+- 參考：Finviz screener 的 News 欄與 Daily Digest（每檔一行最新相關新聞，https://finviz.com/blog/news-column-and-stock-flags-now-in-the-finviz-screener/）；Benzinga「Why Is It Moving」（https://www.benzinga.com/apis/cloud-product/bz-why-is-it-moving/）
+- 預估：finder.py（code → 近 3 天提到它的題材關鍵字，取前 3）＋api.py 傳入＋finder.js（成員 tooltip 與卡片一行「📰 題材」）＋測試；4 檔、約 80 行。

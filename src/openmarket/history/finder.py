@@ -20,6 +20,7 @@ from __future__ import annotations
 import json
 import math
 import operator
+import re
 from collections.abc import Awaitable, Callable, Iterable, Mapping
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import asdict, dataclass, field
@@ -509,6 +510,37 @@ def persistence(groups: list[dict], earlier: Mapping[str, dict]) -> list[dict]:
                     seen.append(day)
                     break
         out.append({**g, "seen_days": seen, "checked_days": len(earlier)})
+    return out
+
+
+THEME_TERM = re.compile(r"^[\u4e00-\u9fffA-Za-z0-9／/+&.\-（）()]+$")  # CJK, letters, digits, a few separators
+THEMES_PER_STOCK = 3
+THEMES_PER_GROUP = 4
+
+
+def news_themes(groups: list[dict], news_days: list[dict]) -> list[dict]:
+    """「為什麼在動」: the news keywords (of the stored news days, {term: {codes: {code: n}}}) that named
+    each member, most mentions first. Adds member `themes` (top THEMES_PER_STOCK) and group `themes`
+    [{term, count}] (how many members a keyword named, top THEMES_PER_GROUP) to copies of the groups."""
+    by_code: dict[str, dict[str, int]] = {}
+    for day in news_days:
+        for term, info in day.items():
+            if not THEME_TERM.match(term):  # headline-parsing leftovers such as '音量🔊'
+                continue
+            for code, n in (info.get("codes") or {}).items():
+                by_code.setdefault(code, {})
+                by_code[code][term] = by_code[code].get(term, 0) + n
+    out = []
+    for g in groups:
+        members = []
+        group_terms: dict[str, int] = {}
+        for m in g["members"]:
+            terms = sorted(by_code.get(m["code"], {}).items(), key=lambda kv: (-kv[1], kv[0]))[:THEMES_PER_STOCK]
+            members.append({**m, "themes": [t for t, _ in terms]})
+            for t, _ in terms:
+                group_terms[t] = group_terms.get(t, 0) + 1
+        top = sorted(group_terms.items(), key=lambda kv: (-kv[1], kv[0]))[:THEMES_PER_GROUP]
+        out.append({**g, "members": members, "themes": [{"term": t, "count": n} for t, n in top]})
     return out
 
 
