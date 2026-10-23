@@ -60,3 +60,29 @@
 因為原始需求是**門檻要保留彈性、常常要調**，所以頂尖做法會順便做**預設篩選組（presets）＋自訂**；目前的成果**只有部分**——只有逐欄輸入和「恢復預設」。
 - 參考：TradingView「standard levels … Custom section」（https://www.tradingview.com/blog/en/new-screeners-stock-crypto-coins-etf-42346）；fffinstill screener presets（https://fffinstill.com/learning/concepts/screener-presets）；Chaikin preset screens（https://help.chaikinanalytics.com/en_US/screener/360041564913-Preset-Screens）
 - 預估：finder.js（三個按鈕套用一組參數）＋測試；2 檔、約 50 行。
+
+# 加分候選（第 4 輪）
+
+## F1 · 背景預算最近 5 個交易日（不只最新一天）（✅ 已完成 bonus-07）
+因為原始需求是**整個搜尋要在 1 分鐘內、最好打開就有**，所以頂尖做法會順便做**收盤後批次預算並快取、打開時直接讀**（cache warmer）；目前的成果**只有部分**——只預算「最新一天＋預設門檻」，往前翻一天就要現算（剛重啟時可能要 30 秒以上）。
+- 參考：maverick-mcp cache warmer（https://glama.ai/mcp/servers/@wshobson/maverick-mcp/blob/e0e1dd2c7d5833cd01a7168f85f9f268758a8894/maverick_mcp/utils/cache_warmer.py）；Barchart 收盤後排程掃描、結果是快照（https://www.barchart.com/stocks/stocks-screener）；StocksCafe 的取捨：只預算真的會用到的（https://blog.stocks.cafe/888/screener-updates/）
+- 預估：api.py finder_precompute（最新 → 往前 5 天、兩種找法、預設門檻；已有結果就跳過）；1 檔、約 15 行。
+
+## F2 · N 卡片加 20 日迷你走勢（群組累積漲幅 vs 大盤）
+因為原始需求是**看資金是不是持續在流入這群股票**，所以頂尖做法會順便做**結果旁的 sparkline 迷你走勢**；目前的成果**沒有**——卡片只有當天數字，看不出這群是這幾天才被拉、還是一路被買上來。
+- 參考：TradingView Sparklines 指標（最近 20 點的迷你圖＋績效，https://www.tradingview.com/scripts/sparklines/）；Google Sheets SPARKLINE（https://support.google.com/docs/answer/3093289）
+- 預估：finder.py（describe 帶出群組 20 日等權累積漲幅；大盤用 index_rows）＋finder.js（SVG 小折線）＋測試；3～4 檔、約 120 行。
+
+# 加分候選（第 5 輪）
+
+## G1 · 盤中錄製順便記成交量（之後的日子不用再跟 Yahoo 抓分 K）
+因為原始需求是**整個搜尋 1 分鐘內、資料要準**，所以頂尖做法會順便做**盤中把即時 tick 聚合成本機 1 分 K（OHLCV）、盤後直接用**；目前的成果**只有部分**——錄製只存價格（沒有成交量），所以自錄的日子 N 的爆量、個股走勢的均價／成交量都缺，還是得回頭抓 Yahoo。
+- 參考：PKScreener InMemoryCandleStore「turns ticks into OHLCV candles … replaces Yahoo Finance as the primary data source during market hours」（https://pkscreener.readthedocs.io/en/latest/HIGH_PERFORMANCE_DATA.html）；Kite 論壇：用 tick 自己的時間戳聚合分 K（https://kite.trade/forum/discussion/comment/46172/）
+- 預估：intraday.py（記 price＋累計量）＋store.py（tick blob 相容舊格式，不改 schema）＋linkage tick_bars（由累計量差算每分鐘量）＋測試；4 檔、約 100 行。
+
+# 加分候選（第 6 輪）
+
+## H1 · B 族群排行標出「N 今天找到共同注資」的族群
+因為原始需求是**多維度看資金往哪個族群流、是不是同一筆錢**，所以頂尖做法會順便做**在使用者瀏覽的清單上直接標旗（watchlist／monitor 的 unusual activity 標記）**；目前的成果**沒有**——N 的結論只在 N 區，B 排行看不到「這族群今天有被找到同步拉抬」。
+- 參考：Futu Market Monitor「show the unusual activities of the stocks in your watchlists」（https://support.futunn.com/en/topic106）；Acuity Market Reader 熱力圖用亮度標出異常移動（https://knowledgebase.acuitytrading.com/en/acuity-client-knowledge-base/platform-navigation-visual-tools-and-output-formats）
+- 預估：history.js（B 列名稱旁加小圖示；讀 N 已存的當天找法1 結果，不觸發計算）＋finder.js 匯出查詢小函式＋測試；3 檔、約 80 行。

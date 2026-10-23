@@ -714,16 +714,23 @@ def create_app(
         res = await task
         return {**res, "cached": False, "missing_groupings": missing}
 
+    FINDER_PRECOMPUTE_DAYS = 5  # the latest stored days kept ready, newest first
+    FINDER_PRECOMPUTE_PAUSE = 5  # seconds between two real runs, so the app stays responsive
+
     async def finder_precompute() -> None:
-        """After the close, run both searches with the default thresholds for the latest stored day."""
+        """After the close, keep both searches with the default thresholds ready for the latest
+        FINDER_PRECOMPUTE_DAYS days (a stored day returns at once; only missing ones are computed)."""
         await asyncio.sleep(180)  # let the start-up collectors settle first
         while True:
             try:
-                days = app.state.history.trading_dates(limit=1)
-                groupings, missing = finder_groupings(FinderParams().groupings, days[0]) if days else ({}, ["all"])
-                if days and not missing:
+                for day in app.state.history.trading_dates(limit=FINDER_PRECOMPUTE_DAYS):
+                    _, missing = finder_groupings(FinderParams().groupings, day)
+                    if missing:  # concept / chain groups not loaded yet: try again next round
+                        break
                     for method in ("known", "new"):
-                        await finder_result(days[0], method, FinderParams())
+                        res = await finder_result(day, method, FinderParams())
+                        if not res.get("cached"):
+                            await asyncio.sleep(FINDER_PRECOMPUTE_PAUSE)
             except asyncio.CancelledError:
                 raise
             except Exception:
