@@ -276,16 +276,6 @@ body.resizing-cols { cursor: ew-resize; user-select: none; }
 .link-badge { display: inline-block; padding: 0 6px; border-radius: 3px; color: #fff; font-size: 11px; }
 .link-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(330px, 1fr)); gap: 12px; align-items: start; }
 table.link-matrix td, table.link-matrix th { padding: 2px 4px; font-size: 11px; text-align: center; }
-.tl { font-size: 12px; }
-.tl-axis { position: relative; height: 13px; margin: 2px 52px 4px 84px; color: var(--muted); font-size: 10px; }
-.tl-axis span { position: absolute; transform: translateX(-50%); white-space: nowrap; }
-.tl-axis span:first-child { transform: none; }
-.tl-axis span:last-child { transform: translateX(-100%); }
-.tl-row { display: flex; align-items: center; gap: 6px; height: 20px; }
-.tl-name { width: 78px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
-.tl-track { position: relative; flex: 1; height: 2px; background: #3a3e48; }
-.tl-dot { position: absolute; top: -5px; width: 12px; height: 12px; margin-left: -6px; border-radius: 50%; border: 1px solid #0f1115; }
-.tl-time { width: 46px; color: var(--muted); font-variant-numeric: tabular-nums; }
 
 /* 關鍵字圖: the picked group's members beside the cloud */
 .wc-cloud { flex: 1; min-width: 0; height: 100%; }
@@ -301,16 +291,26 @@ table.link-matrix td, table.link-matrix th { padding: 2px 4px; font-size: 11px; 
 .race-ctl { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 6px 0; }
 .race-clock { font-size: 20px; font-variant-numeric: tabular-nums; min-width: 3.2em; color: #ffd400; }
 .race-seek { flex: 1; min-width: 160px; max-width: 520px; }
-.race-board { position: relative; max-width: 900px; }
-.race-row { position: absolute; left: 0; right: 0; height: 22px; display: flex; align-items: center; gap: 6px; font-size: 12px; cursor: pointer; transition: transform .35s ease; }
-.race-rank { width: 1.6em; text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; }
-.race-name { width: 92px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.race-track { position: relative; flex: 1; height: 16px; background: #1d2028; border-radius: 2px; }
-.race-zero { position: absolute; top: -2px; bottom: -2px; width: 1px; background: #666b78; }
-.race-bar { position: absolute; top: 2px; bottom: 2px; border-radius: 2px; transition: width .2s linear, left .2s linear; }
-.race-bar.limit { box-shadow: 0 0 0 1px #ffd400; }
-.race-pct { width: 92px; font-variant-numeric: tabular-nums; }
 .race-tag { color: #ffd400; font-size: 11px; }
 
 /* A header: 加權 / 櫃買 change of the shown day */
 .idx-chg { margin-left: 12px; font-size: 12px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.rt { max-width: 1100px; }
+.rt-axis { position: relative; height: 13px; margin: 0 196px 2px 122px; color: var(--muted); font-size: 10px; }
+.rt-axis span { position: absolute; transform: translateX(-50%); white-space: nowrap; }
+.rt-axis span:first-child { transform: none; }
+.rt-axis span:last-child { transform: translateX(-100%); }
+.rt-board { position: relative; }
+.rt-layer { position: absolute; top: 0; bottom: 0; left: 122px; right: 196px; pointer-events: none; z-index: 1; }
+.rt-after { position: absolute; top: 0; bottom: 0; right: 0; background: #ffffff08; border-left: 1px dashed #555a66; }
+.rt-head { position: absolute; top: -4px; bottom: 0; width: 2px; margin-left: -1px; background: #ffd400; box-shadow: 0 0 6px #ffd40088; }
+.rt-row { position: absolute; left: 0; right: 0; height: 38px; display: flex; align-items: center; gap: 6px; font-size: 12px; cursor: pointer; transition: transform .35s ease; }
+.rt-rank { width: 18px; flex: none; text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; }
+.rt-name { width: 92px; flex: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rt-track { position: relative; flex: 1; height: 38px; border-bottom: 1px solid #262a33; }
+.rt-track svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+.rt-zero { stroke: #3d424d; stroke-width: 1; stroke-dasharray: 3 3; vector-effect: non-scaling-stroke; }
+.rt-path { fill: none; stroke-width: 1.6; vector-effect: non-scaling-stroke; }
+.rt-dot { position: absolute; width: 10px; height: 10px; margin: -5px 0 0 -5px; border-radius: 50%; border: 1px solid #fff; box-shadow: 0 0 4px #000; }
+.rt-now { width: 84px; flex: none; text-align: right; font-size: 13px; font-variant-numeric: tabular-nums; }
+.rt-peak { width: 100px; flex: none; color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; white-space: nowrap; }

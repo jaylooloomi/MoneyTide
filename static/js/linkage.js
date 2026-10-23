@@ -4,7 +4,6 @@
 import { mountRace } from './race.js';
 import { colorFor, escapeHtml, fmtPct } from './transform.js';
 
-const SESSION_MINUTES = 240; // 09:00–13:00: the intraday-high window
 const VERDICT_COLOR = { 群體圍攻: '#b8301a', 高度同步: '#b8301a', 中度連動: '#6b5a1e', 普通: '#6b5a1e', 單兵作戰: '#2c4a6b', 時間錯落: '#2c4a6b', 資料不足: '#3a3e48' };
 
 // shown until a group is picked in B, so the panel is easy to find
@@ -25,26 +24,6 @@ export function matrixHtml(names, matrix) {
     )
     .join('');
   return `<table class="grid link-matrix"><thead><tr><th></th>${head}</tr></thead><tbody>${rows}</tbody></table>`;
-}
-
-/** Dots on a 09:00–13:00 axis: when each member first reached its 09:00–13:00 high (日內最高點時間). */
-export function timelineHtml(peaks, members) {
-  const byCode = new Map(members.map((m) => [m.code, m]));
-  const known = peaks.filter((p) => p.time);
-  if (!known.length) return '<p class="hint">這一天沒有分時資料</p>';
-  const rows = peaks
-    .map((p, i) => {
-      const m = byCode.get(p.code);
-      if (!p.time) return `<div class="tl-row"><span class="tl-name">${escapeHtml(m?.name || p.code)}</span><span class="muted">—</span></div>`;
-      const [h, mm] = p.time.split(':').map(Number);
-      const left = Math.min(100, Math.max(0, (((h - 9) * 60 + mm) / SESSION_MINUTES) * 100));
-      return `<div class="tl-row"><span class="tl-name" title="${escapeHtml(p.code)}">${i === 0 ? '👑' : ''}${escapeHtml(m?.name || p.code)}</span><span class="tl-track"><span class="tl-dot" style="left:${left}%;background:${colorFor(m?.change_pct, 7)}" title="${escapeHtml(p.time)}"></span></span><span class="tl-time">${escapeHtml(p.time)}</span></div>`;
-    })
-    .join('');
-  const ticks = [['09:00', 0], ['10:00', 60], ['11:00', 120], ['12:00', 180], ['13:00', 240]]
-    .map(([label, min]) => `<span style="left:${(min / SESSION_MINUTES) * 100}%">${label}</span>`)
-    .join('');
-  return `<div class="tl"><div class="tl-axis">${ticks}</div>${rows}</div>`;
 }
 
 export function summaryHtml(d) {
@@ -80,11 +59,10 @@ export function mountLinkagePanel(container, { onStock }) {
     const names = d.members.map((m) => m.name);
     body.innerHTML = `${summaryHtml(d)}
       <div class="link-grid">
-        <div><div class="muted">日相關（${state.win} 日漲跌幅）</div>${matrixHtml(names, d.daily[`matrix${state.win}`])}</div>
+        <div><div class="muted">日相關（<span class="link-win">${state.win}</span> 日漲跌幅）</div><div class="link-daily">${matrixHtml(names, d.daily[`matrix${state.win}`])}</div></div>
         <div><div class="muted">分時相關（最近 ${d.intraday.sessions.length} 個交易日 5 分 K）</div>${matrixHtml(names, d.intraday.matrix)}</div>
-        <div><div class="muted" title="每檔在 09:00–13:00 之間價格最高的那個時間點（同價取最早）">${escapeHtml(d.date)} 日內最高點時間（09:00–13:00；${d.peak_resolution_min === 5 ? '5 分 K：超過 30 天沒有 1 分資料' : '1 分精度'}；👑 龍頭）</div>${timelineHtml(d.peaks, d.members)}</div>
       </div>
-      <div class="race"><div class="muted">${escapeHtml(d.date)} 漲幅賽跑（09:00 → 13:30，依當下漲跌幅排名；點股票看卡片）</div><div class="race-box"></div></div>`;
+      <div class="race"><div class="muted" title="日內最高點＝每檔在 09:00–13:00 之間價格最高的那個時間點（同價取最早）">${escapeHtml(d.date)} 日內最高點時間＋漲幅（按 ▶ 從 09:00 播到 13:30，依當下漲跌幅排名；👑 龍頭；點股票看卡片）</div><div class="race-box"></div></div>`;
     state.stopRace = mountRace(body.querySelector('.race-box'), d, { onStock });
   };
   sec.querySelector('#hLinkWin').addEventListener('click', (e) => {
@@ -92,7 +70,11 @@ export function mountLinkagePanel(container, { onStock }) {
     if (!b) return;
     state.win = b.dataset.value;
     for (const x of sec.querySelectorAll('#hLinkWin button')) x.classList.toggle('on', x === b);
-    draw();
+    // only the daily matrix changes: leave the animation where it is
+    const d = state.data;
+    if (!d) return;
+    body.querySelector('.link-win').textContent = state.win;
+    body.querySelector('.link-daily').innerHTML = matrixHtml(d.members.map((m) => m.name), d.daily[`matrix${state.win}`]);
   });
   const reset = () => {
     state.ticket += 1; // drop a request still in flight
@@ -105,10 +87,6 @@ export function mountLinkagePanel(container, { onStock }) {
     body.innerHTML = HINT;
   };
   sec.querySelector('#hLinkClose').addEventListener('click', reset);
-  body.addEventListener('click', (e) => {
-    const name = e.target.closest('.tl-name');
-    if (name?.title) onStock(name.title);
-  });
   async function show(group, date, grouping) {
     if (!group || !date) {
       reset();

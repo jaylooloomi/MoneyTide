@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { matrixHtml, summaryHtml, timelineHtml } from '../../static/js/linkage.js';
+import { matrixHtml, summaryHtml } from '../../static/js/linkage.js';
 
 test('matrix: diagonal dash, values, escaping', () => {
   const html = matrixHtml(['A', '<b>'], [[1, 0.82], [0.82, 1]]);
@@ -9,16 +9,6 @@ test('matrix: diagonal dash, values, escaping', () => {
   assert.equal((html.match(/<td class="muted">—<\/td>/g) || []).length, 2);
   assert.ok(!html.includes('<b>') && html.includes('&lt;b&gt;'));
   assert.match(matrixHtml([], []), /資料不足/);
-});
-
-test('timeline: dots positioned on the session axis, leader crowned', () => {
-  const html = timelineHtml([{ code: '1', time: '09:00' }, { code: '2', time: '11:15' }, { code: '3', time: null }], [
-    { code: '1', name: '龍頭', change_pct: 3 }, { code: '2', name: '二線', change_pct: 1 }, { code: '3', name: '三線', change_pct: 0 }]);
-  assert.match(html, /👑龍頭/);
-  assert.match(html, /left:0%/);
-  assert.match(html, /left:56.25%/); // 135 of 240 minutes
-  assert.match(html, /三線<\/span><span class="muted">—/);
-  assert.match(timelineHtml([{ code: '1', time: null }], [{ code: '1', name: 'x' }]), /沒有分時資料/);
 });
 
 test('summary shows verdicts and sources', () => {

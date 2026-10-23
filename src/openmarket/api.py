@@ -483,7 +483,7 @@ def create_app(
                         per_code_sessions[c][s] = bucket_closes(ticks[c])
                         if s == d:
                             peaks[c] = peak_minute_from_ticks(ticks[c])
-                            race[c] = race_points(ticks[c], prev[c])
+                            race[c] = race_points([(ts, p, p) for ts, p in ticks[c]], prev[c])
             yahoo_sessions = [s for s in sessions if s not in recorded]
             if yahoo_sessions:
                 for m in members:
@@ -497,7 +497,7 @@ def create_app(
                         per_code_sessions[m["code"]][s] = {int(x[0][:2]) * 12 + int(x[0][3:5]) // 5 - 108: x[3] for x in b}
                         if s == d:
                             peaks[m["code"]] = peak_minute_from_bars(b)
-                            race[m["code"]] = race_points([(x[0], x[3]) for x in b], prev[m["code"]])
+                            race[m["code"]] = race_points([(x[0], x[1], x[3]) for x in b], prev[m["code"]])
                 if d in yahoo_sessions:
                     # the peak time to the minute: 1-minute bars where Yahoo still has them
                     for m in members:
@@ -506,7 +506,7 @@ def create_app(
                             notes.append(err)
                         if mb:
                             peaks[m["code"]] = peak_minute_from_bars(mb)
-                            race[m["code"]] = race_points([(x[0], x[3]) for x in mb], prev[m["code"]])
+                            race[m["code"]] = race_points([(x[0], x[1], x[3]) for x in mb], prev[m["code"]])
                         else:
                             coarse.add(m["code"])
         axis = list(range(0, 55))
@@ -519,7 +519,8 @@ def create_app(
         matrix, r_intraday = pair_matrix(series, min_points=20)
         for m in members:  # 13:30 = the official close (Yahoo's bars stop before the closing auction)
             if race[m["code"]] and m.get("change_pct") is not None:
-                race[m["code"]] = [p for p in race[m["code"]] if p[0] < 270] + [[270, round(m["change_pct"], 2)]]
+                close = round(m["change_pct"], 2)
+                race[m["code"]] = [p for p in race[m["code"]] if p[0] < 270] + [[270, close, close]]
         peak_list = [peaks[c] for c in codes]
         std, lag = peak_stats(peak_list)
         return {

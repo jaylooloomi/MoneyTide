@@ -170,16 +170,20 @@ def peak_minute_from_bars(bars: list[tuple]) -> int | None:
 
 
 def race_points(points: list[tuple], prev_close: float | None) -> list[list[float]]:
-    """(HH:MM[:SS], price) polls or bar closes → [[minute since 09:00, % change]], last value per minute.
-    The 漲幅賽跑 animation in K replays these from 09:00 to 13:30."""
+    """(HH:MM[:SS], high, close) bars or (ts, price, price) polls → [[minute since 09:00, close %, high %]]:
+    the last close and the highest high per minute. K's animated timeline replays these from 09:00 to
+    13:30; its moving high dot uses the highs, so it lands where peak_minute_from_* put the 日內最高點."""
     if not prev_close:
         return []
-    by_minute: dict[int, float] = {}
-    for ts, price in points:
+    pct = lambda p: round((p / prev_close - 1) * 100, 2)  # noqa: E731
+    by_minute: dict[int, list[float]] = {}
+    for ts, high, close in points:
         m = minutes(ts)
-        if 0 <= m <= 270 and price:
-            by_minute[m] = round((price / prev_close - 1) * 100, 2)
-    return [[m, v] for m, v in sorted(by_minute.items())]
+        if not (0 <= m <= 270 and high and close):
+            continue
+        prev = by_minute.get(m)
+        by_minute[m] = [pct(close), max(pct(high), prev[1]) if prev else pct(high)]
+    return [[m, c, h] for m, (c, h) in sorted(by_minute.items())]
 
 
 def peak_stats(peaks: list[int | None]) -> tuple[float | None, float | None]:
