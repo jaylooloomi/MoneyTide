@@ -80,6 +80,26 @@ export function raceOrder(codes, frames, m) {
   });
 }
 
+/**
+ * 領漲: the stock first at the close, and the minute from which it held first place to the close
+ * (with the lock-first rule: the earliest limit-up that stayed locked, else the day's top gainer).
+ * null when nobody traded or the day's first place closed flat or down.
+ */
+export function leadOf(codes, frames) {
+  const first = [];
+  for (let m = 0; m <= RACE_END; m++) first.push(raceOrder(codes, frames, m)[0]);
+  const code = first[RACE_END];
+  const v = frames[code]?.values[RACE_END];
+  if (v === null || v === undefined || v <= 0) return null;
+  let from = RACE_END;
+  while (from > 0 && first[from - 1] === code && frames[code].values[from - 1] !== null) from -= 1;
+  return { code, from };
+}
+
+/** Inline 領漲 icon: a red disc with a rising arrow. */
+export const LEAD_ICON =
+  '<svg class="lead-icon" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="7.5" fill="#e0282e"/><path d="M3.6 10.6 6.6 7.4 8.6 9.2 11.6 5.6" fill="none" stroke="#fff" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><path d="M9.2 5.2h2.8v2.8" fill="none" stroke="#fff" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+
 /** The highest high up to minute m (never past 13:00) and the first minute it was reached; null before any trade. */
 export function peakSoFar(frame, m) {
   let best = null;
@@ -135,7 +155,8 @@ export function mountRace(box, d, { onStock } = {}) {
   const [lo, hi] = raceDomain(frames);
   const inner = ROW_H - 2 * PAD;
   const y = (v) => PAD + ((hi - v) / (hi - lo)) * inner;
-  const leader = codes[0];
+  const leader = codes[0]; // 👑 龍頭: the largest market cap
+  const lead = leadOf(codes, frames); // 領漲
   const step = d.race?.step_min === 5 ? '5 分 K：超過 30 天沒有 1 分資料' : '1 分 K';
   let speed = 'mid';
   try {
@@ -152,7 +173,7 @@ export function mountRace(box, d, { onStock } = {}) {
       <div class="seg race-speed">${Object.entries(RACE_SPEEDS)
         .map(([k, [label]]) => `<button type="button" data-speed="${k}"${k === speed ? ' class="on"' : ''}>${label}</button>`)
         .join('')}</div>
-      <small class="muted">${step}；● ＝到目前為止的最高點；先鎖漲停的排前面；點一列看右邊的走勢圖</small>
+      <small class="muted">${step}；● ＝到目前為止的最高點；👑 龍頭＝市值最大；${LEAD_ICON} 領漲${lead ? `＝${escapeHtml(byCode.get(lead.code)?.name || lead.code)}（${fmtClock(lead.from)} 起一路領先）` : ''}；先鎖漲停的排前面；點一列看右邊的走勢圖</small>
     </div>
     <div class="rt">
       <div class="rt-axis">${TICKS.map(([label, m]) => `<span style="left:${pctX(m)}%">${label}</span>`).join('')}</div>
@@ -162,7 +183,7 @@ export function mountRace(box, d, { onStock } = {}) {
           .map((c) => {
             const m = byCode.get(c);
             return `<div class="rt-row" data-code="${escapeHtml(c)}" title="${escapeHtml(c)} ${escapeHtml(m.name)}：點一下看右邊的走勢圖">
-              <span class="rt-rank"></span><span class="rt-name">${c === leader ? '👑' : ''}${escapeHtml(m.name)}</span>
+              <span class="rt-rank"></span><span class="rt-name">${c === leader ? '<span title="龍頭：族群市值最大">👑</span>' : ''}${escapeHtml(m.name)}${lead?.code === c ? `<span class="rt-lead" title="領漲：收盤排第一，${fmtClock(lead.from)} 起一路領先到收盤" hidden>${LEAD_ICON}</span>` : ''}</span>
               <span class="rt-track">
                 <svg viewBox="0 0 ${RACE_END} ${ROW_H}" preserveAspectRatio="none"><line class="rt-zero" x1="0" x2="${RACE_END}" y1="${y(0)}" y2="${y(0)}"/><polyline class="rt-path"/></svg>
                 <span class="rt-dot"></span>
@@ -197,6 +218,8 @@ export function mountRace(box, d, { onStock } = {}) {
       const v = f.values[m];
       el.style.transform = `translateY(${i * ROW_H}px)`;
       el.querySelector('.rt-rank').textContent = v === null ? '' : String(i + 1);
+      const leadMark = el.querySelector('.rt-lead');
+      if (leadMark) leadMark.hidden = m < lead.from; // appears when it takes the lead for good
       const path = el.querySelector('.rt-path');
       path.setAttribute('points', pathPoints(f, m, y));
       path.style.stroke = v === null ? 'transparent' : colorFor(v > 0 ? 10 : v < 0 ? -10 : 0, 10);

@@ -232,9 +232,11 @@ table.rot tr.bench:nth-child(2) td { box-shadow: 0 3px 0 -1px #ffd40066; } /* li
 #historyView .panel.loading { position: relative; }
 #historyView .panel.loading > :not(.panel-h) { opacity: .35; transition: opacity .15s; }
 #historyView .panel.loading::after {
-  content: '載入中…'; position: absolute; top: 8px; right: 12px; z-index: 3;
-  padding: 2px 8px; border-radius: 4px; background: #2b3a55; color: #cfe0ff; font-size: 12px;
+  content: '載入中…'; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 3;
+  padding: 8px 18px; border-radius: 6px; background: #2b3a55ee; color: #cfe0ff; font-size: 14px;
+  box-shadow: 0 4px 16px #0008; pointer-events: none; animation: loading-pulse 1s ease-in-out infinite alternate;
 }
+@keyframes loading-pulse { from { opacity: .65; } to { opacity: 1; } }
 
 /* J · 新聞熱門族群 */
 table.news-themes td { vertical-align: top; padding-top: 5px; padding-bottom: 5px; }
@@ -332,3 +334,6 @@ table.link-matrix td, table.link-matrix th { padding: 2px 4px; font-size: 11px; 
 .ic-info { width: 100%; font-size: 12px; border-collapse: collapse; font-variant-numeric: tabular-nums; }
 .ic-info td { padding: 2px 4px; border-bottom: 1px solid #23262e; }
 .ic-info td:last-child { text-align: right; }
+.lead-icon { width: 13px; height: 13px; vertical-align: -2px; margin-left: 3px; filter: drop-shadow(0 0 3px #e0282e88); }
+.rt-lead:not([hidden]) .lead-icon { animation: lead-pop .4s ease-out; }
+@keyframes lead-pop { from { transform: scale(1.8); } to { transform: scale(1); } }

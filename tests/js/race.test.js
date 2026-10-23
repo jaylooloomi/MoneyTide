@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { RACE_END, fmtClock, isLimitUp, pathPoints, peakSoFar, raceDomain, raceFrames, raceOrder } from '../../static/js/race.js';
+import { RACE_END, fmtClock, isLimitUp, leadOf, pathPoints, peakSoFar, raceDomain, raceFrames, raceOrder } from '../../static/js/race.js';
 
 test('raceFrames forward-fills closes, remembers when a value was reached, keeps highs per minute', () => {
   const f = raceFrames({ A: [[0, 1, 2], [5, 10, 10], [6, 10, 10], [30, 9, 9.5]] }, ['A', 'B']);
@@ -62,4 +62,12 @@ test('isLimitUp uses the exact limit-up % per stock, else the 9.5% rule', () => 
   assert.equal(isLimitUp(null)(9.6), true);
   const f = raceFrames({ A: [[0, 9.7], [10, 9.95]] }, ['A'], { A: 9.95 });
   assert.deepEqual([f.A.lockedAt[5], f.A.lockedAt[10]], [null, 10]);
+});
+
+test('leadOf: first at the close, from the minute it held first place to the close', () => {
+  // B locks at 09:40 and stays; A was ahead before that
+  const f = raceFrames({ A: [[0, 5], [60, 4]], B: [[0, 1], [40, 9.95]], C: [[0, 2]] }, ['A', 'B', 'C'], { B: 9.95 });
+  assert.deepEqual(leadOf(['A', 'B', 'C'], f), { code: 'B', from: 40 });
+  // a first place that closed down is no 領漲
+  assert.equal(leadOf(['A'], raceFrames({ A: [[0, -1]] }, ['A'])), null);
 });
