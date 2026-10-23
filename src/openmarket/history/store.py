@@ -65,6 +65,14 @@ CREATE TABLE IF NOT EXISTS yahoo_1m (
     bars TEXT NOT NULL,
     PRIMARY KEY (code, date)
 );
+CREATE TABLE IF NOT EXISTS finder_result (
+    date TEXT NOT NULL,
+    method TEXT NOT NULL,
+    params TEXT NOT NULL,
+    result TEXT NOT NULL,
+    computed_at TEXT NOT NULL,
+    PRIMARY KEY (date, method, params)
+);
 CREATE TABLE IF NOT EXISTS ptt_day (
     date TEXT PRIMARY KEY,
     titles TEXT NOT NULL,
@@ -139,6 +147,7 @@ class HistoryStore:
                 "INSERT OR REPLACE INTO trading_day (date, status, fetched_at, rows) VALUES (?, 'ok', ?, ?)",
                 (day.isoformat(), fetched_at.isoformat(), len(rows)),
             )
+            c.execute("DELETE FROM finder_result WHERE date = ?", (day.isoformat(),))  # N's results used the old rows
         self.derived_cache.clear()  # after commit, so no reader can re-cache pre-write rows
 
     def mark_no_data(self, day: date, fetched_at: datetime) -> None:
@@ -524,6 +533,53 @@ class HistoryStore:
         with self._conn() as c:
             row = c.execute("SELECT bars FROM yahoo_1m WHERE code = ? AND date = ?", (code, day.isoformat())).fetchone()
         return [tuple(x) for x in json.loads(row["bars"])] if row else None
+
+    def save_yahoo_1m_many(self, items: list[tuple[str, date, list]]) -> None:
+        """Many (code, day, bars) in one transaction (N fetches dozens of stocks at once)."""
+        import json
+
+        if not items:
+            return
+        with self._lock, self._conn() as c:
+            c.executemany(
+                "INSERT OR REPLACE INTO yahoo_1m (code, date, bars) VALUES (?, ?, ?)",
+                [(code, d.isoformat(), json.dumps(bars)) for code, d, bars in items],
+            )
+
+    def yahoo_1m_many(self, codes: list[str], days: list[date]) -> dict[tuple[str, date], list]:
+        """{(code, day): bars} for what is cached ([] = Yahoo had none); missing keys were never fetched."""
+        import json
+
+        if not codes or not days:
+            return {}
+        out = {}
+        dmarks = ", ".join("?" for _ in days)
+        with self._conn() as c:
+            for i in range(0, len(codes), 400):  # stay well under SQLite's variable limit
+                part = codes[i : i + 400]
+                cmarks = ", ".join("?" for _ in part)
+                for r in c.execute(
+                    f"SELECT code, date, bars FROM yahoo_1m WHERE code IN ({cmarks}) AND date IN ({dmarks})",
+                    [*part, *[d.isoformat() for d in days]],
+                ):
+                    out[(r["code"], date.fromisoformat(r["date"]))] = [tuple(x) for x in json.loads(r["bars"])]
+        return out
+
+    def save_finder(self, day: date, method: str, params: str, result: dict) -> None:
+        import json
+
+        with self._lock, self._conn() as c:
+            c.execute(
+                "INSERT OR REPLACE INTO finder_result (date, method, params, result, computed_at) VALUES (?, ?, ?, ?, ?)",
+                (day.isoformat(), method, params, json.dumps(result, ensure_ascii=False), datetime.now().astimezone().isoformat()),
+            )
+
+    def finder(self, day: date, method: str, params: str) -> dict | None:
+        import json
+
+        with self._conn() as c:
+            row = c.execute("SELECT result FROM finder_result WHERE date = ? AND method = ? AND params = ?", (day.isoformat(), method, params)).fetchone()
+        return json.loads(row["result"]) if row else None
 
     def yahoo_fetched_at(self, code: str) -> datetime | None:
         with self._conn() as c:

@@ -63,3 +63,19 @@ async def fetch_day_1m(client: httpx.AsyncClient, code: str, market: str, day: d
     end = int(datetime.combine(day, time(13, 31), TAIPEI).timestamp())
     resp = await get_with_retry(client, DAY_1M_URL.format(symbol=symbol_for(code, market), start=start, end=end))
     return parse_chart(resp.json()).get(day, [])
+
+
+async def fetch_span_1m(client: httpx.AsyncClient, code: str, market: str, first: date, last: date) -> dict[date, list]:
+    """1-minute bars for every session from `first` to `last` in one request (Yahoo allows 8 days of
+    1m per request); a longer span falls back to one request per day."""
+    if (last - first).days > 7:
+        out = {}
+        d = first
+        while d <= last:
+            out[d] = await fetch_day_1m(client, code, market, d)
+            d = date.fromordinal(d.toordinal() + 1)
+        return out
+    start = int(datetime.combine(first, time(9, 0), TAIPEI).timestamp())
+    end = int(datetime.combine(last, time(13, 31), TAIPEI).timestamp())
+    resp = await get_with_retry(client, DAY_1M_URL.format(symbol=symbol_for(code, market), start=start, end=end))
+    return parse_chart(resp.json())

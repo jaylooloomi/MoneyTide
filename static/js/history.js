@@ -22,6 +22,7 @@ import { mountCountyMap } from './countymap.js';
 import { mountWordCloud } from './wordcloud.js';
 import { mountHistoryAiPanel } from './ainews.js';
 import { mountNewsPanel } from './newsthemes.js';
+import { mountFinderPanel } from './finder.js';
 import { mountLinkagePanel } from './linkage.js';
 
 const PREFS_KEY = 'openmarket.history.v1';
@@ -54,6 +55,7 @@ let indexPanel = null; // G: TAIEX + TPEx timeline (indexchart.js)
 let aiPanel = null; // I: AI news explanations (ainews.js)
 let newsPanel = null; // J: news-driven hot groups (newsthemes.js)
 let linkPanel = null; // K: group linkage (linkage.js)
+let finderPanel = null; // N: 資金連動搜尋 (finder.js)
 const countyPanel = { ctl: null, words: null, view: 'map', ticket: 0, cache: new Map() }; // H: county money map (countymap.js) or group word cloud (wordcloud.js)
 
 function loadPrefs() {
@@ -157,6 +159,7 @@ async function selectDate(date) {
   aiPanel?.load(); // I: cached explanations for the day
   newsPanel?.load(); // J: that day's hot groups
   linkPanel?.refresh(st.date, st.grouping); // K follows the day
+  finderPanel?.refresh(st.date); // N too (loads only while on screen)
 }
 
 // ---- A: day heatmap ---------------------------------------------------------
@@ -612,6 +615,8 @@ export async function showHistory() {
     newsPanel = mountNewsPanel($('#historyView'), { getDate: () => st.date, onPick: pickNewsTheme, onStock: openHistCard });
     newsPanel.load();
     linkPanel = mountLinkagePanel($('#historyView'), { onStock: openHistCard });
+    finderPanel = mountFinderPanel($('#historyView'), { onStock: openHistCard });
+    finderPanel.refresh(st.date);
     return;
   }
   chart.resize();

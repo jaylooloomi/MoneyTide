@@ -109,7 +109,7 @@ export function summaryHtml(d) {
 // ---- panels -------------------------------------------------------------------------------------
 
 /** K's body: summary, both matrices and the animated timeline; returns stop() for the animation. */
-function renderBody(body, d, win, onStock, raceNote) {
+export function renderBody(body, d, win, onStock, raceNote) {
   const names = d.members.map((m) => m.name);
   body.innerHTML = `${summaryHtml(d)}
     <div class="link-grid">

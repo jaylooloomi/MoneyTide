@@ -3,10 +3,11 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import json
+import logging
 import mimetypes
 from dataclasses import asdict
 from datetime import date, datetime, time
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Mapping
 from pathlib import Path
 
 import httpx
@@ -23,8 +24,9 @@ from .history.linkage import (
     INTRADAY_HIGH_R, INTRADAY_LOW_R, bucket_closes, daily_linkage, fmt_minute, pair_matrix, peak_minute_from_bars, peak_minute_from_ticks,
     align_bars, amplitude_pct, limit_down_pct, limit_up_pct, minute_bars, turnover_rate, peak_stats, tick_bars, with_close_bar, race_points, returns, top_members, verdict_r, verdict_timing,
 )
+from .history.finder import FinderParams, run_search
 from .intraday import IntradayRecorder
-from .sources.yahoo_intraday import ONE_MINUTE_DAYS, fetch_bars, fetch_day_1m
+from .sources.yahoo_intraday import ONE_MINUTE_DAYS, fetch_bars, fetch_day_1m, fetch_span_1m
 from .news_themes import NewsThemeCollector, heat_bursts, themes_for_day, themes_mapping
 from .concepts import ConceptLoader
 from .groups import GroupStore
@@ -169,6 +171,7 @@ def create_app(
             tasks.append(asyncio.create_task(app.state.news.run()))
             app.state.recorder = IntradayRecorder(store=app.state.history, get_poller=lambda: app.state.poller)
             tasks.append(asyncio.create_task(app.state.recorder.run()))
+            tasks.append(asyncio.create_task(finder_precompute()))  # N: the latest day, after the close
         if start_concepts and app.state.concepts is None:
             if client is None:
                 client = make_client()
@@ -566,6 +569,150 @@ def create_app(
         if len(members) < 2:
             raise HTTPException(404, "這個族群少於 2 檔普通股，無法計算連動性")
         return {**await linkage_payload(d, members), "group": group}
+
+    # ---- N · 資金連動搜尋 (history/finder.py) -----------------------------------------------------
+
+    FINDER_CONCURRENCY = 12  # Yahoo served 92 stocks in ~2 s at 6–24 at once (2026-10-24 test)
+    finder_running: dict[tuple, asyncio.Task] = {}
+
+    async def finder_fetch(rows: list[dict], sessions: list[date]) -> dict[str, tuple[dict, int]]:
+        """Bars for the finder: cached 1m first, else one 1m request per stock for all sessions (last ~30
+        days), else the 5m bars; new 1m bars are saved in one transaction."""
+        store = app.state.history
+        codes = [r["code"] for r in rows]
+        cached = await asyncio.to_thread(store.yahoo_1m_many, codes, sessions)
+        now = datetime.now(TAIPEI)
+        minute_ok = (now.date() - sessions[0]).days <= ONE_MINUTE_DAYS
+        finished = lambda s: s < now.date() or now.time() >= time(13, 35)  # noqa: E731
+        out: dict[str, tuple[dict, int]] = {}
+        new: list[tuple[str, date, list]] = []
+        gate = asyncio.Semaphore(FINDER_CONCURRENCY)
+        async with httpx.AsyncClient(timeout=20, headers={"User-Agent": USER_AGENT}, follow_redirects=True) as http:
+
+            async def one(r: dict) -> None:
+                c = r["code"]
+                have = {s: cached[(c, s)] for s in sessions if (c, s) in cached and (not cached[(c, s)] or len(cached[(c, s)][0]) >= 6)}
+                if minute_ok and len(have) < len(sessions):
+                    try:
+                        async with gate:
+                            by_day = await fetch_span_1m(http, c, r["market"], sessions[0], sessions[-1])
+                        for s in sessions:
+                            if s not in have:
+                                have[s] = by_day.get(s, [])
+                                if finished(s):
+                                    new.append((c, s, have[s]))
+                    except Exception:  # unofficial source: this stock falls back to the 5m bars
+                        pass
+                if minute_ok and have.get(sessions[-1]):
+                    out[c] = ({s: have.get(s, []) for s in sessions}, 1)
+                    return
+                async with gate:
+                    bars, _ = await bars_for(http, c, r["market"], sessions)
+                if bars.get(sessions[-1]):
+                    out[c] = ({s: bars.get(s, []) for s in sessions}, 5)
+
+            await asyncio.gather(*(one(r) for r in rows))
+        await asyncio.to_thread(store.save_yahoo_1m_many, new)
+        return out
+
+    def finder_groupings(names: tuple[str, ...], day: date) -> tuple[dict, list[str]]:
+        found, missing = {}, []
+        for n in names:
+            g = get_grouping(f"news@{day.isoformat()}" if n == "news" else n)
+            if g is None:
+                missing.append(n)
+            else:
+                found[n] = g
+        return found, missing
+
+    def finder_titles(day: date) -> list[str]:
+        store = app.state.history
+        titles: list[str] = []
+        for d in store.news_dates_sorted(up_to=day, limit=3):
+            for term in store.news_day(d).values():
+                titles.extend(t["title"] for t in term.get("titles", []) if t.get("title"))
+        return titles + store.ptt_titles(day)
+
+    def finder_params(query: Mapping[str, str]) -> FinderParams:
+        """Any FinderParams field can come from the query string (lists comma-separated, '' = None)."""
+        import dataclasses
+
+        base = FinderParams()
+        values = {}
+        for f in dataclasses.fields(FinderParams):
+            if f.name not in query:
+                continue
+            raw, default = query[f.name], getattr(base, f.name)
+            try:
+                if isinstance(default, bool):
+                    values[f.name] = raw.lower() in ("1", "true", "yes", "on")
+                elif isinstance(default, tuple):
+                    values[f.name] = tuple(x for x in raw.split(",") if x)
+                elif raw == "" and f.name == "start_gap":
+                    values[f.name] = None
+                elif isinstance(default, int) or f.name == "start_gap":
+                    values[f.name] = int(raw)
+                else:
+                    values[f.name] = float(raw)
+            except ValueError as exc:
+                raise HTTPException(422, f"{f.name}: {raw!r}") from exc
+        return dataclasses.replace(base, **values)
+
+    async def finder_result(d: date, method: str, p: FinderParams, refresh: bool = False) -> dict:
+        store = app.state.history
+        groupings, missing = finder_groupings(p.groupings, d)
+        key = p.key() + "|" + ",".join(sorted(groupings))
+        if not refresh:
+            hit = await asyncio.to_thread(store.finder, d, method, key)
+            if hit is not None:
+                return {**hit, "cached": True, "missing_groupings": missing}
+        k = (d, method, key)
+        task = finder_running.get(k)
+        if task is None:
+            async def go() -> dict:
+                t0 = datetime.now()
+                res = await run_search(store, d, method, p, groupings, finder_fetch, finder_titles(d))
+                res["stats"]["seconds"]["total"] = round((datetime.now() - t0).total_seconds(), 2)
+                await asyncio.to_thread(store.save_finder, d, method, key, res)
+                return res
+            task = finder_running[k] = asyncio.create_task(go())
+            task.add_done_callback(lambda _: finder_running.pop(k, None))
+        res = await task
+        return {**res, "cached": False, "missing_groupings": missing}
+
+    async def finder_precompute() -> None:
+        """After the close, run both searches with the default thresholds for the latest stored day."""
+        await asyncio.sleep(180)  # let the start-up collectors settle first
+        while True:
+            try:
+                days = app.state.history.trading_dates(limit=1)
+                groupings, missing = finder_groupings(FinderParams().groupings, days[0]) if days else ({}, ["all"])
+                if days and not missing:
+                    for method in ("known", "new"):
+                        await finder_result(days[0], method, FinderParams())
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                logging.getLogger(__name__).exception("finder precompute failed")
+            await asyncio.sleep(600)
+
+    @app.get("/api/history/finder")
+    async def finder_api(request: Request, day: str = Query(..., alias="date"), method: str = Query("known", pattern="^(known|new)$"), refresh: bool = False) -> dict:
+        d = _day(day)
+        if not app.state.history.day_rows(d):
+            raise HTTPException(404, f"no data for {day}")
+        return await finder_result(d, method, finder_params(request.query_params), refresh)
+
+    @app.get("/api/history/linkage-codes")
+    async def linkage_codes(codes: str, day: str = Query(..., alias="date")) -> dict:
+        """K's view for any set of stocks (a group found by N)."""
+        d = _day(day)
+        wanted = [c for c in codes.split(",") if c][:40]
+        rows = [r for r in app.state.history.day_rows(d) if r["code"] in wanted and r.get("kind") == "stock"]
+        if len(rows) < 2:
+            raise HTTPException(404, "至少要 2 檔有資料的股票")
+        rows.sort(key=lambda r: -(r.get("market_cap") or 0))
+        return await linkage_payload(d, rows)
 
     @app.get("/api/history/intraday")
     async def stock_intraday(code: str, day: str = Query(..., alias="date")) -> dict:
