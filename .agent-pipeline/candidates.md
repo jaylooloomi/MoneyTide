@@ -144,7 +144,7 @@
 
 # 加分候選（第 12 輪，預先調研）
 
-## N1 · N 卡片標「誰先動」：組合內的領先者與落後分鐘數
+## N1 · N 卡片標「誰先動」：組合內的領先者與落後分鐘數（✖ 實驗後放棄：真實資料沒有可量到的領先）
 因為原始需求是**找出同一筆資金怎麼進場（先買哪檔、再帶動哪檔）**，所以頂尖做法會順便做**lead-lag：在幾個位移量上算分時相關，相關最高的位移就是領先時間**；目前的成果**只有部分**——N 只比「日內最高點」的時間差（一個點），沒有用整段分時走勢判斷誰帶頭。
 - 參考：Huth & Abergel：流動性高的股票通常領先、lead-lag 隨時段變化（https://www.arxiv.org/pdf/1111.7103）；OFR Working Paper 2015-15 Lead-Lag Correlations（https://www.financialresearch.gov/working-papers/files/OFRwp-2015-15_Lead-Lag-Correlations.pdf）
 - 預估：finder.py（pair_check 多算位移 −3…+3 根 5 分 K 的相關，取最大）＋describe＋finder.js 一行「領先：A 早 10 分」＋測試；3～4 檔、約 100 行。
