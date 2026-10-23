@@ -125,6 +125,13 @@ export function amplitudeSoFar(frame, m) {
   return hi === null || lo === null ? null : hi - lo;
 }
 
+/** 「　法人 +1,234 張」 for a row's tooltip from 三大法人 net shares; '' when the day has none yet. */
+export function instTip(net) {
+  if (net == null) return '';
+  const lots = Math.round(net / 1000);
+  return `　法人 ${lots > 0 ? '+' : lots < 0 ? '−' : ''}${Math.abs(lots).toLocaleString()} 張`;
+}
+
 export function fmtClock(m) {
   return `${String(9 + Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
 }
@@ -213,7 +220,8 @@ export function mountRace(box, d, { onStock } = {}) {
           .map((c) => {
             const m = byCode.get(c);
             const extra = m.turnover_rate != null ? `　週轉率 ${m.turnover_rate.toFixed(1)}%　振幅 ${m.amplitude_pct?.toFixed(1) ?? '—'}%` : '';
-            return `<div class="rt-row" data-code="${escapeHtml(c)}" title="${escapeHtml(c)} ${escapeHtml(m.name)}${extra}：點一下看右邊的走勢圖">
+            const inst = instTip(m.inst_net);
+            return `<div class="rt-row" data-code="${escapeHtml(c)}" title="${escapeHtml(c)} ${escapeHtml(m.name)}${extra}${inst}：點一下看右邊的走勢圖">
               <span class="rt-rank"></span><span class="rt-name">${c === leader ? '<span title="龍頭：族群市值最大">👑</span>' : ''}${escapeHtml(m.name)}<span class="rt-lead" title="領漲：這一分鐘排第一（有漲停時是最早鎖住的）" hidden>${LEAD_ICON}</span></span>
               <span class="rt-track">
                 <svg viewBox="0 0 ${RACE_END} ${ROW_H}" preserveAspectRatio="none"><line class="rt-zero" x1="0" x2="${RACE_END}" y1="${y(0)}" y2="${y(0)}"/><polyline class="rt-path"/></svg>

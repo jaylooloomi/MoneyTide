@@ -534,6 +534,7 @@ def create_app(
                 race[m["code"]] = [p for p in race[m["code"]] if p[0] < 270] + [[270, close, close, close]]
         peak_list = [peaks[c] for c in codes]
         std, lag = peak_stats(peak_list)
+        inst = (await asyncio.to_thread(store.inst_net, [d])).get(d, {})  # 三大法人 net shares (posted after the close)
         return {
             "date": d.isoformat(),
             "members": [
@@ -541,6 +542,7 @@ def create_app(
                     "code": m["code"], "name": m["name"], "market_cap": m["market_cap"], "change_pct": m["change_pct"],
                     "limit_up_pct": limit_up_pct(m.get("prev_close")),
                     "turnover_rate": turnover_rate(m), "amplitude_pct": amplitude_pct(m),
+                    "inst_net": inst.get(m["code"]),
                 }
                 for m in members
             ],
