@@ -29,7 +29,7 @@ from itertools import combinations
 from .linkage import align_bars, amplitude_pct, limit_up_pct, minutes, pearson, turnover_rate
 from .store import HistoryStore
 
-FINDER_VERSION = 3  # part of the cache key: bump when the search logic changes, so stored results are redone
+FINDER_VERSION = 4  # part of the cache key: bump when the search logic changes, so stored results are redone
 PEAK_END = 240  # the intraday high is taken over 09:00–13:00
 OPEN_MINUTES = 2  # a high at 09:00–09:02 is the open, not a signal (unless locked limit-up)
 BUCKETS = 54  # 5-minute buckets 09:00–13:25
@@ -349,15 +349,22 @@ def pair_check(a: Intraday, b: Intraday, p: FinderParams) -> dict:
     return out
 
 
-def confirm(candidates: list[dict], feats: Mapping[str, Intraday], p: FinderParams) -> list[dict]:
-    """Stage B/C on each candidate's pairs; the passing pairs become dense cores again."""
+def confirm(candidates: list[dict], feats: Mapping[str, Intraday], p: FinderParams, funnel: dict | None = None) -> list[dict]:
+    """Stage B/C on each candidate's pairs; the passing pairs become dense cores again.
+    `funnel`, when given, is filled with what happened to each distinct pair (for tuning thresholds):
+    {pairs, no_bars, passed, rejected: {reason: count}}."""
     found = []
     seen = set()
+    outcome: dict[frozenset, str] = {}  # pair → '' (passed) / reason / '沒有分 K'
     for c in candidates:
         checks = {}
         for a, b in combinations(c["members"], 2):
+            e = frozenset((a, b))
             if a in feats and b in feats:
-                checks[frozenset((a, b))] = pair_check(feats[a], feats[b], p)
+                checks[e] = pair_check(feats[a], feats[b], p)
+                outcome[e] = "" if checks[e]["ok"] else checks[e]["reason"]
+            else:
+                outcome.setdefault(e, "沒有分 K")
         ok = [e for e, ch in checks.items() if ch["ok"]]
         for core in dense_cores(ok, p.dense, p.min_size):
             key = tuple(core)
@@ -366,6 +373,17 @@ def confirm(candidates: list[dict], feats: Mapping[str, Intraday], p: FinderPara
             seen.add(key)
             inside = {e: ch for e, ch in checks.items() if e <= set(core)}
             found.append({**c, "members": core, "pairs": inside, "daily": {e: r for e, r in c.get("daily", {}).items() if e <= set(core)}})
+    if funnel is not None:
+        rejected: dict[str, int] = {}
+        for why in outcome.values():
+            if why and why != "沒有分 K":
+                rejected[why] = rejected.get(why, 0) + 1
+        funnel.update(
+            pairs=len(outcome),
+            no_bars=sum(1 for why in outcome.values() if why == "沒有分 K"),
+            passed=sum(1 for why in outcome.values() if why == ""),
+            rejected=dict(sorted(rejected.items(), key=lambda kv: -kv[1])),
+        )
     return found
 
 
@@ -547,7 +565,8 @@ async def run_search(
     for code, (by_session, resolution) in got.items():
         aligned = {s: align_bars(b, session_rows.get(s, {}).get(code, {})) for s, b in by_session.items()}
         feats[code] = intraday_features(aligned, {s: session_rows.get(s, {}).get(code, {}) for s in sessions}, day, p, resolution)
-    found = confirm(cands, feats, p)
+    funnel: dict = {}
+    found = confirm(cands, feats, p, funnel)
     inst = store.inst_net([day]).get(day, {})
     market_turnover = sum(r.get("turnover_yuan") or 0 for r in rows)  # common stocks only (rows above)
     groups = [describe(g, by_code, feats, groupings, titles or [], inst, market_turnover) for g in found]
@@ -558,6 +577,6 @@ async def run_search(
         "method": method,
         "params": asdict(p),
         "groupings": [GROUPING_LABELS.get(g, g) for g in groupings],
-        "stats": {"candidates": len(cands), "pool": pool_size, "fetched": len(got), "groups": len(groups), "seconds": timing},
+        "stats": {"candidates": len(cands), "pool": pool_size, "fetched": len(got), "groups": len(groups), "seconds": timing, "funnel": funnel},
         "groups": groups,
     }

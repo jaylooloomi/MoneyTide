@@ -109,8 +109,11 @@ def test_pair_check_rules():
 def test_confirm_keeps_dense_cores_of_passing_pairs():
     up = [0.1, 0.3, -0.2, 0.5, 0.1] * 6
     feats = {"A": mk(60, rets=up), "B": mk(62, rets=up), "C": mk(64, rets=up), "D": mk(150, rets=up)}
-    (g,) = confirm([{"members": ["A", "B", "C", "D"], "sources": [], "daily": {}}], feats, P)
+    funnel = {}
+    (g,) = confirm([{"members": ["A", "B", "C", "D", "Z"], "sources": [], "daily": {}}], feats, P, funnel)
     assert g["members"] == ["A", "B", "C"]  # D peaked 90 minutes later
+    # 10 pairs: A/B/C pass with each other (3), D fails the high gap with A/B/C (3), Z has no bars (4)
+    assert funnel == {"pairs": 10, "no_bars": 4, "passed": 3, "rejected": {"高點時間差太大": 3}}
     assert set(g["pairs"]) == {e("A", "B"), e("A", "C"), e("B", "C")}
 
 

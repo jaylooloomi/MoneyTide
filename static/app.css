@@ -380,3 +380,5 @@ table.link-heat td.self { background: #3a3e48; }
 .rt-row.bench .rt-name { color: #ffd400; font-weight: 600; }
 .fd-save { margin-left: 4px; font-size: 11px; padding: 0 6px; flex: none; white-space: nowrap; width: auto; }
 .fd-money { font-size: 12px; margin-bottom: 4px; color: #cfd3dc; }
+.fd-funnel { padding: 2px 10px 0; font-size: 12px; text-align: right; }
+.fd-funnel:empty { display: none; }

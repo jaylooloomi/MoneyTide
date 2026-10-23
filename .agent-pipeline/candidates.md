@@ -36,3 +36,27 @@
 因為原始需求是**找「資金」共同注資的組合**，所以頂尖做法會順便做**候選池先濾掉成交量太小的股票**（screener 的 volume filter），否則兩檔小量股巧合同步就會被當成「資金組合」；目前的成果**只有部分**——找法1 有 ≥300 張，找法2 沒有；bonus-02 的 💰 顯示 10/22 找法2「勝昱+全景軟體」整組只有 0.1 億成交值。
 - 參考：TradingView screener volume 欄篩選（https://barbucket.readthedocs.io/en/latest/tv_screener/）；使用者自己為找法1 指定「增加成交量 過濾 預設 至少>300張」
 - 預估：finder.py candidate_pool＋finder.js 欄位＋測試；≤3 檔、<40 行。
+
+# 加分候選（第 2 輪）
+
+## D1 · 「這檔跟誰一起動」：從一檔股票找同夥（N 第三種找法）
+因為原始需求是**找出因為共同注資而一起動的股票**，所以頂尖做法會順便做**給一檔股票，自動找出全市場跟它相關最高的同夥並排序**；目前的成果**沒有**——找法1/2 都是從一群股票裡找，不能從「我正在看的這檔」出發。
+- 參考：stock-correlation skill「finds peers for a ticker … ranks peers by absolute correlation … 0.60 threshold, top ten」（https://tessl.io/registry/skills/github/himself65/finance-skills/stock-correlation）；arXiv 1204.5103 高頻資料看即時共同走勢（https://ar5iv.arxiv.org/html/1204.5103）
+- 預估：finder.py（peer 候選：對全市場算日 R 取前 N，再走分時／高點兩關，只檢查與目標股的配對）＋api 參數＋finder.js（第三個分頁＋代號輸入）＋測試；4 檔、約 200 行。
+
+## D2 · N 卡片加「PTT 討論熱度」當動機證據
+因為原始需求是**找資金背後的動機**，所以頂尖做法會順便做**社群討論熱度（同一批股票近幾天被提到的次數比平常多）**；目前的成果**只有部分**——卡片有「新聞同時提到兩檔」，沒有個股在 PTT 的討論增幅（J 區只有族群層級的熱度）。
+- 參考：政大論文：PTT 個股回文數與後續報酬的關係（https://nccur.lib.nccu.edu.tw/handle/140.119/98565）；北科論文：PTT 股版情緒結合換手率等指標（https://thesis.lib.nccu.edu.tw/thesis/detail/a226b628d8b1f7e3bb3d5416c0183480/）
+- 預估：finder.py（成員名稱在近 3 天 PTT 標題的次數 vs 前 20 天）＋finder.js＋測試；3 檔、約 80 行。
+
+# 加分候選（第 3 輪）——錨點：「要幫我保留變數彈性 後面可能會調整!!!」
+
+## E1 · N 顯示「漏斗：每一關刷掉幾對、最常卡在哪一關」（✅ 已完成 bonus-05）
+因為原始需求是**門檻會反覆調整**，所以頂尖做法會順便做**讓使用者看見每個條件刷掉多少、哪個條件最嚴**，才知道該放寬哪一個；目前的成果**只有部分**——統計列只有「日相關通過 N 組／找到 M 群」，看不到分時相關、高點差、假同步各刷掉幾對（pair_check 其實已經有 reason，只是沒彙總）。
+- 參考：TradingView screener「standard levels … Custom section for alternative values」（https://www.tradingview.com/blog/en/new-screeners-stock-crypto-coins-etf-42346）；Chaikin 預設篩選從 universe 一路篩下（https://help.chaikinanalytics.com/en_US/screener/360041564913-Preset-Screens）
+- 預估：finder.py（confirm 彙總 reason 次數、run_search 放進 stats）＋finder.js（統計列下一行小字）＋測試；3 檔、約 60 行。
+
+## E2 · N 條件預設組：嚴格／標準／寬鬆 一鍵切換
+因為原始需求是**門檻要保留彈性、常常要調**，所以頂尖做法會順便做**預設篩選組（presets）＋自訂**；目前的成果**只有部分**——只有逐欄輸入和「恢復預設」。
+- 參考：TradingView「standard levels … Custom section」（https://www.tradingview.com/blog/en/new-screeners-stock-crypto-coins-etf-42346）；fffinstill screener presets（https://fffinstill.com/learning/concepts/screener-presets）；Chaikin preset screens（https://help.chaikinanalytics.com/en_US/screener/360041564913-Preset-Screens）
+- 預估：finder.js（三個按鈕套用一組參數）＋測試；2 檔、約 50 行。

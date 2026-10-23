@@ -169,6 +169,18 @@ export function statsText(d) {
   return parts.filter(Boolean).join('　·　');
 }
 
+/**
+ * The funnel under the stats line: pairs reaching the intraday stage, what removed them (most first)
+ * and how many passed — which threshold to loosen when nothing is found.
+ */
+export function funnelText(d) {
+  const f = d?.stats?.funnel;
+  if (!f?.pairs) return '';
+  const why = Object.entries(f.rejected || {}).map(([k, n]) => `${k} ${n}`);
+  if (f.no_bars) why.push(`沒有分 K ${f.no_bars}`);
+  return `漏斗：進入分時比對 ${f.pairs} 對 → 刷掉：${why.join('、') || '無'} → 三關都過 ${f.passed} 對 → ${d.stats.groups} 群`;
+}
+
 /** Progress of a running search → {pct, text}: 日相關 0–15%, 抓分 K 15–90% (by stock), 比對 90–100%. */
 export function progressView(p) {
   if (!p?.running) return { pct: 3, text: '準備中…' };
@@ -219,6 +231,7 @@ export function mountFinderPanel(container, { onStock }) {
       <button type="button" class="icon wide" id="hFinderRun" title="用目前的條件重新計算這一天">重新計算</button>
       <button type="button" class="icon wide" id="hFinderCsv" title="匯出目前顯示的卡片（依上面的篩選；Excel 可開）">CSV</button>
       <span class="muted" id="hFinderStats" style="margin-left:auto"></span></div>
+    <div class="fd-funnel muted" id="hFinderFunnel" title="每一關刷掉幾對：卡最多的那一關，就是要放寬的條件"></div>
     <div class="fd-form" id="hFinderForm" hidden></div>
     <div class="fd-progress" id="hFinderProgress" hidden><div class="fd-bar"><span></span></div><div class="fd-ptext"></div></div>
     <div id="hFinderBody" style="padding:8px 10px"><p class="hint">捲到這裡就會載入這一天的結果。</p></div>
@@ -337,6 +350,7 @@ export function mountFinderPanel(container, { onStock }) {
       if (!resp.ok) throw new Error(data.detail || `HTTP ${resp.status}`);
       state.data = data;
       sec.querySelector('#hFinderStats').textContent = statsText(data);
+      sec.querySelector('#hFinderFunnel').textContent = funnelText(data);
       drawCards();
     } catch (err) {
       if (t !== state.ticket) return;
