@@ -110,3 +110,15 @@
 因為原始需求是**找資金背後的動機**，所以頂尖做法會順便做**每檔股票旁邊直接標它的新聞題材／催化劑**；目前的成果**只有部分**——卡片只在「同一則標題同時提到兩檔」時才列新聞，大部分組合沒有任何動機線索；但新聞資料其實已經記了每個關鍵字提到哪些代號（news_day 的 codes）。
 - 參考：Finviz screener 的 News 欄與 Daily Digest（每檔一行最新相關新聞，https://finviz.com/blog/news-column-and-stock-flags-now-in-the-finviz-screener/）；Benzinga「Why Is It Moving」（https://www.benzinga.com/apis/cloud-product/bz-why-is-it-moving/）
 - 預估：finder.py（code → 近 3 天提到它的題材關鍵字，取前 3）＋api.py 傳入＋finder.js（成員 tooltip 與卡片一行「📰 題材」）＋測試；4 檔、約 80 行。
+
+# 加分候選（第 9 輪）
+
+## K1 · 歷史頁頂端一行「今天 N 找到 X 群（🔁 Y 群持續）」，點了跳到 N
+因為原始需求是**每天先看資金往哪裡、是不是同一筆錢**，所以頂尖做法會順便做**一條常駐的摘要列（float bar／bottom bar）顯示今天偵測到幾個訊號、點了直接進明細**；目前的成果**沒有**——N 在頁面中段，要捲下去才知道今天有沒有找到東西。
+- 參考：moomoo Market Monitor float bar「displays unusual activity … the latest unusual activity data」、bottom bar「total number of bullish and bearish signals detected」（https://www.moomoo.com/us/support/topic3_70、https://moomoo.com/us/manual/topic-14-84）
+- 預估：history.js（讀 bonus-08 已有的 stored_only 找法1 結果＋找法2 結果，標題列加一行，點了捲到 N）；1～2 檔、約 50 行。
+
+## K2 · N 卡片展開的 K 檢視補上 🔁 天數與 📰 題材（✅ 已完成 bonus-11）
+因為原始需求是**看動機與持續性**，所以頂尖做法會順便做**明細頁帶著清單上的摘要資訊**；目前的成果**只有部分**——卡片上有，但點開的明細（K 動畫）沒有。
+- 參考：Finviz screener → quote 頁帶 News（https://finviz.com/blog/news-column-and-stock-flags-now-in-the-finviz-screener/）
+- 預估：finder.js（展開時在明細標題帶入）；1 檔、約 15 行。

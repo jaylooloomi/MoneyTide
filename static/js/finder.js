@@ -494,7 +494,10 @@ export function mountFinderPanel(container, { onStock }) {
       const d = await resp.json();
       if (t !== state.detailTicket) return;
       if (!resp.ok) throw new Error(d.detail || `HTTP ${resp.status}`);
-      detail.innerHTML = `<div class="panel-h"><b>${escapeHtml(g.members.map((m) => m.name).join('、'))}</b><button type="button" class="icon" data-act="close" aria-label="關閉" style="margin-left:auto">✕</button></div><div class="fd-detail-body"></div>`;
+      // the card's 🔁 and 📰 come along into the detail header
+      const seen = card.querySelector('.fd-seen')?.outerHTML || '';
+      const themes = card.querySelector('.fd-themes')?.textContent || '';
+      detail.innerHTML = `<div class="panel-h"><b>${escapeHtml(g.members.map((m) => m.name).join('、'))}</b>${seen}${themes ? `<span class="fd-themes">${escapeHtml(themes)}</span>` : ''}<button type="button" class="icon" data-act="close" aria-label="關閉" style="margin-left:auto">✕</button></div><div class="fd-detail-body"></div>`;
       state.stopRace = renderBody(detail.querySelector('.fd-detail-body'), d, '20', onStock, '點一列看那檔的分時走勢');
     } catch (err) {
       if (t === state.detailTicket) detail.innerHTML = `<p class="hint">${escapeHtml(err.message)}</p>`;
