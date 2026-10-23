@@ -244,9 +244,8 @@ table.news-themes a.theme-pick { color: #fff; font-weight: 600; }
   cursor: ns-resize; touch-action: none;
 }
 .panel-resizer::after {
-  content: ''; position: absolute; left: 50%; top: 3px; width: 48px; height: 4px; margin-left: -24px;
-  border-radius: 2px; background: #3a3e48; opacity: 0; transition: opacity .15s;
+  content: ''; position: absolute; left: 50%; top: 1px; width: 80px; height: 6px; margin-left: -40px;
+  border-radius: 3px; background: #8a90a0; box-shadow: 0 0 0 1px #0f1115; transition: background .15s, width .15s, margin .15s;
 }
-.hA:hover .panel-resizer::after, .hB:hover .panel-resizer::after, .panel-resizer.dragging::after { opacity: 1; }
-.panel-resizer.dragging::after { background: var(--accent); }
+.panel-resizer:hover::after, .panel-resizer.dragging::after { background: var(--accent); width: 120px; margin-left: -60px; }
 body.resizing-rows { cursor: ns-resize; user-select: none; }

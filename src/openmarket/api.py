@@ -206,6 +206,15 @@ def create_app(
     # Local-only app: reject other Host headers (DNS rebinding could otherwise reach the PUT routes).
     app.add_middleware(TrustedHostMiddleware, allowed_hosts=list(allowed_hosts))
 
+    @app.middleware("http")
+    async def revalidate_static(request: Request, call_next):
+        # Without Cache-Control browsers cache JS/CSS heuristically and keep running an old
+        # front end after an update; no-cache makes them revalidate (ETag → 304) on every load.
+        response = await call_next(request)
+        if not request.url.path.startswith("/api/") and "cache-control" not in response.headers:
+            response.headers["Cache-Control"] = "no-cache"
+        return response
+
     def get_poller() -> Poller:
         p = app.state.poller
         if p is None:

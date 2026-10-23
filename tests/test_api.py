@@ -231,3 +231,21 @@ def test_grouping_maps(tmp_path):
         client.put("/api/groups/我的/2330")
         assert client.get("/api/groupings/custom").json()["mapping"] == {"2330": ["我的"]}
         assert client.get("/api/groupings/industry").status_code == 422
+
+
+def test_static_files_are_revalidated(tmp_path):
+    from fastapi.testclient import TestClient
+
+    from openmarket.api import create_app
+    from openmarket.config import AppConfig
+
+    static = tmp_path / "static"
+    (static / "js").mkdir(parents=True)
+    (static / "index.html").write_text("<html></html>", encoding="utf-8")
+    (static / "js" / "a.js").write_text("export {};", encoding="utf-8")
+    app = create_app(AppConfig(data_dir=tmp_path / "data"), start_polling=False, start_history=False, start_concepts=False, static_dir=static)
+    with TestClient(app, base_url="http://127.0.0.1") as client:
+        r = client.get("/js/a.js")
+        assert r.headers["cache-control"] == "no-cache" and r.headers.get("etag")
+        assert client.get("/js/a.js", headers={"if-none-match": r.headers["etag"]}).status_code == 304
+        assert client.get("/").headers["cache-control"] == "no-cache"
