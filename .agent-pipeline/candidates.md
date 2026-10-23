@@ -198,3 +198,15 @@
 因為原始需求是 **看出資金是誰的**，所以頂尖做法會順便做 **在連動檢視裡也看到逐檔法人**；目前的成果 **只有部分**：B 有族群法人淨買超、N 卡片有逐檔法人，但 K（點族群後的連動檢視）沒有。
 - 參考：Goodinfo! 個股法人買賣超；CMoney 族群法人進出。
 - 預估：linkage_payload members 加 inst_net（store.inst_net([d])），race.js 列 title 加「法人 ±N 張」；api.py／race.js／2 測試檔，約 20 行。
+
+## 第 17 輪調研
+
+## S1 · N 卡片「法人占成交」：法人淨買賣金額 ÷ 組合成交值
+因為原始需求是 **尋找資金＝背後的動機（是法人在推，還是法人以外的資金）**，所以頂尖做法會順便做 **法人買賣超占成交量／成交值的比例**；目前的成果 **只有部分**：卡片有法人 ≈ 億元（bonus-17）和成交值（💰 bonus-02），但沒算兩者的比，使用者要自己心算「1.6 億 ÷ 40 億」。
+- 參考：Goodinfo!「法人買賣超佔成交量比重」；CMoney 籌碼「法人持股／成交比重」；玩股網 主力進出占比。
+- 預估：finder.js instText 旁加「占成交 4%」（amount_100m ÷ turnover_100m，兩者都在卡片資料裡），附 title 說明；1 檔＋測試，約 12 行。
+
+## S2 · 法人附加資料的 API 層測試（with_history 的 🏦／連買路徑）
+因為原始需求是 **資金動機的判斷要可信**，所以頂尖做法會順便做 **回應組裝路徑的整合測試**；目前的成果 **只有部分**：inst_summary／inst_streak 有單元測試，但 api with_history 把它們串起來的地方沒有（bonus-20 的審查就是在這層抓到「缺日被接成連續」）。
+- 參考：Google Testing Blog「Test Sizes」(medium tests)；Martin Fowler「Practical Test Pyramid」。
+- 預估：tests/test_finder.py 加一個用 tmp store 的端點測試（存一個 finder 結果＋三天法人、中間缺一天 → 連買只算到缺日前），約 40 行、1 檔。

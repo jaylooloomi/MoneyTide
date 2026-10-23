@@ -366,3 +366,34 @@ def test_inst_streak_counts_same_sign_days_of_the_group():
     assert sold["inst_streak"] == {"days": 2, "side": "sell"}
     assert inst_streak(groups, by_day, d[:1])[0]["inst_streak"] is None  # one day is not a streak
     assert inst_streak(groups, by_day, [])[0]["inst_streak"] is None  # the shown day has no 法人 yet
+
+
+def test_finder_api_attaches_inst_and_stops_the_streak_at_a_day_without_inst(tmp_path):
+    from datetime import datetime
+
+    from fastapi.testclient import TestClient
+
+    from openmarket.api import create_app
+    from openmarket.config import AppConfig
+    from openmarket.history.store import HistoryStore
+    from openmarket.sources.institutional import InstRow
+
+    s = HistoryStore(tmp_path / "h.sqlite")
+    days = [date(2026, 3, 2), date(2026, 3, 3), date(2026, 3, 4), date(2026, 3, 5)]
+    row = lambda c, close: {"code": c, "name": c.lower(), "market": "上市", "industry": "X", "kind": "stock", "close": close, "prev_close": close, "change": 0, "change_pct": 0}  # noqa: E731
+    for d in days:
+        s.save_day(d, [row("A", 100.0), row("B", 50.0)], datetime(d.year, d.month, d.day, 15))
+    buy = lambda a, b: [InstRow("A", a, 0, 0, a), InstRow("B", b, 0, 0, b)]  # noqa: E731
+    s.save_inst_day(days[0], buy(1000, 1000), datetime(2026, 3, 2, 17))  # buy
+    # 3/3: no 法人 fetched at all — the streak must not jump over it
+    s.save_inst_day(days[2], buy(3000, -1000), datetime(2026, 3, 4, 17))  # net buy
+    s.save_inst_day(days[3], buy(2_000_000, -500_000), datetime(2026, 3, 5, 17))  # net buy
+    key = FinderParams(groupings=("industry",)).key() + "|industry"
+    s.save_finder(days[3], "known", key, {"date": days[3].isoformat(), "method": "known", "groups": [{"members": [{"code": "A", "name": "a"}, {"code": "B", "name": "b"}]}], "stats": {}})
+    app = create_app(AppConfig(data_dir=tmp_path), start_polling=False, start_history=False, start_concepts=False, history_store=s)
+    with TestClient(app, base_url="http://127.0.0.1") as client:
+        g = client.get("/api/history/finder", params={"date": days[3].isoformat(), "method": "known", "stored_only": 1, "groupings": "industry"}).json()["groups"][0]
+    assert g["inst"] == {"lots": 1500, "amount_100m": round((2e6 * 100 - 5e5 * 50) / 1e8, 2), "buyers": 1, "sellers": 1}
+    assert [m["inst_net"] for m in g["members"]] == [2_000_000, -500_000]
+    assert g["inst_streak"] == {"days": 2, "side": "buy"}  # 3/5 and 3/4 only: 3/3 has no 法人, so 3/2 does not count
+    assert s.finder(days[3], "known", key)["groups"][0].get("inst") is None  # attached when served, never stored
