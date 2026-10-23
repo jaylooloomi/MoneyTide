@@ -1066,10 +1066,11 @@ function renderLiveMap(stocks, grouped) {
       note: $('#liveWordsNote'),
       prefKey: 'openmarket.live.wordMetric',
       onGroup: (name) => {
-        // a word zooms the heatmap into its group
+        // the side panel's 在熱力圖放大 button
         setLiveView('heat');
         zoomTo(name);
       },
+      onStock: openCard,
     });
     seg.addEventListener('click', (e) => {
       const b = e.target.closest('button[data-value]');

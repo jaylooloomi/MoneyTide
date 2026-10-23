@@ -286,3 +286,12 @@ table.link-matrix td, table.link-matrix th { padding: 2px 4px; font-size: 11px; 
 .tl-track { position: relative; flex: 1; height: 2px; background: #3a3e48; }
 .tl-dot { position: absolute; top: -5px; width: 12px; height: 12px; margin-left: -6px; border-radius: 50%; border: 1px solid #0f1115; }
 .tl-time { width: 46px; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+/* 關鍵字圖: the picked group's members beside the cloud */
+.wc-cloud { flex: 1; min-width: 0; height: 100%; }
+.wc-side { width: 340px; flex: none; overflow: auto; border-left: 1px solid var(--line, #2a2e37); }
+.wc-side tr[data-code] { cursor: pointer; }
+.wc-head { padding: 8px 10px; display: flex; flex-direction: column; gap: 6px; }
+.wc-stats { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px; }
+.wc-head button { align-self: flex-start; }
+@media (max-width: 760px) { .wc-side { width: 46%; } }

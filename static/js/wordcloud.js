@@ -2,7 +2,7 @@
 // turnover (or move) and coloured by the cap-weighted change; groups also hot in the news glow.
 // Pure builders on top (node --test); the ECharts / DOM part below.
 
-import { aggregateIndustries, escapeHtml, fmtPct, fmtTurnover } from './transform.js';
+import { aggregateIndustries, colorFor, escapeHtml, fmtPct, fmtTurnover, groupMembers, limitTag } from './transform.js';
 
 export const WORD_METRICS = { turnover: '字大小：成交值', move: '字大小：漲跌幅' };
 const MAX_WORDS = 120;
@@ -37,6 +37,8 @@ export function groupWords(stocks, { metric = 'turnover', hot = new Set() } = {}
       turnover_100m: r.turnover_100m,
       change_pct: r.change_pct,
       count: r.stock_count,
+      up: r.up_count,
+      down: r.down_count,
       hot: hot.has(r.name) || hot.has(label),
     };
   });
@@ -55,7 +57,37 @@ export function wordTooltip(w) {
   if (!w) return '';
   return `<b>${escapeHtml(w.full)}</b>（${w.count} 家）<br>成交值　${fmtTurnover(w.turnover_100m)}<br>市值加權漲幅　${fmtPct(w.change_pct)}${
     w.hot ? '<br><span style="color:' + GLOW + '">新聞熱門族群</span>' : ''
-  }<br><span style="opacity:.7">點一下放大到這個族群</span>`;
+  }<br><span style="opacity:.7">點一下看右側的成分股</span>`;
+}
+
+/** Right-hand panel: the picked group's figures and its members by turnover (total: all words' turnover). */
+export function sideHtml(w, members, total) {
+  if (!w) return '<p class="hint" style="padding:8px 10px">點左邊的字，這裡會列出族群的成分股。</p>';
+  const groupTurnover = members.reduce((a, s) => a + (s.turnover_100m || 0), 0);
+  const rows = members
+    .map((s) => {
+      const share = groupTurnover > 0 ? ((s.turnover_100m || 0) / groupTurnover) * 100 : null;
+      const tag = limitTag(s.change_pct);
+      return `<tr data-code="${escapeHtml(s.code)}" title="${escapeHtml(s.code)} ${escapeHtml(s.name)}：點開資訊卡">
+        <td class="l muted">${escapeHtml(s.code)}</td>
+        <td class="l"><span class="clip" style="max-width:6.5em">${escapeHtml(s.name)}</span>${tag ? ` <small class="muted">${tag}</small>` : ''}</td>
+        <td class="c" style="background:${colorFor(s.change_pct, 7)}">${fmtPct(s.change_pct)}</td>
+        <td>${fmtTurnover(s.turnover_100m)}</td>
+        <td class="muted">${share === null ? '—' : share.toFixed(0) + '%'}</td></tr>`;
+    })
+    .join('');
+  const pct = w.change_pct;
+  const cls = pct > 0 ? 'up' : pct < 0 ? 'down' : '';
+  return `<div class="wc-head">
+      <div><b style="font-size:15px">${escapeHtml(w.full)}</b>${w.hot ? ' <span class="burst-tag" title="也在 J 新聞熱門族群裡">新聞熱門</span>' : ''}</div>
+      <div class="wc-stats">
+        <span><span class="muted">市值加權</span> <b class="${cls}">${fmtPct(pct)}</b></span>
+        <span><span class="muted">成交值</span> <b>${fmtTurnover(w.turnover_100m)}</b>${total > 0 ? ` <small class="muted">占 ${((w.turnover_100m / total) * 100).toFixed(1)}%</small>` : ''}</span>
+        <span><span class="muted">家數</span> <b>${w.count}</b> <small><span class="up">▲${w.up ?? 0}</span> <span class="down">▼${w.down ?? 0}</span></small></span>
+      </div>
+      <button type="button" class="icon wide" data-act="zoom">在熱力圖放大這個族群</button>
+    </div>
+    <table class="grid"><thead><tr><th class="l">代號</th><th class="l">名稱</th><th>漲幅</th><th>成交值</th><th title="占族群成交值">占比</th></tr></thead><tbody>${rows}</tbody></table>`;
 }
 
 /** Series box in px that keeps the island's aspect (the mask is stretched to the box). */
@@ -188,11 +220,36 @@ async function hotGroups(date) {
 
 /**
  * A word cloud inside `el` with a size-metric <select> placed into `controls` and a note element.
- * render(stocks, {caption, date, force}) redraws (stocks grouped: industry := group name);
- * onGroup(fullName) runs when a word is clicked.
+ * render(stocks, {caption, date, force}) redraws (stocks grouped: industry := group name).
+ * A clicked word lists its members on the right; onGroup(fullName) zooms the heatmap into it
+ * and onStock(code) opens a member's card.
  */
-export function mountWordCloud(el, { controls, note, prefKey, onGroup }) {
-  const state = { chart: null, stocks: [], caption: '', date: null, metric: 'turnover', sig: '', at: 0, ticket: 0, timer: null, force: false };
+export function mountWordCloud(el, { controls, note, prefKey, onGroup, onStock }) {
+  const state = { chart: null, stocks: [], caption: '', date: null, metric: 'turnover', sig: '', at: 0, ticket: 0, timer: null, force: false, words: [], picked: null };
+  el.style.display = 'flex';
+  el.innerHTML = '<div class="wc-cloud"></div><div class="wc-side table-wrap"></div>';
+  const cloud = el.querySelector('.wc-cloud');
+  const side = el.querySelector('.wc-side');
+  // the list follows every refresh, even when the cloud keeps its layout
+  function drawSide() {
+    if (!state.words.some((w) => w.full === state.picked)) state.picked = state.words[0]?.full ?? null;
+    const w = state.words.find((x) => x.full === state.picked) || null;
+    const total = state.words.reduce((a, x) => a + x.turnover_100m, 0);
+    const members = w
+      ? groupMembers(state.stocks, w.full)
+          .filter((s) => s.kind === 'stock')
+          .sort((a, b) => (b.turnover_100m || 0) - (a.turnover_100m || 0))
+      : [];
+    side.innerHTML = sideHtml(w, members, total);
+  }
+  side.addEventListener('click', (e) => {
+    if (e.target.closest('[data-act="zoom"]')) {
+      if (state.picked) onGroup?.(state.picked);
+      return;
+    }
+    const tr = e.target.closest('tr[data-code]');
+    if (tr) onStock?.(tr.dataset.code);
+  });
   try {
     const saved = localStorage.getItem(prefKey);
     if (saved in WORD_METRICS) state.metric = saved;
@@ -239,24 +296,30 @@ export function mountWordCloud(el, { controls, note, prefKey, onGroup }) {
     const hot = await hotGroups(state.date);
     if (t !== state.ticket) return;
     const words = groupWords(state.stocks, { metric: state.metric, hot });
+    state.words = words;
+    drawSide();
     const sig = `${state.metric}|${words.map((w) => w.full).join(',')}`;
     // the same groups again (a live refresh): keep the layout still unless a minute has passed
     if (!force && sig === state.sig && Date.now() - state.at < REDRAW_MS) return;
     if (!state.chart) {
-      state.chart = echarts.init(el);
-      state.chart.on('click', (p) => p.data?.full && onGroup?.(p.data.full));
+      state.chart = echarts.init(cloud);
+      state.chart.on('click', (p) => {
+        if (!p.data?.full) return;
+        state.picked = p.data.full;
+        drawSide();
+      });
       let last = '';
       new ResizeObserver(() => {
-        const size = `${el.clientWidth}x${el.clientHeight}`;
+        const size = `${cloud.clientWidth}x${cloud.clientHeight}`;
         if (size === last) return;
         last = size;
         state.chart.resize();
         draw(true);
-      }).observe(el);
+      }).observe(cloud);
     }
     state.sig = sig;
     state.at = Date.now();
-    const box = fitBox(el.clientWidth, el.clientHeight, mask.aspect);
+    const box = fitBox(cloud.clientWidth, cloud.clientHeight, mask.aspect);
     const option = buildWordOption(words, box);
     option.series[0].maskImage = mask.canvas;
     state.chart.clear();

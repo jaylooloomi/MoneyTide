@@ -61,6 +61,7 @@ function loadPrefs() {
     const p = JSON.parse(localStorage.getItem(PREFS_KEY) || '{}');
     for (const k of ['threshold', 'sizeBy', 'rotDays', 'rotMetric', 'moverMode', 'groupSort', 'grouping']) if (p[k] !== undefined) st[k] = p[k];
     if (p.moverValue) Object.assign(st.moverValue, p.moverValue);
+    if (st.groupSort?.key === 'rank_change') st.groupSort = { key: 'rank', dir: 'asc' }; // 名次 now sorts by the rank itself
   } catch {
     /* defaults */
   }
@@ -530,7 +531,7 @@ function bind() {
     if (!th) return;
     const key = th.dataset.sort;
     if (st.groupSort.key === key) st.groupSort.dir = st.groupSort.dir === 'asc' ? 'desc' : 'asc';
-    else st.groupSort = { key, dir: key === 'name' ? 'asc' : 'desc' };
+    else st.groupSort = { key, dir: key === 'name' || key === 'rank' ? 'asc' : 'desc' };
     savePrefs();
     renderGroups();
   });
@@ -1280,6 +1281,7 @@ function mountCountyPanel() {
     onGroup: (name) => {
       zoomTo(name); // A is sticky at the top: the zoom shows right away
     },
+    onStock: openHistCard,
   });
   try {
     if (localStorage.getItem('openmarket.history.hView') === 'words') countyPanel.view = 'words';
