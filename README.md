@@ -4,20 +4,26 @@
 
 **即時（盤中）**
 - **樹狀熱力圖**：格子大小可選市值、成交值或等大小，顏色依今日或本週漲跌（紅漲綠跌），漲停加黃框、跌停加青框。點產業標題可放大。
-- **族群分類切換**：官方產業、自訂族群、概念股（Yahoo 股市約 100 個概念，背景載入、快取 7 天）。
-- **產業矩陣**：今日、本週、20 日、振幅、量占比、量能（今日成交值 ÷ 20 日均，盤中依時間換算）、漲／跌家數熱力格，可排序；滑過即在熱力圖上加框。
+- **族群分類切換**：官方產業、自訂族群、概念股（Yahoo 股市約 100 個概念）、細產業（櫃買中心產業價值鏈平台約 450 個細分類，例如「IC設計／電源管理IC」）；後兩者背景載入、快取 7 天。
+- **熱力圖產業標題**：可切換顯示市值加權漲幅、≥5% 佔比或漲停佔比；顏色可選今日、本週或量比（今日成交值 ÷ 前 20 日均量，盤中依時間換算），今日色階可調 ±3／5／7／10%。
+- **台灣地圖**：主畫面可從熱力圖切到台灣地圖，依公司總部所在縣市彙總成交值或市值加權漲幅，右側附縣市排行。
+- **產業矩陣**：今日、本週、20 日、振幅、量占比、量能（今日成交值 ÷ 20 日均，盤中依時間換算）、≥5% 佔比、漲停佔比、漲／跌家數熱力格，可排序；滑過即在熱力圖上加框。
 - **市場廣度列**：上漲／平盤／下跌家數、漲停／跌停、上漲股成交值占比。
 - **個股資訊卡**：完整報價、加入自選、加入自訂族群、所屬概念股／自訂族群。另有自選清單，可切換「只看自選」。
+- **AI 解讀**（收盤後）：當天漲跌幅各前 3 名（成交值 ≥ 1 億）的新聞原因，見下方「AI 新聞分析」。
 - 盤中依設定頻率自動更新（預設 60 秒，最低 30 秒），13:35 抓收盤後的最後一次。
 
 **歷史（回溯）**：頂部切換「歷史」，資料為證交所與櫃買中心的官方收盤，自動回補近一年。
 - **A 當日熱力圖**：顏色可選 1／5／20 日漲幅。點個股開卡片，含近 20 日走勢。
-- **B 強勢族群排行**：名次與前一交易日比的升降、平均漲幅、市值加權、5／20／60 日、≥門檻佔比、漲停、漲／跌、領漲股、家數。點族群會展開成分股表。
+- **B 強勢族群排行**：名次與前一交易日比的升降、平均漲幅、市值加權、5／20／60 日、≥門檻佔比、漲停、漲停佔比、漲／跌、領漲股、家數。點族群會展開成分股表。
 - **C 族群輪動矩陣**：近 10／20／60 日，點格子跳到那天。
 - **D 集體上漲**：當日漲幅、區間累計、連續上漲，結果依族群分組。
 - **E 族群走勢比較**：累積報酬線，與全市場比較。
 - **F 每日廣度月曆**：一年每個交易日一格，點格子跳到那天。
-- **其他**：逐日播放、CSV 匯出、網址可存成書籤（例如 `#history/2026-10-16/concept`），族群分類可切官方產業、自訂、概念股。
+- **G 大盤＋櫃買**：加權與櫃買指數日 K（MA5／20／60）＋成交值，▼ 標出強勢日（全市場 ≥5% 佔比 ≥ 10% 或漲停 ≥ 90 家）；點任一天，上方所有面板切到那天。
+- **H 台灣地圖**：選中那天依公司總部縣市彙總的全市場成交值或漲跌。
+- **I 漲跌原因（AI 新聞分析）**：那天漲跌幅各前 3 名的新聞原因摘要與連結。
+- **其他**：逐日播放、CSV 匯出、網址可存成書籤（例如 `#history/2026-10-16/chain`），族群分類可切官方產業、自訂、概念股、細產業。
 
 只看盤，不下單。
 
@@ -35,15 +41,61 @@ uv run python -m openmarket
 | 環境變數 | 預設 | 說明 |
 |---|---|---|
 | `OPENMARKET_PORT` | `8765` | 連接埠 |
-| `OPENMARKET_DATA_DIR` | `./data` | 快取、設定與自選清單存放位置 |
+| `OPENMARKET_DATA_DIR` | `./data` | 快取、設定、自選清單與歷史資料庫（`history.sqlite`，不進 git）存放位置 |
+| `OPENMARKET_AI_FORMAT` | `openai` | AI 介面格式：`openai`（OpenAI 相容）或 `anthropic`（Claude Messages API） |
+| `OPENMARKET_AI_BASE_URL` | 依格式：`https://api.groq.com/openai/v1`／`https://api.anthropic.com` | AI 服務位址 |
+| `OPENMARKET_AI_KEY` | （無） | AI 金鑰；沒設定時 AI 功能停用，其他功能照常 |
+| `OPENMARKET_AI_MODEL` | 依格式：`qwen/qwen3-32b`／`claude-opus-5-5` | 模型 |
 
 加上 `--no-browser` 參數可以不自動開瀏覽器。
+
+## AI 新聞分析
+
+收盤後（即時頁「AI 解讀」）或歷史頁某一天（I 面板「分析這一天」），取漲跌幅各前 3 名的普通股（成交值 ≥ 1 億），用 Google News RSS 搜尋該日前後 2 天的新聞標題（每檔最多 8 則），再請 AI 只根據標題寫 2～3 句原因並附引用連結。新聞不足時會寫「找不到足夠新聞，無法判斷」，不會讓 AI 自行推測。結果依「日期＋代號」存在 `data/history.sqlite`，同一天同一檔只問一次。逾時 30 秒，遇到 429／5xx 最多重試 2 次。
+
+金鑰只從環境變數讀取，不會寫進任何檔案、記錄或 API 回應。設定後要重新啟動。三種常見設定（Windows 用 `setx`，設定後開新的命令列視窗再啟動）：
+
+**Groq（預設，免費額度）**：選它的原因是有持續的免費方案、OpenAI 相容介面，`qwen/qwen3-32b` 中文能力足夠（回答前的思考段落會自動去掉）；額度與條款會變動，以 Groq 官網為準。其他免費選項見 [cheahjs/free-llm-api-resources](https://github.com/cheahjs/free-llm-api-resources)，例如 Google AI Studio（Gemini 中文更好，但免費方案的內容可能被用於改進產品）。
+
+```bash
+setx OPENMARKET_AI_KEY 你的GroqKey
+```
+
+**正版 Claude（付費）**：
+
+```bash
+setx OPENMARKET_AI_FORMAT anthropic
+```
+
+```bash
+setx OPENMARKET_AI_KEY 你的AnthropicKey
+```
+
+**本機 free-claude-code 代理**：另外啟動 [free-claude-code](https://github.com/Alishahryar1/free-claude-code)（獨立程式，AGPL；本專案不含它的任何程式碼），再把位址指過去（埠號以它實際的設定為準）：
+
+```bash
+setx OPENMARKET_AI_FORMAT anthropic
+```
+
+```bash
+setx OPENMARKET_AI_BASE_URL http://127.0.0.1:8082
+```
+
+```bash
+setx OPENMARKET_AI_KEY 代理設定的token
+```
 
 ## 資料來源
 
 - 報價：HiStock 排行頁（`https://histock.tw/stock/rank.aspx?p=all`）。這是第三方網站，**僅供個人本機使用**。
 - 產業分類：證交所 ISIN 公開清單（快取 7 天）。
 - 已發行股數（計算市值用）：證交所與櫃買中心 OpenAPI（快取 7 天）。
+- 歷史收盤：證交所 MI_INDEX、櫃買中心每日收盤行情；大盤與櫃買指數：證交所 MI_5MINS_HIST／FMTQIK、櫃買中心 inx／tradingIndex（按月）。
+- 概念股：Yahoo 股市分類頁（第三方網站，**僅供個人本機使用**）。
+- 細產業：櫃買中心產業價值鏈資訊平台（<https://ic.tpex.org.tw>）。CMoney、XQ 的細產業是付費軟體的自家資料，沒有公開來源，因此不使用。
+- 公司總部地址：證交所 OpenAPI `t187ap03_L`、櫃買中心 OpenAPI `mopsfin_t187ap03_O`（只取到縣市）。
+- 台灣縣市界：`static/geo/tw-counties.geo.json`，轉自 [taiwan-atlas](https://github.com/dkaoster/taiwan-atlas)（MIT），原始資料為內政部村里界圖（政府資料開放授權條款第 1 版），授權全文見 `static/geo/LICENSE-taiwan-atlas.txt`。
+- 新聞：Google News RSS 搜尋（只取標題、來源與連結）。
 
 ## 測試
 
@@ -55,4 +107,4 @@ uv run pytest -q -p no:warnings
 node --test "tests/js/*.test.js"
 ```
 
-設計規格見 [docs/superpowers/specs/2026-10-12-industry-heatmap-design.md](docs/superpowers/specs/2026-10-12-industry-heatmap-design.md)。
+設計規格見 [docs/superpowers/specs/](docs/superpowers/specs/)：熱力圖主體、歷史紀錄、大盤＋櫃買時間軸、漲停／強勢佔比、細產業、台灣地圖、AI 新聞分析。
