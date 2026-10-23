@@ -6,6 +6,8 @@ import { colorFor, escapeHtml, fmtPct } from './transform.js';
 const SESSION_MINUTES = 270; // 09:00–13:30
 const VERDICT_COLOR = { 群體圍攻: '#b8301a', 高度同步: '#b8301a', 中度連動: '#6b5a1e', 普通: '#6b5a1e', 單兵作戰: '#2c4a6b', 時間錯落: '#2c4a6b', 資料不足: '#3a3e48' };
 
+// shown until a group is picked in B, so the panel is easy to find
+const HINT = '<p class="hint" style="margin:4px 0">👆 在上方 <b>B 強勢族群排行</b>點一個族群，這裡會顯示它前 8 大成分股的日相關、分時相關與創高時間。</p>';
 const fmtR = (r) => (r === null || r === undefined ? '—' : r.toFixed(2));
 const badge = (text) => `<span class="link-badge" style="background:${VERDICT_COLOR[text] || '#3a3e48'}">${escapeHtml(text)}</span>`;
 
@@ -58,13 +60,12 @@ export function mountLinkagePanel(container, { onStock }) {
   const sec = document.createElement('section');
   sec.id = 'hLinkPanel';
   sec.className = 'panel hK';
-  sec.hidden = true;
   sec.innerHTML = `<div class="panel-h"><b>K · 族群連動性</b><span id="hLinkTitle"></span>
       <span class="muted">市值前 8 大；R &gt; 0.7 群體圍攻、&lt; 0.3 單兵作戰（分時 0.5／0.2）；創高差 ≤ 10 分高度同步、≥ 60 分時間錯落</span>
       <div class="seg" id="hLinkWin"><button data-value="20" class="on">20 日</button><button data-value="60">60 日</button></div>
       <span class="muted" id="hLinkNote" style="margin-left:auto"></span>
       <button type="button" class="icon" id="hLinkClose" aria-label="關閉">✕</button></div>
-    <div id="hLinkBody" style="padding:8px 10px"></div>`;
+    <div id="hLinkBody" style="padding:8px 10px">${HINT}</div>`;
   container.appendChild(sec);
   const body = sec.querySelector('#hLinkBody');
   const state = { ticket: 0, data: null, win: '20', group: null, date: null, grouping: null };
@@ -86,22 +87,27 @@ export function mountLinkagePanel(container, { onStock }) {
     for (const x of sec.querySelectorAll('#hLinkWin button')) x.classList.toggle('on', x === b);
     draw();
   });
-  sec.querySelector('#hLinkClose').addEventListener('click', () => {
-    sec.hidden = true;
+  const reset = () => {
+    state.ticket += 1; // drop a request still in flight
     state.group = null;
-  });
+    state.data = null;
+    sec.querySelector('#hLinkTitle').textContent = '';
+    sec.querySelector('#hLinkNote').textContent = '';
+    sec.classList.remove('loading');
+    body.innerHTML = HINT;
+  };
+  sec.querySelector('#hLinkClose').addEventListener('click', reset);
   body.addEventListener('click', (e) => {
     const name = e.target.closest('.tl-name');
     if (name?.title) onStock(name.title);
   });
   async function show(group, date, grouping) {
     if (!group || !date) {
-      sec.hidden = true;
+      reset();
       return;
     }
     Object.assign(state, { group, date, grouping });
     const t = ++state.ticket;
-    sec.hidden = false;
     sec.querySelector('#hLinkTitle').textContent = `${group} · ${date}`;
     sec.classList.add('loading');
     try {
@@ -123,11 +129,8 @@ export function mountLinkagePanel(container, { onStock }) {
   return {
     show,
     refresh(date, grouping) {
-      if (state.group && !sec.hidden) show(state.group, date, grouping);
+      if (state.group) show(state.group, date, grouping);
     },
-    hide() {
-      sec.hidden = true;
-      state.group = null;
-    },
+    hide: reset,
   };
 }
