@@ -24,7 +24,7 @@ from .history.linkage import (
     INTRADAY_HIGH_R, INTRADAY_LOW_R, bucket_closes, daily_linkage, fmt_minute, pair_matrix, peak_minute_from_bars, peak_minute_from_ticks,
     align_bars, amplitude_pct, limit_down_pct, limit_up_pct, minute_bars, turnover_rate, peak_stats, tick_bars, with_close_bar, race_points, returns, top_members, verdict_r, verdict_timing,
 )
-from .history.finder import FinderParams, run_search
+from .history.finder import FinderParams, persistence, run_search
 from .intraday import IntradayRecorder
 from .sources.yahoo_intraday import INDEX_SYMBOLS, ONE_MINUTE_DAYS, fetch_bars, fetch_day_1m, fetch_span_1m
 from .news_themes import NewsThemeCollector, heat_bursts, themes_for_day, themes_mapping
@@ -692,10 +692,16 @@ def create_app(
         store = app.state.history
         groupings, missing = finder_groupings(p.groupings, d)
         key = p.key() + "|" + ",".join(sorted(groupings))
+        def with_history(res: dict) -> dict:
+            # 🔁 the same combination on the earlier days of the window (stored results only, never computed)
+            earlier_days = store.trading_dates(up_to=d, limit=FINDER_PRECOMPUTE_DAYS)[1:]
+            earlier = {e.isoformat(): r for e in earlier_days if (r := store.finder(e, method, key)) is not None}
+            return {**res, "groups": persistence(res.get("groups", []), earlier)}
+
         if not refresh:
             hit = await asyncio.to_thread(store.finder, d, method, key)
             if hit is not None:
-                return {**hit, "cached": True, "missing_groupings": missing}
+                return {**await asyncio.to_thread(with_history, hit), "cached": True, "missing_groupings": missing}
         if stored_only:  # another panel peeking (B's 🔗): never start a search for it
             return {"date": d.isoformat(), "method": method, "groups": [], "stored": False, "cached": False, "missing_groupings": missing}
         k = (d, method, key)
@@ -714,7 +720,7 @@ def create_app(
             task = finder_running[k] = asyncio.create_task(go())
             task.add_done_callback(lambda _: (finder_running.pop(k, None), finder_progress.pop(k, None)))
         res = await task
-        return {**res, "cached": False, "missing_groupings": missing}
+        return {**await asyncio.to_thread(with_history, res), "cached": False, "missing_groupings": missing}
 
     FINDER_PRECOMPUTE_DAYS = 5  # the latest stored days kept ready, newest first
     FINDER_PRECOMPUTE_PAUSE = 5  # seconds between two real runs, so the app stays responsive

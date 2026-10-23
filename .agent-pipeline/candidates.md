@@ -86,3 +86,15 @@
 因為原始需求是**多維度看資金往哪個族群流、是不是同一筆錢**，所以頂尖做法會順便做**在使用者瀏覽的清單上直接標旗（watchlist／monitor 的 unusual activity 標記）**；目前的成果**沒有**——N 的結論只在 N 區，B 排行看不到「這族群今天有被找到同步拉抬」。
 - 參考：Futu Market Monitor「show the unusual activities of the stocks in your watchlists」（https://support.futunn.com/en/topic106）；Acuity Market Reader 熱力圖用亮度標出異常移動（https://knowledgebase.acuitytrading.com/en/acuity-client-knowledge-base/platform-navigation-visual-tools-and-output-formats）
 - 預估：history.js（B 列名稱旁加小圖示；讀 N 已存的當天找法1 結果，不觸發計算）＋finder.js 匯出查詢小函式＋測試；3 檔、約 80 行。
+
+# 加分候選（第 7 輪）
+
+## I1 · N 卡片標「近 5 天出現 N 次」（同一組合連續被找到）（✅ 已完成 bonus-09）
+因為原始需求是**判斷連動是不是因為資金「共同注資」（持續性的）而不是一天的巧合**，所以頂尖做法會順便做**滾動／跨期追蹤：同一關係在最近幾期是否持續成立**；目前的成果**沒有**——每天的結果各自獨立；bonus-07 之後最近 5 天的結果都已存好，比對幾乎零成本。
+- 參考：stock-correlation skill「track rolling or regime-dependent correlation」「60-day rolling correlation statistics」（https://tessl.io/registry/skills/github/himself65/finance-skills/stock-correlation）；Futu Market Monitor 追蹤自選股異動（https://support.futunn.com/en/topic106）
+- 預估：api.py（finder_result 讀前 4 個交易日同條件的已存結果，比對成員重疊 ≥ 一半）＋finder.js（卡片徽章）＋測試；3～4 檔、約 80 行。
+
+## I2 · K 動畫標出 N 找到的成員
+因為原始需求是**看族群裡哪幾檔是被同一筆錢拉**，所以頂尖做法會順便做**在使用者正在看的視圖直接標出異常成員**；目前的成果**只有部分**——bonus-08 在 B 列標了 🔗，但點進 K 看族群時，不知道是哪幾檔。
+- 參考：Futu Market Monitor（https://support.futunn.com/en/topic106）；Acuity Market Reader 以亮度標異常（https://knowledgebase.acuitytrading.com/en/acuity-client-knowledge-base/platform-navigation-visual-tools-and-output-formats）
+- 預估：history.js（把 finderMarks 傳給 K）＋linkage.js／race.js（成員名稱旁加 🔗）＋測試；3～4 檔、約 50 行。

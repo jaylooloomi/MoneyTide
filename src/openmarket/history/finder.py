@@ -489,6 +489,29 @@ def describe(g: dict, rows_by_code: Mapping[str, dict], feats: Mapping[str, Intr
     }
 
 
+# ---- persistence across days --------------------------------------------------------------------
+
+SAME_GROUP = 0.5  # Jaccard overlap at which two days' groups count as the same combination
+
+
+def persistence(groups: list[dict], earlier: Mapping[str, dict]) -> list[dict]:
+    """For each found group, the earlier days (stored results by ISO date) whose result holds the same
+    combination (member overlap ≥ SAME_GROUP). Adds `seen_days` (oldest first) and `checked_days`
+    (how many earlier days had a stored result to compare with) to copies of the groups."""
+    out = []
+    for g in groups:
+        mine = {m["code"] for m in g["members"]}
+        seen = []
+        for day in sorted(earlier):
+            for other in earlier[day].get("groups", []):
+                theirs = {m["code"] for m in other["members"]}
+                if len(mine & theirs) / len(mine | theirs) >= SAME_GROUP:
+                    seen.append(day)
+                    break
+        out.append({**g, "seen_days": seen, "checked_days": len(earlier)})
+    return out
+
+
 # ---- one full search ----------------------------------------------------------------------------
 
 _POOL = ThreadPoolExecutor(max_workers=2, thread_name_prefix="finder")

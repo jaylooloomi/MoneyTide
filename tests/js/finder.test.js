@@ -49,6 +49,9 @@ test('cardHtml: kind, closest grouping, members (outside one marked), facts and 
   assert.match(money, /成交值 <b>40\.00 億<\/b>（占全市場 <b>1\.23%<\/b>）/);
   assert.match(money, /平均漲幅 <b class="up">\+7\.00%<\/b>/);
   assert.doesNotMatch(html, /fd-money/); // older stored results without the fields
+  assert.match(cardHtml({ ...G, seen_days: ['2026-10-20', '2026-10-21'], checked_days: 4 }, 5), /🔁 近 5 天第 3 次/);
+  assert.match(cardHtml({ ...G, seen_days: [], checked_days: 4 }, 6), /🆕 首次/);
+  assert.doesNotMatch(cardHtml({ ...G, seen_days: [], checked_days: 0 }, 7), /fd-seen/); // nothing to compare with
   assert.match(cardHtml({ ...G, sources: [{ label: '概念股', group: 'AI' }] }, 1), /概念股：AI/);
 });
 

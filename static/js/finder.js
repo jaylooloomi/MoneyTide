@@ -88,9 +88,14 @@ export function cardHtml(g, i) {
     .filter(Boolean)
     .join('　');
   const news = g.news?.length ? `<div class="fd-news">📰 ${g.news.map((t) => escapeHtml(t)).join('<br>📰 ')}</div>` : '';
+  const seen = g.seen_days?.length
+    ? `<span class="fd-seen" title="前幾天也找到同一組合（成員重疊過半）：${g.seen_days.map((x) => x.slice(5)).join('、')}">🔁 近 ${g.checked_days + 1} 天第 ${g.seen_days.length + 1} 次</span>`
+    : g.checked_days
+      ? '<span class="fd-seen new" title="前幾天的結果裡沒有這個組合">🆕 首次</span>'
+      : '';
   return `<div class="fd-card" data-i="${i}">
     <div class="fd-top"><span class="link-badge" style="background:${KIND_COLOR[g.kind] || '#3a3e48'}">${escapeHtml(g.kind)}</span>
-      <span class="fd-title">${title}</span><span class="muted">${g.members.length} 檔</span>
+      <span class="fd-title">${title}</span>${seen}<span class="muted">${g.members.length} 檔</span>
       <button type="button" class="icon fd-save" data-save="${i}" title="把這群股票存成自訂族群，之後在 B／C／K 追蹤">＋族群</button></div>
     <div class="fd-chips">${chips}</div>${money}
     <div class="fd-facts">${facts}</div>${news}

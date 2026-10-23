@@ -145,6 +145,25 @@ def test_money_size():
     assert money_size(["A"], rows, 0)["turnover_share"] is None
 
 
+def test_persistence_same_combination_on_earlier_days():
+    from openmarket.history.finder import persistence
+
+    def grp(*codes):
+        return {"members": [{"code": c} for c in codes]}
+
+    today = [grp("A", "B"), grp("C", "D", "E"), grp("X", "Y")]
+    earlier = {
+        "2026-10-20": {"groups": [grp("A", "B"), grp("C", "D")]},  # A+B again; C+D overlaps 2/3
+        "2026-10-21": {"groups": [grp("A", "Z")]},  # A+Z vs A+B: 1/3, not the same
+        "2026-10-19": {"groups": [grp("B", "A")]},
+    }
+    out = persistence(today, earlier)
+    assert out[0]["seen_days"] == ["2026-10-19", "2026-10-20"] and out[0]["checked_days"] == 3
+    assert out[1]["seen_days"] == ["2026-10-20"]
+    assert out[2]["seen_days"] == []
+    assert "seen_days" not in today[0]  # the input is not changed
+
+
 def test_co_mentions():
     names = {"2327": "國巨*", "2492": "華新科", "6173": "信昌電"}
     titles = ["被動元件大漲 國巨、華新科領軍", "國巨法說會", "信昌電與華新科同步攻頂", "國巨、華新科領軍"]
