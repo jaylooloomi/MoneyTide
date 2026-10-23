@@ -221,31 +221,6 @@ def test_intraday_endpoint_uses_cached_minute_bars(store, tmp_path):
 
 
 
-def test_hot_members_turnover_and_amplitude():
-    from openmarket.history.linkage import amplitude_pct, hot_members, turnover_rate
-
-    def r(code, vol, cap, high, low, kind="stock"):
-        # close 10, prev close 10: shares outstanding = cap / 10
-        return {"code": code, "kind": kind, "close": 10, "prev_close": 10, "high": high, "low": low, "volume_shares": vol, "market_cap": cap}
-
-    rows = [
-        r("A", 600, 100000, 10.5, 10.0),  # 6% turnover, 5% range
-        r("B", 1000, 500000, 10.4, 10.0),  # 2% turnover: out
-        r("C", 2000, 100000, 10.2, 10.0),  # 20% turnover, 2% range: out
-        r("D", 900, 300000, 10.8, 10.2),  # 3% turnover: out at 5%
-        r("E", 800, 100000, 11.0, 10.0, kind="etf"),  # not a common stock
-        r("F", 1500, 200000, 10.6, 10.1),  # 7.5% turnover, 5% range
-    ]
-    assert turnover_rate(rows[0]) == 6.0 and amplitude_pct(rows[0]) == 5.0
-    members, total = hot_members(rows)
-    assert [m["code"] for m in members] == ["F", "A"] and total == 2  # by market cap, leader first
-    members, total = hot_members(rows, min_turnover=2.5)
-    assert {m["code"] for m in members} == {"A", "D", "F"}
-    members, total = hot_members(rows, min_turnover=2.5, limit=2)
-    assert {m["code"] for m in members} == {"A", "F"} and total == 3  # the highest turnover kept
-
-
-
 def test_align_bars_undoes_yahoo_back_adjustment():
     from openmarket.history.linkage import align_bars
 

@@ -21,7 +21,7 @@ from .config import STATIC_DIR, TAIPEI, USER_AGENT, AppConfig
 from .explain import explain_day
 from .history.linkage import (
     INTRADAY_HIGH_R, INTRADAY_LOW_R, bucket_closes, daily_linkage, fmt_minute, pair_matrix, peak_minute_from_bars, peak_minute_from_ticks,
-    HOT_AMPLITUDE, HOT_TURNOVER, align_bars, amplitude_pct, hot_members, limit_down_pct, limit_up_pct, minute_bars, turnover_rate, peak_stats, tick_bars, with_close_bar, race_points, returns, top_members, verdict_r, verdict_timing,
+    align_bars, amplitude_pct, limit_down_pct, limit_up_pct, minute_bars, turnover_rate, peak_stats, tick_bars, with_close_bar, race_points, returns, top_members, verdict_r, verdict_timing,
 )
 from .intraday import IntradayRecorder
 from .sources.yahoo_intraday import ONE_MINUTE_DAYS, fetch_bars, fetch_day_1m
@@ -450,10 +450,10 @@ def create_app(
             store.save_yahoo_1m(code, day, bars)
         return bars or None, ""
 
-    YAHOO_CONCURRENCY = 6  # members fetched at the same time (M can hold dozens of stocks)
+    YAHOO_CONCURRENCY = 6  # members whose bars are fetched at the same time
 
     async def linkage_payload(d: date, members: list[dict]) -> dict:
-        """K / M body for `members` (day rows, the largest market cap first) on day d."""
+        """K body for `members` (day rows, the largest market cap first) on day d."""
         store = app.state.history
         codes = [m["code"] for m in members]
         daily = await asyncio.to_thread(daily_linkage, store, d, codes)
@@ -566,23 +566,6 @@ def create_app(
         if len(members) < 2:
             raise HTTPException(404, "這個族群少於 2 檔普通股，無法計算連動性")
         return {**await linkage_payload(d, members), "group": group}
-
-    @app.get("/api/history/hot-linkage")
-    async def hot_linkage(
-        day: str = Query(..., alias="date"),
-        turnover: float = Query(HOT_TURNOVER, ge=0.5, le=50),
-        amplitude: float = Query(HOT_AMPLITUDE, ge=0, le=20),
-    ) -> dict:
-        """M · 高週轉連動性: every common stock with 週轉率 ≥ turnover % and 振幅 > amplitude % that day."""
-        d = _day(day)
-        rows = app.state.history.day_rows(d)
-        if not rows:
-            raise HTTPException(404, f"no data for {day}")
-        members, total = hot_members(rows, turnover, amplitude)
-        if len(members) < 2:
-            raise HTTPException(404, f"這一天週轉率 ≥ {turnover:g}% 且振幅 > {amplitude:g}% 的股票少於 2 檔")
-        out = await linkage_payload(d, members)
-        return {**out, "criteria": {"turnover": turnover, "amplitude": amplitude, "matched": total, "shown": len(members)}}
 
     @app.get("/api/history/intraday")
     async def stock_intraday(code: str, day: str = Query(..., alias="date")) -> dict:

@@ -1,7 +1,5 @@
-// K · 族群連動性 (a group's top members, /api/history/linkage) and M · 高週轉連動性 (every stock with
-// a high turnover rate and a wide range that day, /api/history/hot-linkage): daily / intraday
-// correlation and the animated intraday-high timeline. Pure HTML builders on top (node --test);
-// panel wiring below.
+// K · 族群連動性: daily / intraday correlation of a group's top members and the animated intraday-high
+// timeline (server: /api/history/linkage). Pure HTML builders on top (node --test); panel wiring below.
 
 import { mountRace } from './race.js';
 import { colorFor, escapeHtml, fmtPct } from './transform.js';
@@ -110,7 +108,7 @@ export function summaryHtml(d) {
 
 // ---- panels -------------------------------------------------------------------------------------
 
-/** Body shared by K and M: summary, both matrices and the animated timeline; returns stop() for the animation. */
+/** K's body: summary, both matrices and the animated timeline; returns stop() for the animation. */
 function renderBody(body, d, win, onStock, raceNote) {
   const names = d.members.map((m) => m.name);
   body.innerHTML = `${summaryHtml(d)}
@@ -193,97 +191,5 @@ export function mountLinkagePanel(container, { onStock }) {
       if (state.group) show(state.group, date, grouping);
     },
     hide: reset,
-  };
-}
-
-const HOT_TURNOVERS = [3, 5, 10];
-const HOT_AMPS = [2, 3, 5];
-
-/**
- * M · 高週轉連動性: the same view as K for every common stock with 週轉率 ≥ X% and 振幅 > Y% that day.
- * Follows the selected date, but only loads while on screen (and settles for a moment first), so a
- * replay or quick date stepping does not fire a Yahoo fetch for dozens of stocks each day.
- */
-export function mountHotLinkagePanel(container, { onStock }) {
-  const sec = document.createElement('section');
-  sec.id = 'hHotPanel';
-  sec.className = 'panel hM';
-  const pref = { turnover: 5, amplitude: 3 };
-  try {
-    Object.assign(pref, JSON.parse(localStorage.getItem('openmarket.history.hot') || '{}'));
-  } catch {
-    /* default */
-  }
-  const opts = (list, v, unit) => list.map((x) => `<option value="${x}"${x === v ? ' selected' : ''}>${unit}${x}%</option>`).join('');
-  sec.innerHTML = `<div class="panel-h"><b>M · 高週轉連動性</b><span id="hHotTitle"></span>
-      <select class="field" id="hHotTurn" title="週轉率＝成交股數 ÷ 流通股數">${opts(HOT_TURNOVERS, pref.turnover, '週轉率 ≥ ')}</select>
-      <select class="field" id="hHotAmp" title="振幅＝（最高 − 最低）÷ 昨收">${opts(HOT_AMPS, pref.amplitude, '振幅 &gt; ')}</select>
-      <span class="muted">普通股；最多 60 檔（週轉率最高的）；R &gt; 0.7 群體圍攻、&lt; 0.3 單兵作戰</span>
-      <div class="seg link-win-seg"><button data-value="20" class="on">20 日</button><button data-value="60">60 日</button></div>
-      <span class="muted" id="hHotNote" style="margin-left:auto"></span></div>
-    <div id="hHotBody" style="padding:8px 10px"><p class="hint">捲到這裡就會載入當天的高週轉股票。</p></div>`;
-  container.appendChild(sec);
-  const body = sec.querySelector('#hHotBody');
-  const state = { ticket: 0, data: null, win: '20', date: null, loadedKey: null, timer: null, visible: false, stopRace: () => {} };
-  wireWindow(sec, state, body);
-  const key = () => `${state.date}|${pref.turnover}|${pref.amplitude}`;
-
-  async function load() {
-    if (!state.date || key() === state.loadedKey) return;
-    state.loadedKey = key();
-    const t = ++state.ticket;
-    sec.querySelector('#hHotTitle').textContent = state.date;
-    sec.classList.add('loading');
-    try {
-      const q = `date=${encodeURIComponent(state.date)}&turnover=${pref.turnover}&amplitude=${pref.amplitude}`;
-      const resp = await fetch(`/api/history/hot-linkage?${q}`, { cache: 'no-store' });
-      const data = await resp.json();
-      if (t !== state.ticket) return;
-      if (!resp.ok) throw new Error(data.detail || `HTTP ${resp.status}`);
-      state.data = data;
-      const c = data.criteria;
-      sec.querySelector('#hHotTitle').textContent = `${data.date} · ${c.shown} 檔${c.matched > c.shown ? `（符合 ${c.matched} 檔，取週轉率最高的 ${c.shown} 檔）` : ''}`;
-      sec.querySelector('#hHotNote').textContent = data.notes.join('；');
-      state.stopRace();
-      state.stopRace = renderBody(body, data, state.win, onStock, '點一列看那檔的分時走勢；滑鼠移到股名看週轉率、振幅');
-    } catch (err) {
-      if (t !== state.ticket) return;
-      state.data = null;
-      state.stopRace();
-      body.innerHTML = `<p class="hint">${escapeHtml(err.message)}</p>`;
-    } finally {
-      if (t === state.ticket) sec.classList.remove('loading');
-    }
-  }
-  const onScreen = () => {
-    const r = sec.getBoundingClientRect();
-    return r.bottom > 0 && r.top < innerHeight;
-  };
-  function schedule() {
-    clearTimeout(state.timer);
-    if (state.visible || onScreen()) state.timer = setTimeout(load, 700);
-  }
-  // the history view scrolls inside its own container: check on its scroll too (throttled by the timer)
-  container.addEventListener('scroll', () => state.data === null || key() !== state.loadedKey ? schedule() : null, { passive: true });
-  new IntersectionObserver((entries) => {
-    state.visible = entries.some((e) => e.isIntersecting);
-    schedule();
-  }).observe(sec);
-  for (const [id, k] of [['#hHotTurn', 'turnover'], ['#hHotAmp', 'amplitude']]) {
-    sec.querySelector(id).addEventListener('change', (e) => {
-      pref[k] = Number(e.target.value);
-      try {
-        localStorage.setItem('openmarket.history.hot', JSON.stringify(pref));
-      } catch {
-        /* ignore */
-      }
-      schedule();
-    });
-  }
-  return {
-    refresh(date) {
-      state.date = date;
-      schedule();
-    },
   };
 }
