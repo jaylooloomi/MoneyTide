@@ -60,6 +60,10 @@ test('cardHtml: kind, closest grouping, members (outside one marked), facts and 
   assert.match(cardHtml({ ...G, turnover_100m: 4000, inst: { lots: 1, amount_100m: 0.5, buyers: 1, sellers: 0 } }, 2), /法人占成交 <b>&lt;0\.1%|法人占成交 <b><0\.1%/);
   assert.doesNotMatch(cardHtml({ ...G, turnover_100m: 0, inst: { lots: 1, amount_100m: 0.5, buyers: 1, sellers: 0 } }, 2), /法人占成交/);
   assert.doesNotMatch(cardHtml({ ...G, turnover_100m: 40, inst: { lots: 1, amount_100m: null, buyers: 1, sellers: 0 } }, 2), /法人占成交/);
+  const line = cardHtml({ ...G, inst: { lots: 10, amount_100m: 1, buyers: 1, sellers: 0 }, turnover_100m: 20, inst_streak: { days: 3, side: 'buy' } }, 2);
+  assert.match(line, /<div class="fd-inst">🏦 法人 .*法人占成交 .*法人連買 3 天/); // one 🏦 line for 法人
+  assert.doesNotMatch(line.match(/<div class="fd-facts">.*?<\/div>/s)[0], /法人/); // not mixed into the R / timing facts
+  assert.doesNotMatch(cardHtml({ ...G, inst_net: null }, 2), /fd-inst/);
   const split = cardHtml({ ...G, inst_split: { foreign: 1991, trust: 0, dealer: -19 } }, 2);
   assert.match(split, /外資 <b class="up">\+1,991<\/b>／投信 <b class="">0<\/b>／自營 <b class="down">−19<\/b> 張/);
   assert.doesNotMatch(cardHtml(G, 2), /外資/);

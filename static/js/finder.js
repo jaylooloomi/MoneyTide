@@ -114,14 +114,18 @@ export function cardHtml(g, i) {
     `高點差 <b>${g.peak_spread ?? '—'}</b> 分`,
     g.start_spread != null ? `起漲差 ${g.start_spread} 分` : '',
     g.together_bursts?.length ? `同時爆量 ${g.together_bursts.slice(0, 3).join('、')}` : '',
-    instText(g),
-    instShareText(g),
-    instSplitText(g),
-    g.inst_streak ? `<b class="${g.inst_streak.side === 'buy' ? 'up' : 'down'}" title="組合合計三大法人買賣超，連續同方向的天數">法人連${g.inst_streak.side === 'buy' ? '買' : '賣'} ${g.inst_streak.days} 天</b>` : '',
     g.resolution === 5 ? '<span class="muted">5 分 K</span>' : '',
   ]
     .filter(Boolean)
     .join('　');
+  // 🏦 everything about 法人 on one line of its own (who is buying), under 💰 (how much money)
+  const instParts = [
+    instText(g),
+    instShareText(g),
+    instSplitText(g),
+    g.inst_streak ? `<b class="${g.inst_streak.side === 'buy' ? 'up' : 'down'}" title="組合合計三大法人買賣超，連續同方向的天數">法人連${g.inst_streak.side === 'buy' ? '買' : '賣'} ${g.inst_streak.days} 天</b>` : '',
+  ].filter(Boolean);
+  const inst = instParts.length ? `<div class="fd-inst">🏦 ${instParts.join('　')}</div>` : '';
   const news = g.news?.length ? `<div class="fd-news">📰 ${g.news.map((t) => escapeHtml(t)).join('<br>📰 ')}</div>` : '';
   const themes = g.themes?.length
     ? `<div class="fd-themes" title="近 3 個新聞日提到這幾檔的題材關鍵字（括號＝提到幾檔）">📰 題材：${g.themes.map((t) => `${escapeHtml(t.term)}${g.members.length > 1 ? `（${t.count}）` : ''}`).join('、')}</div>`
@@ -135,7 +139,7 @@ export function cardHtml(g, i) {
     <div class="fd-top"><span class="link-badge" style="background:${KIND_COLOR[g.kind] || '#3a3e48'}">${escapeHtml(g.kind)}</span>
       <span class="fd-title">${title}</span>${seen}<span class="muted">${g.members.length} 檔</span>
       <button type="button" class="icon fd-save" data-save="${i}" title="把這群股票存成自訂族群，之後在 B／C／K 追蹤">＋族群</button></div>
-    <div class="fd-chips">${chips}</div>${money}
+    <div class="fd-chips">${chips}</div>${money}${inst}
     <div class="fd-facts">${facts}</div>${themes}${news}
   </div>`;
 }
