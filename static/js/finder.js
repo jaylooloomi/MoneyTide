@@ -84,7 +84,7 @@ export function cardHtml(g, i) {
       const extra = [m.peak ? `高點 ${m.peak}` : '', m.locked_at ? `🔒${m.locked_at}` : '', m.start ? `起漲 ${m.start}` : ''].filter(Boolean).join('　');
       const pool = g.pool?.[m.code]?.length ? `（${g.pool[m.code].join('、')}）` : '';
       const themes = m.themes?.length ? `　📰 ${m.themes.join('、')}` : '';
-      return `<span class="fd-chip${outside.has(m.code) ? ' out' : ''}" style="background:${colorFor(m.change_pct, 7)}" title="${escapeHtml(m.code)} ${escapeHtml(m.name)}${pool}　${extra}${m.turnover_rate != null ? `　週轉率 ${m.turnover_rate.toFixed(1)}%` : ''}${escapeHtml(themes)}${outside.has(m.code) ? '　（不在最接近的分類裡）' : ''}">${escapeHtml(m.name)} <small>${fmtPct(m.change_pct)}</small>${m.locked_at ? ' 🔒' : ''}</span>`;
+      return `<span class="fd-chip${outside.has(m.code) ? ' out' : ''}" style="background:${colorFor(m.change_pct, 7)}" title="${escapeHtml(m.code)} ${escapeHtml(m.name)}${pool}　${extra}${m.turnover_rate != null ? `　週轉率 ${m.turnover_rate.toFixed(1)}%` : ''}${m.inst_net != null ? `　法人 ${m.inst_net > 0 ? '+' : m.inst_net < 0 ? '−' : ''}${Math.abs(Math.round(m.inst_net / 1000)).toLocaleString()} 張` : ''}${escapeHtml(themes)}${outside.has(m.code) ? '　（不在最接近的分類裡）' : ''}">${escapeHtml(m.name)} <small>${fmtPct(m.change_pct)}</small>${m.locked_at ? ' 🔒' : ''}</span>`;
     })
     .join('');
   const money = g.turnover_100m != null
