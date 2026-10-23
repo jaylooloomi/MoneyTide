@@ -123,6 +123,11 @@ export function filterOptions(d) {
   return opts;
 }
 
+/** The chip actually in effect: the saved one if that day has cards for it, else 全部 (cards and CSV agree). */
+export function shownFilter(d, saved) {
+  return saved && filterOptions(d).some((o) => o.key === saved && o.n) ? saved : 'all';
+}
+
 export function matchesFilter(g, key, method) {
   if (!key || key === 'all') return true;
   return method === 'new' ? g.kind === key : !!g.sources?.some((s) => s.label === key);
@@ -399,7 +404,7 @@ export function mountFinderPanel(container, { onStock }) {
   });
   sec.querySelector('#hFinderRun').addEventListener('click', () => load(true));
   sec.querySelector('#hFinderCsv').addEventListener('click', () => {
-    const out = csvExport(state.data, state.data ? pref.filter[state.data.method] : 'all');
+    const out = csvExport(state.data, state.data ? shownFilter(state.data, pref.filter[state.data.method]) : 'all');
     if (!out) return;
     const a = document.createElement('a');
     a.href = URL.createObjectURL(new Blob([toCsv(out[1], out[2])], { type: 'text/csv;charset=utf-8' }));
@@ -447,8 +452,7 @@ export function mountFinderPanel(container, { onStock }) {
       closeDetail();
       return;
     }
-    let f = pref.filter[data.method] || 'all';
-    if (!filterOptions(data).some((o) => o.key === f && o.n)) f = 'all';
+    const f = shownFilter(data, pref.filter[data.method]);
     const cards = data.groups.map((g, i) => (matchesFilter(g, f, data.method) ? cardHtml(g, i) : '')).join('');
     body.innerHTML = `${filterHtml(data, f)}<div class="fd-cards">${cards}</div><p class="hint" style="margin:6px 0 0">點卡片看這群股票的連動動畫與走勢</p>`;
     closeDetail();

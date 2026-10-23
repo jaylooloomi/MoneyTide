@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { PRESETS, cardHtml, digestText, finderMarkIndex, finderMarkTitle, csvExport, defaultGroupName, filterHtml, funnelText, presetOf, filterOptions, matchesFilter, progressView, queryOf, statsText } from '../../static/js/finder.js';
+import { PRESETS, cardHtml, digestText, shownFilter, finderMarkIndex, finderMarkTitle, csvExport, defaultGroupName, filterHtml, funnelText, presetOf, filterOptions, matchesFilter, progressView, queryOf, statsText } from '../../static/js/finder.js';
 
 test('queryOf sends only the fields of the chosen method; blank 起漲差 means not required', () => {
   const p = { daily_r: 0.75, daily_window: 20, new_daily_r: 0.85, pool_top: 30, intraday_r: 0.5, peak_gap: 8, start_gap: '', require_burst: true, groupings: ['custom', 'news'], pool_sources: ['gain'] };
@@ -166,4 +166,12 @@ test('digestText: counts per method from stored results, 🔁 for repeats, nothi
   assert.equal(digestText(known, { stored: false, groups: [] }), '💡 資金連動：找法1 3 群（🔁 1）');
   assert.equal(digestText({ groups: [] }, null), '💡 資金連動：找法1 0 群');
   assert.equal(digestText({ stored: false, groups: [] }, null), '');
+});
+
+test('shownFilter: a saved chip the day has no cards for falls back to 全部 (so the CSV matches the screen)', () => {
+  const d = { method: 'new', groups: [{ kind: '已知族群' }] };
+  assert.equal(shownFilter(d, '已知族群'), '已知族群');
+  assert.equal(shownFilter(d, '跨族群新組合'), 'all');
+  assert.equal(shownFilter(d, undefined), 'all');
+  assert.equal(csvExport({ ...d, date: '2026-10-22', params: {}, groups: [{ kind: '已知族群', members: [{ code: '1', name: 'a' }] }] }, shownFilter(d, '跨族群新組合'))[2].length, 1);
 });
