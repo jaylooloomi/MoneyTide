@@ -249,3 +249,18 @@ def test_align_bars_undoes_yahoo_back_adjustment():
     assert align_bars(same, {"high": 314.0, "low": 296.5}) == same
     odd = [("09:00", 334.0, 296.5, 300.0, 300.0, 1.0)]  # high off, low equal: not one factor → untouched
     assert align_bars(odd, {"high": 314.0, "low": 296.5}) == odd
+
+
+def test_limit_up_price_is_the_tick_price_not_one_rebuilt_from_the_rounded_pct():
+    from openmarket.history.linkage import limit_up_pct, limit_up_price, locked_level
+
+    assert limit_up_price(487.5) == 536 and limit_up_pct(487.5) == 9.95  # 487.5 × 1.0995 = 536.006
+    assert limit_up_price(333.5) == 366.5 and limit_up_price(100) == 110 and limit_up_price(None) is None
+    closes = {0: 530.0, 1: 536.0, 2: 536.0}
+    assert locked_level(closes, {"prev_close": 487.5, "high": 536.0}) == 536.0  # was None before
+    bad = 0
+    for k in range(1000, 10000):  # every 0.1 tick from 100 to 1000: a high at limit-up is always caught
+        prev = k / 10
+        if locked_level({0: 1.0}, {"prev_close": prev, "high": limit_up_price(prev)}) is None:
+            bad += 1
+    assert bad == 0

@@ -43,7 +43,7 @@ export function statsAt(data, m) {
   let locked = false;
   if (limit) {
     for (const [t, , , , c] of bars) {
-      const at = c >= limit - 0.005;
+      const at = c >= limit * (1 - 2e-4); // the price rebuilt from the rounded % can sit just above the real one (487.5 → 536.006)
       if (at && firstLock === null) firstLock = t;
       if (locked && !at) opens += 1;
       locked = at;

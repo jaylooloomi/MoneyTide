@@ -27,10 +27,10 @@ from dataclasses import asdict, dataclass, field
 from datetime import date
 from itertools import combinations
 
-from .linkage import align_bars, amplitude_pct, limit_up_pct, minutes, pearson, turnover_rate
+from .linkage import align_bars, amplitude_pct, limit_up_price, minutes, pearson, turnover_rate
 from .store import HistoryStore
 
-FINDER_VERSION = 4  # part of the cache key: bump when the search logic changes, so stored results are redone
+FINDER_VERSION = 5  # part of the cache key: bump when the search logic changes, so stored results are redone
 PEAK_END = 240  # the intraday high is taken over 09:00–13:00
 OPEN_MINUTES = 2  # a high at 09:00–09:02 is the open, not a signal (unless locked limit-up)
 BUCKETS = 54  # 5-minute buckets 09:00–13:25
@@ -289,9 +289,7 @@ def intraday_features(by_session: Mapping[date, list[tuple]], rows_by_session: M
     f = Intraday(resolution=resolution)
     for s in sorted(by_session):
         row = rows_by_session.get(s) or {}
-        pct = limit_up_pct(row.get("prev_close"))
-        limit = row["prev_close"] * (1 + pct / 100) if pct is not None else None
-        f.returns.extend(bucket_returns(by_session[s], limit))
+        f.returns.extend(bucket_returns(by_session[s], limit_up_price(row.get("prev_close"))))
     bars = [b for b in by_session.get(day, []) if 0 <= minutes(b[0]) <= 270]
     row = rows_by_session.get(day) or {}
     if not bars:
@@ -303,9 +301,8 @@ def intraday_features(by_session: Mapping[date, list[tuple]], rows_by_session: M
         before = [b for b in window if minutes(b[0]) <= f.peak]
         lo = min(b[2] for b in before)
         f.start = max(minutes(b[0]) for b in before if b[2] == lo)  # the last touch of the low before the run
-    pct = limit_up_pct(row.get("prev_close"))
-    if pct is not None:
-        limit = row["prev_close"] * (1 + pct / 100)
+    limit = limit_up_price(row.get("prev_close"))
+    if limit is not None:
         f.locked_at = next((minutes(b[0]) for b in bars if b[3] >= limit - 0.001), None)
     vol: dict[int, float] = {}
     for b in bars:

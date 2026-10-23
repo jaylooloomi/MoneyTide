@@ -68,3 +68,11 @@ test('benchPath / buildIntradayOption: 大盤／櫃買 drawn at the same % of th
   assert.ok(opt.yAxis[0].min <= 86); // the whole index line fits, not just what has been played
   assert.equal(buildIntradayOption(data, 3).series.length, 3); // no benchmarks: unchanged
 });
+
+test('statsAt: the lock is caught when the rounded % rebuilds a price just above the limit', () => {
+  // prev 487.5 → limit-up 536 (9.95%: 487.5 × 1.0995 = 536.006)
+  const d = { prev_close: 487.5, limit_up_pct: 9.95, bars: [[0, 520, 525, 519, 524, 1], [1, 524, 536, 524, 536, 1], [2, 536, 536, 536, 536, 1]] };
+  const s = statsAt(d, 270);
+  assert.equal(s.firstLock, 1);
+  assert.equal(s.locked, true);
+});
