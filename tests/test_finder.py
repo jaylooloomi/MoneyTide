@@ -311,3 +311,24 @@ def test_finder_api_stored_result_gets_history_and_themes(tmp_path):
         (g,) = r.json()["groups"]
         assert g["checked_days"] == 0 and g["themes"] == [{"term": "題材甲", "count": 1}]
         assert g["members"][0]["themes"] == ["題材甲"]
+
+
+def test_finder_api_themes_skip_news_older_than_a_week(tmp_path):
+    from datetime import datetime
+
+    from fastapi.testclient import TestClient
+
+    from openmarket.api import create_app
+    from openmarket.config import AppConfig
+    from openmarket.history.store import HistoryStore
+
+    s = HistoryStore(tmp_path / "h.sqlite")
+    d = date(2026, 3, 20)
+    s.save_day(d, [{"code": "A", "name": "a", "market": "上市", "industry": "X", "kind": "stock", "close": 10, "prev_close": 10, "change": 0, "change_pct": 0}], datetime(2026, 3, 20, 15))
+    s.save_news_day(date(2026, 3, 2), {"舊題材": {"mentions": 1, "codes": {"A": 1}, "titles": []}}, 1)  # 18 days before
+    p = FinderParams(groupings=("industry",))
+    s.save_finder(d, "known", p.key() + "|industry", {"date": d.isoformat(), "method": "known", "groups": [{"members": [{"code": "A", "name": "a"}]}], "stats": {}})
+    app = create_app(AppConfig(data_dir=tmp_path), start_polling=False, start_history=False, start_concepts=False, history_store=s)
+    with TestClient(app, base_url="http://127.0.0.1") as client:
+        (g,) = client.get("/api/history/finder", params={"date": d.isoformat(), "method": "known", "groupings": "industry"}).json()["groups"]
+        assert g["themes"] == [] and g["members"][0]["themes"] == []

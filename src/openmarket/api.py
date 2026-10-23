@@ -556,11 +556,11 @@ def create_app(
         """大盤 / 櫃買 for the top of K's timeline: 1m (else 5m) index bars aligned to the official index,
         ending on its close. A market without a stored index row that day is left out."""
         index = app.state.history.index_rows().get(d.isoformat(), {})
-        out = []
-        for code, (name, market) in INDEX_SYMBOLS.items():
+
+        async def one(code: str, name: str, market: str) -> dict | None:
             row = index.get(market)
             if not row or row.get("close") is None or row.get("change") is None:
-                continue
+                return None
             prev = row["close"] - row["change"]
             bars, _ = await minute_bars_for(http, code, market, d)
             if not bars:
@@ -570,8 +570,11 @@ def create_app(
             if pts:
                 close = round(row["change"] / prev * 100, 2)
                 pts = [p for p in pts if p[0] < 270] + [[270, close, close, close]]
-            out.append({"code": code, "name": name, "change_pct": round(row["change"] / prev * 100, 2), "points": pts})
-        return out
+            return {"code": code, "name": name, "change_pct": round(row["change"] / prev * 100, 2), "points": pts}
+
+        # both indexes at once: a slow Yahoo must not add its timeouts twice to every K load
+        got = await asyncio.gather(*(one(code, name, market) for code, (name, market) in INDEX_SYMBOLS.items()))
+        return [x for x in got if x is not None]
 
     def _day(day: str) -> date:
         try:
@@ -597,6 +600,7 @@ def create_app(
     # ---- N · 資金連動搜尋 (history/finder.py) -----------------------------------------------------
 
     FINDER_CONCURRENCY = 12  # Yahoo served 92 stocks in ~2 s at 6–24 at once (2026-10-24 test)
+    NEWS_THEME_DAYS = 7  # 📰 only news days this close to the shown day (a gap in collection must not show old news)
     finder_running: dict[tuple, asyncio.Task] = {}
     finder_progress: dict[tuple, dict] = {}  # (date, method, key) → {stage, done, total} while running
 
@@ -698,8 +702,8 @@ def create_app(
             earlier_days = store.trading_dates(up_to=d, limit=FINDER_PRECOMPUTE_DAYS)[1:]
             earlier = {e.isoformat(): r for e in earlier_days if (r := store.finder(e, method, key)) is not None}
             groups = persistence(res.get("groups", []), earlier)
-            # 📰 the news keywords naming each member (the latest 3 news days up to d), attached, not stored
-            news = [store.news_day(x) for x in store.news_dates_sorted(up_to=d, limit=3)]
+            # 📰 the news keywords naming each member (the latest 3 news days within a week up to d), attached, not stored
+            news = [store.news_day(x) for x in store.news_dates_sorted(up_to=d, limit=3) if (d - x).days <= NEWS_THEME_DAYS]
             return {**res, "groups": finder_news_themes(groups, news)}
 
         if not refresh:
