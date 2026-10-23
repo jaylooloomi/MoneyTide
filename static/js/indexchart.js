@@ -67,24 +67,29 @@ export function indexTooltip(d) {
   return lines.join('<br>');
 }
 
-/** ECharts option: grids 0/2 = candles (TAIEX/TPEx), 1/3 = turnover bars; one shared dataZoom. */
-export function buildIndexOption(days, selected, visible = DEFAULT_VISIBLE) {
+// which markets the panel shows: both stacked, or one of them full height
+export const INDEX_VIEWS = { both: '大盤＋櫃買', twse: '加權', tpex: '櫃買' };
+const viewMarkets = (view) => MARKETS.filter((m) => view === 'both' || !INDEX_VIEWS[view] || m.key === view);
+
+/** ECharts option: per shown market a candle grid and a turnover grid below it; one shared dataZoom. */
+export function buildIndexOption(days, selected, visible = DEFAULT_VISIBLE, view = 'both') {
   const dates = days.map((d) => d.date);
-  const grids = [
-    { top: 28, height: '27%' },
-    { top: '35%', height: '9%' },
-    { top: '52%', height: '27%' },
-    { top: '81%', height: '9%' },
-  ].map((g) => ({ left: 64, right: 18, ...g }));
+  const shown = viewMarkets(view);
+  const layout =
+    shown.length === 2
+      ? [{ top: 28, height: '27%' }, { top: '35%', height: '9%' }, { top: '52%', height: '27%' }, { top: '81%', height: '9%' }]
+      : [{ top: 28, height: '62%' }, { top: '72%', height: '18%' }];
+  const grids = layout.map((g) => ({ left: 64, right: 18, ...g }));
+  const last = grids.length - 1;
   const xAxis = grids.map((_, i) => ({
     type: 'category',
     gridIndex: i,
     data: dates,
     boundaryGap: true,
     axisLine: { lineStyle: { color: '#444a57' } },
-    axisLabel: { show: i === 1 || i === 3, color: '#999' },
+    axisLabel: { show: i % 2 === 1, color: '#999' },
     axisTick: { show: false },
-    axisPointer: { label: { show: i === 3 } },
+    axisPointer: { label: { show: i === last } },
   }));
   const yAxis = grids.map((_, i) => ({
     type: 'value',
@@ -96,7 +101,7 @@ export function buildIndexOption(days, selected, visible = DEFAULT_VISIBLE) {
   }));
   const series = [];
   const mark = selected ? { symbol: 'none', silent: true, label: { show: false }, lineStyle: { color: '#ffd400', type: 'solid', width: 1 }, data: [{ xAxis: selected }] } : undefined;
-  MARKETS.forEach(({ key, label }, m) => {
+  shown.forEach(({ key, label }, m) => {
     const k = m * 2;
     const rows = days.map((d) => d[key]);
     series.push({
@@ -150,7 +155,10 @@ export function buildIndexOption(days, selected, visible = DEFAULT_VISIBLE) {
     symbolRotate: 180,
     itemStyle: { color: '#ffd400' },
     data: days
-      .map((d, i) => (isStrongDay(d) && d.twse?.high ? [i, Math.round(d.twse.high * 1.012 * 100) / 100] : null))
+      .map((d, i) => {
+        const top = d[shown[0].key]?.high; // marks sit above the first shown market's candles
+        return isStrongDay(d) && top ? [i, Math.round(top * 1.012 * 100) / 100] : null;
+      })
       .filter(Boolean),
     tooltip: { show: false },
   });
@@ -172,8 +180,8 @@ export function buildIndexOption(days, selected, visible = DEFAULT_VISIBLE) {
     xAxis,
     yAxis,
     dataZoom: [
-      { type: 'inside', xAxisIndex: [0, 1, 2, 3], startValue: Math.max(0, end - visible + 1), endValue: end },
-      { type: 'slider', xAxisIndex: [0, 1, 2, 3], bottom: 4, height: 16, startValue: Math.max(0, end - visible + 1), endValue: end, textStyle: { color: '#999' } },
+      { type: 'inside', xAxisIndex: grids.map((_, i) => i), startValue: Math.max(0, end - visible + 1), endValue: end },
+      { type: 'slider', xAxisIndex: grids.map((_, i) => i), bottom: 4, height: 16, startValue: Math.max(0, end - visible + 1), endValue: end, textStyle: { color: '#999' } },
     ],
     series,
   };
@@ -201,12 +209,48 @@ export function mountIndexPanel(container, onPick) {
   sec.style.gridColumn = '1 / -1';
   sec.innerHTML = `<div class="panel-h"><b>G · 大盤＋櫃買</b>
       <span class="muted">日 K、MA5／20／60、成交值；▼＝強勢日（≥5% 佔比 ≥ ${STRONG_DAY.ratio}% 或漲停 ≥ ${STRONG_DAY.limitUp} 家）；點任一天切換上方所有面板</span>
+      <div class="seg" id="hIndexView" role="group" aria-label="顯示市場">${Object.entries(INDEX_VIEWS).map(([k, v]) => `<button data-value="${k}">${v}</button>`).join('')}</div>
       <span class="muted" id="hIndexNote" style="margin-left:auto"></span></div>
     <div id="hIndexChart" style="height:560px"></div>`;
   container.appendChild(sec);
   const el = sec.querySelector('#hIndexChart');
   const note = sec.querySelector('#hIndexNote');
-  const state = { days: [], selected: null, chart: null, timer: null, loaded: false };
+  const state = { days: [], selected: null, chart: null, timer: null, loaded: false, view: 'both' };
+  try {
+    const saved = localStorage.getItem('openmarket.history.indexView');
+    if (saved in INDEX_VIEWS) state.view = saved;
+  } catch {
+    /* default */
+  }
+  const seg = sec.querySelector('#hIndexView');
+  const renderSeg = () => {
+    for (const b of seg.querySelectorAll('button')) {
+      b.classList.toggle('on', b.dataset.value === state.view);
+      b.setAttribute('aria-pressed', String(b.dataset.value === state.view));
+    }
+  };
+  renderSeg();
+  seg.addEventListener('click', (e) => {
+    const b = e.target.closest('button[data-value]');
+    if (!b || b.dataset.value === state.view) return;
+    state.view = b.dataset.value;
+    try {
+      localStorage.setItem('openmarket.history.indexView', state.view);
+    } catch {
+      /* ignore */
+    }
+    renderSeg();
+    if (state.loaded) draw(true);
+  });
+
+  /** Redraw with the current view; keepZoom keeps the visible date range across view switches. */
+  function draw(keepZoom = false) {
+    const chart = ensureChart();
+    const dz = keepZoom ? chart.getOption()?.dataZoom?.[0] : null;
+    const opt = buildIndexOption(state.days, state.selected, DEFAULT_VISIBLE, state.view);
+    if (dz && Number.isFinite(dz.startValue)) for (const z of opt.dataZoom) Object.assign(z, { startValue: dz.startValue, endValue: dz.endValue });
+    chart.setOption(opt, { notMerge: true });
+  }
 
   function ensureChart() {
     if (state.chart) return state.chart;
@@ -215,7 +259,8 @@ export function mountIndexPanel(container, onPick) {
     // click anywhere inside a grid (not only on a candle) picks that day
     state.chart.getZr().on('click', (e) => {
       const pt = [e.offsetX, e.offsetY];
-      for (let g = 0; g < 4; g += 1) {
+      const gridCount = state.view === 'both' ? 4 : 2;
+      for (let g = 0; g < gridCount; g += 1) {
         if (!state.chart.containPixel({ gridIndex: g }, pt)) continue;
         const [i] = state.chart.convertFromPixel({ gridIndex: g }, pt); // category axis → day index
         const d = state.days[Math.round(i)];
@@ -255,7 +300,7 @@ export function mountIndexPanel(container, onPick) {
     }
     if (!hasIndex) return;
     state.loaded = true;
-    ensureChart().setOption(buildIndexOption(state.days, state.selected), { notMerge: true });
+    draw();
   }
 
   function mark(date) {
@@ -263,7 +308,8 @@ export function mountIndexPanel(container, onPick) {
     if (!state.loaded) return;
     const chart = ensureChart();
     const line = { symbol: 'none', silent: true, label: { show: false }, lineStyle: { color: '#ffd400', type: 'solid', width: 1 }, data: [{ xAxis: date }] };
-    chart.setOption({ series: ['twseK', 'twseVol', 'tpexK', 'tpexVol'].map((id) => ({ id, markLine: line })) });
+    const ids = viewMarkets(state.view).flatMap(({ key }) => [`${key}K`, `${key}Vol`]);
+    chart.setOption({ series: ids.map((id) => ({ id, markLine: line })) });
     const idx = state.days.findIndex((d) => d.date === date);
     const dz = chart.getOption().dataZoom?.[0];
     if (idx < 0 || !dz) return;

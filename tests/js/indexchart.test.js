@@ -52,3 +52,15 @@ test('windowShowing keeps the width and clamps to the data', () => {
   assert.deepEqual(windowShowing(99, 0, 9, 100), [90, 99]);
   assert.deepEqual(windowShowing(0, 90, 99, 100), [0, 9]);
 });
+
+test('single-market views use two full-height grids', async () => {
+  const { buildIndexOption } = await import('../../static/js/indexchart.js');
+  const tpex = buildIndexOption(days, '2026-09-02', 2, 'tpex');
+  assert.equal(tpex.grid.length, 2);
+  assert.deepEqual(tpex.series.filter((s) => s.type === 'candlestick').map((s) => s.id), ['tpexK']);
+  assert.deepEqual(tpex.dataZoom[0].xAxisIndex, [0, 1]);
+  assert.deepEqual(tpex.series.find((s) => s.id === 'strong').data.map((p) => p[0]), [0]); // marked above the TPEx candle
+  const twse = buildIndexOption(days, null, 2, 'twse');
+  assert.deepEqual(twse.series.filter((s) => s.type === 'candlestick').map((s) => s.id), ['twseK']);
+  assert.equal(buildIndexOption(days, null, 2, 'both').grid.length, 4);
+});
