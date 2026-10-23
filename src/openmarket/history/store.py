@@ -46,6 +46,11 @@ CREATE TABLE IF NOT EXISTS inst_day (
     rows INTEGER NOT NULL DEFAULT 0,
     fetched_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS ptt_day (
+    date TEXT PRIMARY KEY,
+    titles TEXT NOT NULL,
+    fetched_at TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS news_day (
     date TEXT PRIMARY KEY,
     themes TEXT NOT NULL,
@@ -396,3 +401,36 @@ class HistoryStore:
 
     def inst_version(self) -> int:
         return self._inst_version
+
+
+    # ---- PTT 股版 titles per day (heat bursts) ------------------------------------------------
+
+    def save_ptt_days(self, by_day: dict[date, list[str]]) -> None:
+        import json
+
+        now = datetime.now().astimezone().isoformat()
+        with self._lock, self._conn() as c:
+            c.executemany(
+                "INSERT OR REPLACE INTO ptt_day (date, titles, fetched_at) VALUES (?, ?, ?)",
+                [(d.isoformat(), json.dumps(t, ensure_ascii=False), now) for d, t in by_day.items()],
+            )
+        self._news_version += 1
+
+    def ptt_dates_sorted(self, up_to: date | None = None, limit: int | None = None) -> list[date]:
+        sql, args = "SELECT date FROM ptt_day", []
+        if up_to is not None:
+            sql += " WHERE date <= ?"
+            args.append(up_to.isoformat())
+        sql += " ORDER BY date DESC"
+        if limit is not None:
+            sql += " LIMIT ?"
+            args.append(limit)
+        with self._conn() as c:
+            return [date.fromisoformat(r["date"]) for r in c.execute(sql, args)]
+
+    def ptt_titles(self, day: date) -> list[str]:
+        import json
+
+        with self._conn() as c:
+            row = c.execute("SELECT titles FROM ptt_day WHERE date = ?", (day.isoformat(),)).fetchone()
+        return json.loads(row["titles"]) if row else []

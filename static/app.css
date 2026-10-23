@@ -265,3 +265,5 @@ body.resizing-cols { cursor: ew-resize; user-select: none; }
 
 /* long group names (細產業 etc.): cut with … and show the full name on hover */
 .clip { display: inline-block; max-width: 12em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom; }
+
+.burst-tag { display: inline-block; margin-left: 4px; padding: 0 5px; border-radius: 3px; background: #b8501a; color: #fff; font-size: 11px; font-weight: 600; }

@@ -19,7 +19,7 @@ from pydantic import BaseModel
 from .ai import AIConfig
 from .config import STATIC_DIR, TAIPEI, USER_AGENT, AppConfig
 from .explain import explain_day
-from .news_themes import NewsThemeCollector, themes_for_day, themes_mapping
+from .news_themes import NewsThemeCollector, heat_bursts, themes_for_day, themes_mapping
 from .concepts import ConceptLoader
 from .groups import GroupStore
 from .history.api import create_history_router, live_quote_day
@@ -35,6 +35,7 @@ from .sources.institutional import fetch_inst_day
 from .sources.company_address import fetch_county_groups
 from .sources.google_news import fetch_headlines
 from .sources.news_themes import fetch_day_headlines
+from .sources.ptt import fetch_titles_since, make_ptt_client
 from .sources.tpex_chains import fetch_chains
 from .sources.yahoo_concepts import fetch_concepts
 from .sources.shares import fetch_shares
@@ -150,12 +151,14 @@ def create_app(
                 fetch_inst=lambda d: fetch_inst_day(client, d, asyncio.sleep, REQUEST_DELAY_SECONDS),
             )
             tasks.append(asyncio.create_task(app.state.collector.run()))
+            ptt_client = app.state.ptt_client = make_ptt_client()
             app.state.news = NewsThemeCollector(
                 store=app.state.history,
                 fetch_day=lambda d: fetch_day_headlines(client, d, asyncio.sleep, REQUEST_DELAY_SECONDS),
                 reference=stock_names,
                 ai_config=app.state.ai,
                 http=client,
+                fetch_ptt=lambda since: fetch_titles_since(ptt_client, since, asyncio.sleep),
             )
             tasks.append(asyncio.create_task(app.state.news.run()))
         if start_concepts and app.state.concepts is None:
@@ -194,12 +197,15 @@ def create_app(
                     await task
             if client is not None:
                 await client.aclose()
+            if app.state.ptt_client is not None:
+                await app.state.ptt_client.aclose()
 
     app = FastAPI(title="Open Market", lifespan=lifespan)
     app.state.poller = poller
     app.state.history = history_store or HistoryStore(config.data_dir / "history.sqlite")
     app.state.collector = None
     app.state.news = None
+    app.state.ptt_client = None
     app.state.concepts = concepts
     app.state.chains = chains
     app.state.counties = counties
@@ -391,7 +397,11 @@ def create_app(
                 "avg_pct": sum(pcts) / len(pcts) if pcts else None,
                 "strong_ratio": sum(p >= 5 for p in pcts) / len(pcts) * 100 if pcts else None,
             })
-        return {"date": day, "news_date": used.isoformat() if used else None, "method": method, "themes": out}
+        bursts = heat_bursts(app.state.history, d, named_groups())
+        hot = {b["term"] for b in bursts}
+        for t in out:
+            t["burst"] = t["name"] in hot or any(a in hot for a in t["aliases"])
+        return {"date": day, "news_date": used.isoformat() if used else None, "method": method, "themes": out, "bursts": bursts}
 
     @app.get("/api/counties/status")
     def counties_status() -> dict:

@@ -20,7 +20,7 @@ from .ai import AIConfig, AIError, complete
 from .config import TAIPEI
 from .history.store import HistoryStore
 from .sources.google_news import Headline
-from .sources.news_themes import NameIndex, extract_day
+from .sources.news_themes import NameIndex, extract_day, themes_in
 
 log = logging.getLogger(__name__)
 
@@ -170,6 +170,7 @@ class NewsThemeCollector:
         fetch_day: Callable[[date], Awaitable[list[Headline]]],
         reference: Callable[[], Mapping[str, str]],  # common-stock code → name
         ai_config: AIConfig,
+        fetch_ptt: Callable[[date], Awaitable[dict[date, list[str]]]] | None = None,
         http: httpx.AsyncClient | None = None,
         clock: Callable[[], datetime] = lambda: datetime.now(TAIPEI),
         sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
@@ -177,6 +178,7 @@ class NewsThemeCollector:
     ) -> None:
         self.store = store
         self._fetch_day = fetch_day
+        self._fetch_ptt = fetch_ptt
         self._reference = reference
         self._ai = ai_config
         self._http = http
@@ -212,7 +214,27 @@ class NewsThemeCollector:
             self.state.done += 1
             await self._sleep(self._delay)
         self.state.running = False
+        await self.collect_ptt()
         await self.clean_latest_with_ai(dict(names))
+
+    async def collect_ptt(self) -> None:
+        """PTT titles from the newest page back to the day before the latest stored one (first run:
+        PTT_DAYS back); days that were covered are replaced, so a partly fetched day fills up."""
+        if self._fetch_ptt is None:
+            return
+        today = self._clock().astimezone(TAIPEI).date()
+        stored = self.store.ptt_dates_sorted(limit=1)
+        since = max(stored[0] - timedelta(days=1), today - timedelta(days=PTT_DAYS)) if stored else today - timedelta(days=PTT_DAYS)
+        try:
+            by_day = await self._fetch_ptt(since)
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            log.warning("PTT fetch failed: %s", exc)
+            self.state.error = f"PTT：{exc}"
+            return
+        if by_day:
+            self.store.save_ptt_days(by_day)
 
     async def clean_latest_with_ai(self, code_to_name: dict[str, str]) -> None:
         if not self._ai.configured or self._http is None:
@@ -261,3 +283,79 @@ def themes_for_day(store: HistoryStore, day: date | None, groups: Mapping[str, l
     result = (dates[0], hot_themes(days, ai, groups, name_to_code), "ai" if ai else "keyword")
     store.derived_cache[key] = result
     return result
+
+
+
+# ---- heat bursts: terms whose recent mentions jump above their own baseline ---------------------
+
+PTT_DAYS = 30
+BURST_RECENT = 3
+BURST_BASE = 20
+BURST_Z = 2.0
+BURST_MIN = 3
+TOP_BURSTS = 15
+
+_TECH = re.compile(r"(?<![A-Za-z0-9])([A-Za-z][A-Za-z0-9+\-]{1,7})(?![A-Za-z0-9])")
+_TECH_STOP = {"RE", "FW", "ETF", "EPS", "KY", "YOY", "QOQ", "MOM", "ROE", "PE", "PB", "ADR", "IPO", "CEO", "CFO",
+              "GDP", "CPI", "PMI", "FED", "FOMC", "PTT", "US", "TW", "OK", "QQ", "LOL", "XD", "NT", "USD", "TWD",
+              "Q1", "Q2", "Q3", "Q4", "H1", "H2", "AM", "PM", "TSMC", "VS", "NO", "YES"}
+
+
+def ptt_terms(titles: list[str], group_names: list[str]) -> Counter:
+    """Theme phrases, English/alphanumeric tech words and known group names in one day's PTT titles."""
+    counts: Counter = Counter()
+    pattern = re.compile("|".join(re.escape(n) for n in sorted(group_names, key=len, reverse=True))) if group_names else None
+    for t in titles:
+        found = set(themes_in(t))
+        for m in _TECH.finditer(t):
+            w = m.group(1)
+            if w.upper() not in _TECH_STOP and not w.isdigit():
+                found.add(w.upper() if w.isupper() or len(w) <= 4 else w)
+        if pattern:
+            found.update(m.group(0) for m in pattern.finditer(t))
+        counts.update(found)  # a term counts once per title
+    return counts
+
+
+def short_group_names(groups: Mapping[str, list[str]]) -> list[str]:
+    """Group names usable as search terms: the last part of 細產業 names, 2–10 characters."""
+    names = {n.split("／")[-1] for n in groups}
+    return [n for n in names if 2 <= len(n) <= 10 and not n.startswith("其他")]
+
+
+def heat_bursts(store: HistoryStore, day: date | None, groups: Mapping[str, list[str]]) -> list[dict]:
+    """Terms mentioned ≥ BURST_MIN times in the last BURST_RECENT days and ≥ BURST_Z above what their
+    BURST_BASE-day rate predicts: z = (recent − expected) / √(expected + 1), expected = base mean × days."""
+    dates = sorted(set(store.news_dates_sorted(up_to=day, limit=BURST_RECENT + BURST_BASE))
+                   | set(store.ptt_dates_sorted(up_to=day, limit=BURST_RECENT + BURST_BASE)), reverse=True)
+    dates = dates[: BURST_RECENT + BURST_BASE]
+    if len(dates) < BURST_RECENT + 5:
+        return []
+    key = ("heat_bursts", tuple(dates), store.news_version())
+    cached = store.derived_cache.get(key)
+    if cached is not None:
+        return cached
+    names = short_group_names(groups)
+    per_day = []
+    for d in dates:
+        c: Counter = Counter()
+        for theme, t in store.news_day(d).items():
+            c[theme] += t["mentions"]
+        c.update(ptt_terms(store.ptt_titles(d), names))
+        per_day.append(c)
+    recent, base = per_day[:BURST_RECENT], per_day[BURST_RECENT:]
+    terms = set().union(*recent)
+    out = []
+    for term in terms:
+        r = [c.get(term, 0) for c in recent]
+        b = [c.get(term, 0) for c in base]
+        if sum(r) < BURST_MIN:
+            continue
+        bm = sum(b) / len(b)
+        expected = bm * len(r)
+        z = (sum(r) - expected) / (expected + 1) ** 0.5  # Poisson-style: counts are small and bursty
+        if z >= BURST_Z:
+            out.append({"term": term, "recent": sum(r), "base_mean": round(bm, 2), "z": round(z, 2)})
+    out.sort(key=lambda t: (-t["z"], -t["recent"]))
+    store.derived_cache[key] = out[:TOP_BURSTS]
+    return out[:TOP_BURSTS]

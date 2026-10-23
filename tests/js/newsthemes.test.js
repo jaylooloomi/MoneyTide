@@ -30,3 +30,12 @@ test('method text', () => {
   assert.match(methodText({ news_date: '2026-10-22', method: 'ai' }, { running: false }), /AI 整理/);
   assert.match(methodText({ method: 'keyword' }, { running: true, done: 3, total: 60 }), /回補中 3\/60/);
 });
+
+test('bursts strip: chips link to matching themes', async () => {
+  const { burstsHtml, themesTableHtml } = await import('../../static/js/newsthemes.js');
+  const html = burstsHtml([{ term: 'CPO', recent: 9, base_mean: 0.5, z: 4.2 }, { term: 'HBM', recent: 4, base_mean: 0, z: 3 }], [{ name: '矽光子', aliases: ['CPO'] }]);
+  assert.match(html, /data-theme="矽光子"/);
+  assert.match(html, /HBM<small> 4 次・Z 3.0/);
+  assert.equal(burstsHtml([], []), '');
+  assert.match(themesTableHtml({ themes: [{ name: 'x', aliases: [], score: 3, prev_score: 1, members: [], titles: [], avg_pct: null, strong_ratio: null, burst: true }] }), /竄升/);
+});

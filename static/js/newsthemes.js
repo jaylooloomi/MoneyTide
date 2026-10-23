@@ -34,7 +34,7 @@ export function themesTableHtml(data) {
       const aliases = t.aliases?.length ? ` <small class="muted" title="同義詞">（${escapeHtml(t.aliases.join('、'))}）</small>` : '';
       return `<tr data-theme="${escapeHtml(t.name)}">
         <td class="muted">${i + 1}</td>
-        <td class="l"><a href="#" class="theme-pick" title="切到「新聞族群」分組並放大這個族群">${escapeHtml(t.name)}</a>${aliases}</td>
+        <td class="l"><a href="#" class="theme-pick" title="切到「新聞族群」分組並放大這個族群">${escapeHtml(t.name)}</a>${t.burst ? ' <span class="burst-tag" title="近 3 天新聞＋PTT 熱度竄升（比前 20 天高出 2 個標準差以上）">竄升</span>' : ''}${aliases}</td>
         <td>${t.score} 則 ${trendHtml(t.score, t.prev_score)}</td>
         <td class="muted">${t.members.length}</td>
         <td class="c" style="background:${colorFor(t.avg_pct, 3)}">${fmtPct(t.avg_pct)}</td>
@@ -76,6 +76,12 @@ export function mountNewsPanel(container, { getDate, onPick, onStock }) {
       onPick(pick.closest('tr').dataset.theme);
       return;
     }
+    const burst = e.target.closest('a.burst-pick');
+    if (burst) {
+      e.preventDefault();
+      onPick(burst.dataset.theme);
+      return;
+    }
     const tag = e.target.closest('a.tag[data-code]');
     if (tag && !e.ctrlKey && !e.metaKey) {
       e.preventDefault();
@@ -93,7 +99,7 @@ export function mountNewsPanel(container, { getDate, onPick, onStock }) {
         fetch('/api/news-themes/status', { cache: 'no-store' }).then((r) => r.json()),
       ]);
       if (t !== ticket) return;
-      box.innerHTML = themesTableHtml(data);
+      box.innerHTML = burstsHtml(data.bursts, data.themes) + themesTableHtml(data);
       note.textContent = methodText(data, status);
     } catch (err) {
       if (t !== ticket) return;
@@ -103,4 +109,22 @@ export function mountNewsPanel(container, { getDate, onPick, onStock }) {
     }
   }
   return { load };
+}
+
+/** "新興關鍵字": terms whose heat jumped; a term that names a hot theme links to it. */
+export function burstsHtml(bursts, themes) {
+  if (!bursts?.length) return '';
+  const themeOf = new Map();
+  for (const t of themes || []) for (const n of [t.name, ...(t.aliases || [])]) themeOf.set(n, t.name);
+  const chips = bursts
+    .map((b) => {
+      const label = `${escapeHtml(b.term)}<small> ${b.recent} 次・Z ${b.z.toFixed(1)}</small>`;
+      const title = `近 3 天 ${b.recent} 次，前 20 天平均每天 ${b.base_mean} 次`;
+      const theme = themeOf.get(b.term);
+      return theme
+        ? `<a href="#" class="tag burst-pick" data-theme="${escapeHtml(theme)}" style="background:#7a3b10" title="${escapeHtml(title)}（點了切到這個族群）">${label}</a>`
+        : `<span class="tag" style="background:#4a3a20" title="${escapeHtml(title)}">${label}</span>`;
+    })
+    .join('');
+  return `<div style="padding:6px 10px;display:flex;gap:8px;align-items:center;flex-wrap:wrap"><b style="color:#ffb347" title="新聞＋PTT 股版，近 3 天比前 20 天熱度暴增的詞">新興關鍵字</b><div class="tags" style="margin:0">${chips}</div></div>`;
 }
