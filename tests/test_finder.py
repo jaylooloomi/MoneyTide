@@ -44,7 +44,7 @@ def test_daily_edges_threshold_and_missing_days():
 
 
 def test_known_candidates_merges_sources():
-    rows = [{"code": c, "kind": "stock", "industry": "X", "high": 105, "low": 100, "prev_close": 100} for c in "ABC"]
+    rows = [{"code": c, "kind": "stock", "industry": "X", "high": 105, "low": 100, "prev_close": 100, "volume_shares": 500_000} for c in "ABC"]
     s = {"A": [1, 2, 3, 4, 5], "B": [1, 2, 3, 4, 5.5], "C": [1.2, 2, 3.1, 4, 5]}
     groupings = {"industry": lambda r: [r["industry"]], "custom": lambda r: ["題材"]}
     (c,) = known_candidates(rows, groupings, s, P)
@@ -56,6 +56,10 @@ def test_known_candidates_merges_sources():
     (c,) = known_candidates(rows, groupings, s, P)
     assert c["members"] == ["A", "B"]
     assert known_candidates(rows, groupings, s, FinderParams(min_amplitude=1.5))[0]["members"] == ["A", "B", "C"]
+    # volume filter: B traded only 200 張 (< 300)
+    rows[1]["volume_shares"] = 200_000
+    assert known_candidates(rows, groupings, s, FinderParams(min_amplitude=1.5))[0]["members"] == ["A", "C"]
+    assert known_candidates(rows, groupings, s, FinderParams(min_amplitude=1.5, min_volume_lots=100))[0]["members"] == ["A", "B", "C"]
 
 
 def test_bucket_returns_skip_locked_stretch():
@@ -199,7 +203,7 @@ def test_run_search_end_to_end(tmp_path):
         return out
 
     seen = []
-    res = asyncio.run(run_search(s, day, "known", FinderParams(daily_r=0.8, min_amplitude=0), {"industry": lambda r: [r["industry"]]}, fetch, progress=lambda *a: seen.append(a)))
+    res = asyncio.run(run_search(s, day, "known", FinderParams(daily_r=0.8, min_amplitude=0, min_volume_lots=0), {"industry": lambda r: [r["industry"]]}, fetch, progress=lambda *a: seen.append(a)))
     assert seen[0] == ("daily", 0, 1) and ("fetch", 4, 4) in seen and seen[-1] == ("intraday", 0, 1)
     assert res["stats"]["candidates"] == 1
     (g,) = res["groups"]

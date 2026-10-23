@@ -14,6 +14,7 @@ const SOURCES = { gain: '漲幅', turnover: '週轉率', share_z: '比重暴增'
 /** Tunable fields: [key, label, kind, method ('' = both), help]. Defaults come from the server. */
 export const FIELDS = [
   ['min_amplitude', '振幅 >（%）', 'num', 'known', '只看當天振幅（最高 − 最低）÷ 昨收 超過這個 % 的股票'],
+  ['min_volume_lots', '成交量 ≥（張）', 'int', 'known', '只看當天成交量至少這麼多張的股票（1 張＝1,000 股）'],
   ['daily_r', '日相關 ≥', 'num', 'known', '20 日（或下面的天數）日漲跌幅的相關係數'],
   ['daily_window', '日相關天數', 'int', 'known', ''],
   ['new_daily_r', '日相關 ≥', 'num', 'new', '新組合的歷史短，用較短的窗口'],
@@ -137,6 +138,7 @@ export function progressView(p) {
 const PREF_KEY = 'openmarket.history.finder';
 const DEFAULTS = {
   min_amplitude: 3,
+  min_volume_lots: 300,
   daily_r: 0.8, daily_window: 20, new_daily_r: 0.8, new_daily_window: 10, pool_top: 50,
   intraday_r: 0.5, intraday_sessions: 3, peak_gap: 8, start_gap: '', require_burst: false, dense: 0.7, min_size: 2,
   groupings: Object.keys(GROUPINGS), pool_sources: Object.keys(SOURCES),

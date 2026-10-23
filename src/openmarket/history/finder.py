@@ -38,6 +38,7 @@ BUCKETS = 54  # 5-minute buckets 09:00–13:25
 @dataclass(frozen=True)
 class FinderParams:
     min_amplitude: float = 3.0  # 找法1: only stocks whose 振幅 that day is above this %
+    min_volume_lots: float = 300  # 找法1: and that traded at least this many 張 (1 張 = 1,000 shares)
     daily_window: int = 20  # 找法1: days of daily % changes
     daily_r: float = 0.8
     new_daily_window: int = 10  # 找法2: a new combination has little history yet
@@ -172,14 +173,20 @@ def dense_cores(edges: Iterable[frozenset], dense: float, min_size: int) -> list
 
 
 def known_candidates(rows: list[dict], groupings: Mapping[str, Callable[[dict], list[str]]], series: Mapping[str, list], p: FinderParams) -> list[dict]:
-    """找法1 stage A: dense daily cores inside each known group (members with 振幅 > min_amplitude
-    that day); the same member set from several groupings is one candidate listing all its sources."""
+    """找法1 stage A: dense daily cores inside each known group (members with 振幅 > min_amplitude and
+    at least min_volume_lots 張 that day); the same member set from several groupings is one
+    candidate listing all its sources."""
     by_members: dict[tuple, dict] = {}
     pr = PairR(series)
     for gname, grouping in groupings.items():
         groups: dict[str, list[str]] = {}
         for r in rows:
-            if r.get("kind") == "stock" and r["code"] in series and (amplitude_pct(r) or 0) > p.min_amplitude:
+            if (
+                r.get("kind") == "stock"
+                and r["code"] in series
+                and (amplitude_pct(r) or 0) > p.min_amplitude
+                and (r.get("volume_shares") or 0) / 1000 >= p.min_volume_lots
+            ):
                 for g in grouping(r):
                     groups.setdefault(g, []).append(r["code"])
         for g, codes in groups.items():
