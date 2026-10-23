@@ -16,7 +16,7 @@
   4. 英文：去掉空白和符號後比對（處理「Hsin-Chu」「Tao Yuan」「DistrictTaoyuan」），新北各區和新竹縣鄉鎮先於「Taipei」「Hsinchu」比對，也收錄常見錯字。
   5. 海外（開曼、中國、越南、泰國…）歸「海外」。
   6. 最後用郵遞區號前三碼。
-- 實測（2026-10-23）：1,991 家公司中，能判斷縣市 1,948 家，海外 38 家，無法判斷 5 家。
+- 實測（2026-10-23）：1,991 家公司中，能判斷縣市 1,947 家，海外 43 家，無法判斷 1 家（地址欄位是空白）。
 - 快取：重用 `ConceptLoader`，快取檔 `data/counties_cache.json`，7 天更新一次。
 - 地圖：`static/geo/tw-counties.geo.json`。
   - 由 taiwan-atlas 2021.9.20 的 `counties-10t.json` 轉成 GeoJSON，座標取到小數 3 位，縣市名稱統一用「臺」。
