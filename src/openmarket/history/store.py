@@ -437,6 +437,17 @@ class HistoryStore:
                 for code, f, t, d in c.execute("SELECT code, foreign_net, trust_net, dealer_net FROM inst_daily WHERE date = ?", (day.isoformat(),))
             }
 
+    def inst_trust(self, days: list[date]) -> dict[date, dict[str, float]]:
+        """{day: {code: 投信 net shares}}"""
+        if not days:
+            return {}
+        out: dict[date, dict[str, float]] = {d: {} for d in days}
+        marks = ", ".join("?" for _ in days)
+        with self._conn() as c:
+            for d, code, net in c.execute(f"SELECT date, code, trust_net FROM inst_daily WHERE date IN ({marks})", [d.isoformat() for d in days]):
+                out[date.fromisoformat(d)][code] = net or 0.0
+        return out
+
     def inst_version(self, day: date | None = None) -> int:
         return self._inst_version if day is None else self._inst_day_version.get(day, 0)
 

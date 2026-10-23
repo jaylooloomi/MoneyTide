@@ -726,6 +726,9 @@ def create_app(
                 return {k: round(sum(r[i] for r in rows) / 1000) for i, k in enumerate(("foreign", "trust", "dealer"))} if rows else None
 
             groups = [{**g, "inst_split": by_kind(g)} for g in groups]
+            # 投信連買／連賣: the same streak on 投信 alone (theme / window-dressing positioning)
+            trust = inst_streak(groups, store.inst_trust(inst_days), inst_days)
+            groups = [{**g, "trust_streak": t["inst_streak"]} for g, t in zip(groups, trust)]
             return {**res, "groups": finder_news_themes(groups, news)}
 
         if not refresh:

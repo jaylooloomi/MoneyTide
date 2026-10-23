@@ -241,3 +241,15 @@
 因為原始需求是 **快速找出有特定資金在推的連動組合**，所以頂尖做法會順便做 **依資金來源篩選結果**；目前的成果 **只有部分**：chip 只能依分類／種類篩，不能「只看法人買超的組合」。
 - 參考：Finviz screener「Institutional Transactions」篩選；Goodinfo! 選股「法人買超」條件。
 - 預估：finder.js 的 filterOptions／matchesFilter 加兩個 key（inst+／inst−，依 g.inst.lots 正負；兩種找法都適用），不重算；CSV 沿用同一篩選；finder.test.js。2 檔、約 25 行。
+
+## 第 21 輪調研
+
+## W1 · 審查 bonus-21～25、11b、24b 的改動並修正確認的缺陷
+因為原始需求是 **N／K 給出可信的資金判斷**，所以頂尖做法會順便做 **每批改動做獨立審查**；目前的成果 **只有部分**：15～19 已審（bonus-20 抓到漲停價 bug），21～25 動了 K payload、store 新查詢、with_history 第三段查詢與卡片排版，尚未審。
+- 參考：Google eng-practices；SmartBear code review study（200–400 行一批）。
+- 預估：審查員只讀 `git diff c374cff~2..8eadbee`，只修確認缺陷；≤ 5 檔。
+
+## W2 · N 卡片「投信連買 N 天」（只看投信）
+因為原始需求是 **尋找資金＝背後的動機**，所以頂尖做法會順便做 **投信連買**（台股最常用的「主題／作帳佈局」訊號，比三大法人合計更有指向性）；目前的成果 **只有部分**：bonus-19 是三大法人合計的連買，bonus-24 有當天投信張數，沒有投信自己的連續天數。
+- 參考：CMoney 選股「投信連買 3 日」；Goodinfo!「投信連續買超」排行；財報狗 投信動向。
+- 預估：store.inst_split 改成可吃多天（續 bonus-24）；with_history 依 trust 欄算連續天數（沿用 inst_streak 的邏輯）；卡片 🏦 行加「投信連買 N 天」；測試。4–5 檔、約 40 行。

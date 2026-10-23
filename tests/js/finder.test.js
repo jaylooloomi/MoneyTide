@@ -64,6 +64,8 @@ test('cardHtml: kind, closest grouping, members (outside one marked), facts and 
   assert.match(line, /<div class="fd-inst">🏦 法人 .*法人占成交 .*法人連買 3 天/); // one 🏦 line for 法人
   assert.doesNotMatch(line.match(/<div class="fd-facts">.*?<\/div>/s)[0], /法人/); // not mixed into the R / timing facts
   assert.doesNotMatch(cardHtml({ ...G, inst_net: null }, 2), /fd-inst/);
+  assert.match(cardHtml({ ...G, trust_streak: { days: 3, side: 'buy' } }, 2), /<div class="fd-inst">🏦 .*<b class="up"[^>]*>投信連買 3 天<\/b>/);
+  assert.doesNotMatch(cardHtml(G, 2), /投信連/);
   const split = cardHtml({ ...G, inst_split: { foreign: 1991, trust: 0, dealer: -19 } }, 2);
   assert.match(split, /外資 <b class="up">\+1,991<\/b>／投信 <b class="">0<\/b>／自營 <b class="down">−19<\/b> 張/);
   assert.doesNotMatch(cardHtml(G, 2), /外資/);

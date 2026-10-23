@@ -124,6 +124,7 @@ export function cardHtml(g, i) {
     instShareText(g),
     instSplitText(g),
     g.inst_streak ? `<b class="${g.inst_streak.side === 'buy' ? 'up' : 'down'}" title="組合合計三大法人買賣超，連續同方向的天數">法人連${g.inst_streak.side === 'buy' ? '買' : '賣'} ${g.inst_streak.days} 天</b>` : '',
+    g.trust_streak ? `<b class="${g.trust_streak.side === 'buy' ? 'up' : 'down'}" title="只看投信：組合合計投信買賣超連續同方向的天數（投信連買常是主題／作帳佈局）">投信連${g.trust_streak.side === 'buy' ? '買' : '賣'} ${g.trust_streak.days} 天</b>` : '',
   ].filter(Boolean);
   const inst = instParts.length ? `<div class="fd-inst">🏦 ${instParts.join('　')}</div>` : '';
   const news = g.news?.length ? `<div class="fd-news">📰 ${g.news.map((t) => escapeHtml(t)).join('<br>📰 ')}</div>` : '';

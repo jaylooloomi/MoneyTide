@@ -423,3 +423,31 @@ def test_finder_api_splits_inst_into_foreign_trust_dealer(tmp_path):
         ab, c = client.get("/api/history/finder", params={"date": d.isoformat(), "method": "known", "stored_only": 1, "groupings": "industry"}).json()["groups"]
     assert ab["inst_split"] == {"foreign": 2000, "trust": -200, "dealer": -20}
     assert c["inst_split"] is None  # no 法人 rows for C
+    assert ab["trust_streak"] is None  # one day is not a streak
+
+
+def test_finder_api_trust_streak_counts_投信_alone(tmp_path):
+    from datetime import datetime
+
+    from fastapi.testclient import TestClient
+
+    from openmarket.api import create_app
+    from openmarket.config import AppConfig
+    from openmarket.history.store import HistoryStore
+    from openmarket.sources.institutional import InstRow
+
+    s = HistoryStore(tmp_path / "h.sqlite")
+    days = [date(2026, 3, 2), date(2026, 3, 3), date(2026, 3, 4)]
+    row = {"code": "A", "name": "a", "market": "上市", "industry": "X", "kind": "stock", "close": 10.0, "prev_close": 10.0, "change": 0, "change_pct": 0}
+    for d in days:
+        s.save_day(d, [row], datetime(d.year, d.month, d.day, 15))
+    # 外資 sells every day (法人合計 sells) while 投信 buys three days running
+    for d in days:
+        s.save_inst_day(d, [InstRow("A", -900_000, 100_000, 0, -800_000)], datetime(d.year, d.month, d.day, 17))
+    key = FinderParams(groupings=("industry",)).key() + "|industry"
+    s.save_finder(days[-1], "known", key, {"date": days[-1].isoformat(), "method": "known", "groups": [{"members": [{"code": "A", "name": "a"}]}], "stats": {}})
+    app = create_app(AppConfig(data_dir=tmp_path), start_polling=False, start_history=False, start_concepts=False, history_store=s)
+    with TestClient(app, base_url="http://127.0.0.1") as client:
+        g = client.get("/api/history/finder", params={"date": days[-1].isoformat(), "method": "known", "stored_only": 1, "groupings": "industry"}).json()["groups"][0]
+    assert g["inst_streak"] == {"days": 3, "side": "sell"}
+    assert g["trust_streak"] == {"days": 3, "side": "buy"}
