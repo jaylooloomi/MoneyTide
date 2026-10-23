@@ -161,6 +161,14 @@ test('csvExport: one row per member of the cards on screen, with the group figur
   assert.equal(only[2][0][2], 2); // keeps the card number it has on screen
   assert.match(only[0], /_官方產業\.csv$/);
   assert.equal(csvExport({ ...d, groups: [] }), null);
+  // the 🏦 line goes into the CSV too
+  const rich = { ...d, groups: [{ ...d.groups[0], members: [{ code: '1', name: '甲', inst_net: 1_234_567 }], inst: { lots: 1235, amount_100m: 2, buyers: 1, sellers: 0 }, inst_split: { foreign: 1000, trust: 200, dealer: 35 }, inst_streak: { days: 3, side: 'buy' }, trust_streak: { days: 2, side: 'sell' } }] };
+  const [rname, rh, rr] = csvExport(rich, '@inst+');
+  const col = (k) => rr[0][rh.indexOf(k)];
+  assert.deepEqual(['個股法人(張)', '群組法人(張)', '群組法人(億)', '法人占成交%', '外資(張)', '投信(張)', '自營(張)', '法人連續', '投信連續'].map(col), [1235, 1235, 2, 5, 1000, 200, 35, '連買3', '連賣2']);
+  assert.equal(rh[rh.length - 1], '條件');
+  assert.match(rname, /_法人買超\.csv$/);
+  assert.equal(rows[0][header.indexOf('外資(張)')], ''); // no 法人 attached: blank, not 0
 });
 
 test('funnelText: what removed the pairs, most first, then how many passed', () => {

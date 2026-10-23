@@ -202,17 +202,23 @@ export function csvExport(d, filter = 'all') {
       : `振幅>${p.min_amplitude}% 成交量≥${p.min_volume_lots}張 日R≥${p.daily_r}(${p.daily_window}日)`;
   const header = [
     '日期', '找法', '群組#', '類型', '來源／最接近分類', '代號', '名稱', '漲幅%', '週轉率%', '振幅%', '高點時間', '起漲時間', '鎖漲停',
-    '群組日R', '群組分時R', '高點差(分)', '起漲差(分)', '群組成交值(億)', '占全市場%', '群組平均漲幅%', '條件',
+    '群組日R', '群組分時R', '高點差(分)', '起漲差(分)', '群組成交值(億)', '占全市場%', '群組平均漲幅%',
+    '個股法人(張)', '群組法人(張)', '群組法人(億)', '法人占成交%', '外資(張)', '投信(張)', '自營(張)', '法人連續', '投信連續', '條件',
   ];
+  const streak = (s) => (s ? `連${s.side === 'buy' ? '買' : '賣'}${s.days}` : '');
   const rows = groups.flatMap(([g, n]) => {
     const src = g.sources?.length ? g.sources.map((s) => `${s.label}:${s.group}`).join('／') : g.matches?.[0] ? `${g.matches[0].label}:${g.matches[0].group}(${Math.round(g.matches[0].overlap * 100)}%)` : '';
     const cut = (v) => (v == null ? '' : Math.round(v * 100) / 100);
     return g.members.map((m) => [
       d.date, METHODS[d.method] || d.method, n, g.kind, src, m.code, m.name, cut(m.change_pct), cut(m.turnover_rate), cut(m.amplitude_pct), m.peak || '', m.start || '', m.locked_at || '',
-      g.daily_r ?? '', g.intraday_r ?? '', g.peak_spread ?? '', g.start_spread ?? '', g.turnover_100m ?? '', g.turnover_share ?? '', g.avg_pct ?? '', `${cond} 分時R≥${p.intraday_r} 高點差≤${p.peak_gap}分`,
+      g.daily_r ?? '', g.intraday_r ?? '', g.peak_spread ?? '', g.start_spread ?? '', g.turnover_100m ?? '', g.turnover_share ?? '', g.avg_pct ?? '',
+      m.inst_net == null ? '' : Math.round(m.inst_net / 1000), g.inst?.lots ?? '', g.inst?.amount_100m ?? '',
+      g.inst?.amount_100m != null && g.turnover_100m > 0 ? cut((Math.abs(g.inst.amount_100m) / g.turnover_100m) * 100) : '',
+      g.inst_split?.foreign ?? '', g.inst_split?.trust ?? '', g.inst_split?.dealer ?? '', streak(g.inst_streak), streak(g.trust_streak), `${cond} 分時R≥${p.intraday_r} 高點差≤${p.peak_gap}分`,
     ]);
   });
-  const tag = filter && filter !== 'all' ? `_${filter}` : '';
+  const label = Object.fromEntries(INST_FILTERS)[filter]?.replace('🏦 ', '') || filter; // no internal '@inst+' in file names
+  const tag = filter && filter !== 'all' ? `_${label}` : '';
   return [`資金連動搜尋_${d.method === 'new' ? '找法2' : '找法1'}_${d.date}${tag}.csv`, header, rows];
 }
 
