@@ -53,6 +53,7 @@ class FinderParams:
     dense: float = 0.7  # each member passes with ≥ this share of the group
     min_size: int = 2
     pool_top: int = 50  # 找法2: top N of each ranking
+    new_min_volume_lots: float = 300  # 找法2: the pool only takes stocks that traded at least this many 張
     pool_sources: tuple[str, ...] = ("gain", "turnover", "share_z")
     share_window: int = 20  # days behind the 成交比重暴增 z-score
     groupings: tuple[str, ...] = ("industry", "custom", "concept", "chain", "news")
@@ -225,8 +226,13 @@ def share_z(store: HistoryStore, day: date, window: int) -> dict[str, float]:
 
 
 def candidate_pool(rows: list[dict], z: Mapping[str, float], p: FinderParams) -> dict[str, list[str]]:
-    """找法2: top `pool_top` common stocks of each ranking → {code: [sources]}."""
-    stocks = [r for r in rows if r.get("kind") == "stock" and r.get("change_pct") is not None]
+    """找法2: top `pool_top` common stocks of each ranking → {code: [sources]}; stocks under
+    `new_min_volume_lots` 張 are left out first (two thin stocks moving together are no pool of money)."""
+    stocks = [
+        r for r in rows
+        if r.get("kind") == "stock" and r.get("change_pct") is not None
+        and (r.get("volume_shares") or 0) / 1000 >= p.new_min_volume_lots
+    ]
     rankers = {
         "gain": ("漲幅", lambda r: r.get("change_pct")),
         "turnover": ("週轉率", turnover_rate),

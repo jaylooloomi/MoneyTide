@@ -121,8 +121,10 @@ def test_candidate_pool_and_match_known():
         {"code": "3", "kind": "stock", "change_pct": 5.0, "close": 10, "market_cap": 1000, "volume_shares": 1, "industry": "Y"},
         {"code": "E", "kind": "etf", "change_pct": 20.0, "close": 10, "market_cap": 1000, "volume_shares": 99, "industry": ""},
     ]
-    pool = candidate_pool(rows, {"3": 9.0}, FinderParams(pool_top=1))
+    pool = candidate_pool(rows, {"3": 9.0}, FinderParams(pool_top=1, new_min_volume_lots=0))
     assert pool == {"1": ["漲幅"], "2": ["週轉率"], "3": ["比重暴增"]}
+    # the volume floor (張 = 1,000 shares): only "2" traded ≥ 0.05 張 here
+    assert candidate_pool(rows, {"3": 9.0}, FinderParams(pool_top=1, new_min_volume_lots=0.05)) == {"2": ["漲幅", "週轉率"]}
     by = {r["code"]: r for r in rows}
     m = match_known(["1", "2", "3"], by, {"industry": lambda r: [r["industry"]]})
     assert m[0]["group"] == "X" and m[0]["overlap"] == pytest.approx(2 / 3) and m[0]["outside"] == ["3"]

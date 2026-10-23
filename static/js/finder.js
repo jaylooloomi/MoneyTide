@@ -21,6 +21,7 @@ export const FIELDS = [
   ['new_daily_r', '日相關 ≥', 'num', 'new', '新組合的歷史短，用較短的窗口'],
   ['new_daily_window', '日相關天數', 'int', 'new', ''],
   ['pool_top', '各排行取前', 'int', 'new', '漲幅、週轉率、比重暴增各取前 N 名'],
+  ['new_min_volume_lots', '成交量 ≥（張）', 'int', 'new', '候選池只收當天成交量至少這麼多張的股票（1 張＝1,000 股）'],
   ['intraday_r', '分時相關 ≥', 'num', '', '最近幾個交易日 5 分 K 報酬；鎖漲停的平線不計'],
   ['intraday_sessions', '分時天數', 'int', '', ''],
   ['peak_gap', '高點差 ≤（分）', 'int', '', '日內最高點（09:00–13:00）的時間差'],
@@ -156,6 +157,7 @@ const PREF_KEY = 'openmarket.history.finder';
 const DEFAULTS = {
   min_amplitude: 3,
   min_volume_lots: 300,
+  new_min_volume_lots: 300,
   daily_r: 0.8, daily_window: 20, new_daily_r: 0.8, new_daily_window: 10, pool_top: 50,
   intraday_r: 0.5, intraday_sessions: 3, peak_gap: 8, start_gap: '', require_burst: false, dense: 0.7, min_size: 2,
   groupings: Object.keys(GROUPINGS), pool_sources: Object.keys(SOURCES),

@@ -22,7 +22,7 @@
 - 參考：TradingView screener 欄位排序（https://barbucket.readthedocs.io/en/latest/tv_screener/）；stock-correlation skill 輸出「strongest and weakest pairs」
 - 預估：finder.js＋測試；≤2 檔、<80 行。
 
-## C5 · N 卡片加「資金規模」：群組總成交值與平均漲幅
+## C5 · N 卡片加「資金規模」：群組總成交值與平均漲幅（✅ 已完成 bonus-02, 6db6715）
 因為原始需求是**找資金（多少錢、往哪去）背後的動機**，所以頂尖做法會順便做**每個組合的成交值總和與漲跌摘要**（熱力圖／screener 的 market-cap、volume 欄）；目前的成果**只有部分**——卡片列成員漲跌，但沒有群組的成交值總和、占全市場比重。
 - 參考：Twelve Data 熱力圖相關分析（https://twelvedata.com/news/analyzing-the-correlation-of-u-s-stocks-using-heat-maps）；TradingView screener volume / market cap 欄（https://barbucket.readthedocs.io/en/latest/tv_screener/）
 - 預估：finder.py describe＋finder.js＋測試；≤3 檔、<60 行。
@@ -31,3 +31,8 @@
 因為原始需求是**看是不是同一筆資金在同一時間進場**，所以頂尖做法會順便做**在走勢上標出量能異常的時間點**（XQ「大戶買賣力」盤中逐筆）；目前的成果**只有部分**——N 卡片寫出同時爆量時間，但 K 動畫上看不到。
 - 參考：XQ 全球贏家「大戶買賣力」盤中逐筆指標（https://www.moneyweekly.com.tw/_Article?AID=75294）
 - 預估：linkage payload 加每檔爆量時段＋race.js 畫標記；≤4 檔、<150 行。
+
+## C7 · 找法2 也加成交量門檻（預設與找法1 相同：≥ 300 張）（✅ 已完成 bonus-03）
+因為原始需求是**找「資金」共同注資的組合**，所以頂尖做法會順便做**候選池先濾掉成交量太小的股票**（screener 的 volume filter），否則兩檔小量股巧合同步就會被當成「資金組合」；目前的成果**只有部分**——找法1 有 ≥300 張，找法2 沒有；bonus-02 的 💰 顯示 10/22 找法2「勝昱+全景軟體」整組只有 0.1 億成交值。
+- 參考：TradingView screener volume 欄篩選（https://barbucket.readthedocs.io/en/latest/tv_screener/）；使用者自己為找法1 指定「增加成交量 過濾 預設 至少>300張」
+- 預估：finder.py candidate_pool＋finder.js 欄位＋測試；≤3 檔、<40 行。

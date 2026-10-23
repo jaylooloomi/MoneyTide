@@ -16,6 +16,8 @@ test('queryOf sends only the fields of the chosen method; blank 起漲差 means 
   assert.equal(fresh.get('new_daily_r'), '0.85');
   assert.equal(fresh.get('daily_r'), null);
   assert.equal(fresh.get('pool_sources'), 'gain');
+  assert.equal(new URLSearchParams(queryOf('new', { ...p, new_min_volume_lots: 500 })).get('new_min_volume_lots'), '500');
+  assert.equal(new URLSearchParams(queryOf('known', { ...p, new_min_volume_lots: 500 })).get('new_min_volume_lots'), null);
 });
 
 const G = {
