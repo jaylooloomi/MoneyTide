@@ -393,6 +393,9 @@ function loadRotation() {
     return loadRotationNow();
   }
   rotationLazy.pending = true;
+  // a request still in flight is for the old settings: drop it (and its dimmed 載入中 state)
+  tickets.rotation += 1;
+  document.querySelector('#historyView .hC')?.classList.remove('loading');
   if (!rotationLazy.watching) {
     rotationLazy.watching = true;
     const wake = () => {
