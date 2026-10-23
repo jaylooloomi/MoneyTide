@@ -35,6 +35,8 @@ const liveRvol = { avg: null, day: null, loading: false, failedAt: 0 };
 const RVOL_RETRY_MS = 5 * 60_000;
 // bonus-23: declared up here because main() renders before the module finishes evaluating
 const liveSearch = { shown: [], listFor: null };
+// money flow: share baselines per grouping from the history store (declared before main() runs)
+const liveFlow = { baselines: {}, loading: {} };
 // ③: main area shows the heatmap or the county money map (declared before main() runs)
 const liveMap = { on: false, ctl: null };
 let liveAi = null; // ⑤ AI 解讀 button
@@ -243,7 +245,7 @@ function render() {
   renderCrumb();
   renderNote();
   renderLegend();
-  renderMatrix(withPeriods(aggregateIndustries(stocks, { stocksOnly: liveGrouping.by === 'industry' }))); // bonus-11: 20-day column; ①
+  renderMatrix(withFlows(withPeriods(aggregateIndustries(stocks, { stocksOnly: liveGrouping.by === 'industry' })), stocks, snap)); // bonus-11: 20-day column; ①; money flow
   renderLiveBreadth(filtered); // bonus-05 (each stock once, whatever the grouping)
   renderLiveSearch(snap, stocks); // bonus-23
   renderLiveMap(filtered); // ③
@@ -365,7 +367,7 @@ function renderMatrix(rows) {
   table.tBodies[0].innerHTML = sorted
     .map(
       (r) => `<tr data-industry="${escapeHtml(r.name)}"${r.name === state.zoomIndustry ? ' class="hl"' : ''}>
-        <td class="l"><span class="clip" title="${escapeHtml(r.name)}">${escapeHtml(r.name)}</span></td>
+        <td class="l"><span class="clip" title="${escapeHtml(r.name)}">${r.z20 >= 2 ? '<span title="成交比重暴增（Z ≥ 2）">🔥</span>' : ''}${escapeHtml(r.name)}</span></td>
         ${pctCell(r.change_pct, colorLimit('today', state.view.scale))}
         ${pctCell(r.week_pct, colorLimit('week'))}
         ${pctCell(livePeriods.byGroup[r.name]?.perf_20 ?? null, 15)}
@@ -374,6 +376,7 @@ function renderMatrix(rows) {
         ${volRatioCell(r.vol_ratio)}
         ${ratioCell(r.strong_ratio, r.strong_count, 30)}
         ${ratioCell(r.limit_ratio, r.limit_up, 20)}
+        ${liveFlowCells(r)}
         ${breadthCell(r.up_count, r.down_count)}
       </tr>`,
     )
@@ -1074,4 +1077,70 @@ function renderLiveMap(stocks) {
   }
   liveMap.ctl.render(stocks, '今日即時');
   if (wasHidden) liveMap.ctl.show();
+}
+
+// ---- money flow in the live matrix: share z (vs the stored 20-day baseline), CLV flow, turnover rate --
+function liveClv(s) {
+  const { high, low, price } = s;
+  if (high === null || low === null || price === null || high === undefined || !(high > low)) return 0;
+  return (price - low - (high - price)) / (high - low);
+}
+
+function withFlows(rows, stocks, snap) {
+  const by = liveGrouping.by;
+  const base = liveFlow.baselines[by];
+  if (!base && !liveFlow.loading[by]) loadFlowBaseline(by);
+  // the market is every common stock in the snapshot, whatever the filters
+  const market = (snap?.stocks || []).filter((s) => s.kind === 'stock').reduce((a, s) => a + (s.turnover_100m || 0), 0);
+  const acc = new Map();
+  const seen = new Set();
+  for (const s of stocks) {
+    if (s.kind !== 'stock' || seen.has(`${s.industry}|${s.code}`)) continue;
+    seen.add(`${s.industry}|${s.code}`);
+    const g = acc.get(s.industry) || { t: 0, mf: 0, vol: 0, shares: 0 };
+    const t = s.turnover_100m || 0;
+    g.t += t;
+    g.mf += liveClv(s) * t;
+    g.vol += (s.volume_lots || 0) * 1000;
+    if (s.market_cap && s.price) g.shares += s.market_cap / s.price;
+    acc.set(s.industry, g);
+  }
+  return rows.map((r) => {
+    const g = acc.get(r.name);
+    if (!g) return { ...r, z20: null, mf: null, turnover_rate: null };
+    const share = market > 0 ? (g.t / market) * 100 : null;
+    const b = base?.groups?.[r.name];
+    return {
+      ...r,
+      share,
+      z20: share !== null && b ? (share - b.m20) / b.s20 : base ? null : undefined,
+      mf: g.t > 0 ? (g.mf / g.t) * 100 : null,
+      turnover_rate: g.shares > 0 ? (g.vol / g.shares) * 100 : null,
+    };
+  });
+}
+
+async function loadFlowBaseline(by) {
+  liveFlow.loading[by] = true;
+  try {
+    const resp = await fetch(`/api/history/flow-baseline?grouping=${by}`, { cache: 'no-store' });
+    if (resp.ok) liveFlow.baselines[by] = await resp.json();
+    render();
+  } catch {
+    /* retried on a later render */
+  } finally {
+    liveFlow.loading[by] = false;
+  }
+}
+
+function liveFlowCells(r) {
+  const z =
+    r.z20 === undefined
+      ? '<td class="muted">…</td>'
+      : r.z20 === null
+        ? '<td class="muted">—</td>'
+        : `<td class="c" style="background:${colorFor(r.z20, 3)}" title="比重 ${r.share?.toFixed(2)}%">${r.z20.toFixed(1)}</td>`;
+  const mf = r.mf === null ? '<td class="muted">—</td>' : `<td class="c" style="background:${colorFor(r.mf, 60)}">${r.mf.toFixed(0)}</td>`;
+  const tr = r.turnover_rate === null ? '<td class="muted">—</td>' : `<td>${r.turnover_rate.toFixed(2)}%</td>`;
+  return z + mf + tr;
 }

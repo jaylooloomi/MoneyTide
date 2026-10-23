@@ -23,6 +23,8 @@ RETRY_INTERVAL = timedelta(minutes=30)
 
 DayFetcher = Callable[[date], Awaitable[list[DailyRow] | None]]
 IndexFetcher = Callable[[str, date], Awaitable[list]]  # (market, any day of the month) -> IndexRow list
+InstFetcher = Callable[[date], Awaitable[list | None]]  # day -> InstRow list, None when not published
+INST_DAYS = 250  # 三大法人 backfill window (stored trading days)
 
 
 def build_rows(
@@ -81,6 +83,7 @@ class HistoryCollector:
         sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
         request_delay: float = REQUEST_DELAY_SECONDS,
         fetch_index: IndexFetcher | None = None,
+        fetch_inst: InstFetcher | None = None,
     ) -> None:
         self.store = store
         self._fetch_twse = fetch_twse
@@ -92,6 +95,8 @@ class HistoryCollector:
         self.state = BackfillState()
         self._fetch_index = fetch_index
         self.index_state = BackfillState()
+        self._fetch_inst = fetch_inst
+        self.inst_state = BackfillState()
 
     def pending_days(self, now: datetime) -> list[date]:
         """Weekdays within the backfill window that are not stored yet, newest first."""
@@ -146,6 +151,7 @@ class HistoryCollector:
             await self._sleep(self._delay)
         self.state.running = False
         await self.collect_index()
+        await self.collect_inst()
         await asyncio.to_thread(warm_history_cache, self.store)  # bonus-19
 
     async def collect_index(self) -> None:
@@ -167,6 +173,30 @@ class HistoryCollector:
             self.index_state.done += 1
             await self._sleep(self._delay)
         self.index_state.running = False
+
+    async def collect_inst(self) -> None:
+        """三大法人 for stored trading days that have none yet (newest first)."""
+        if self._fetch_inst is None:
+            return
+        known = self.store.inst_dates()
+        todo = [d for d in self.store.trading_dates(limit=INST_DAYS) if d not in known]
+        self.inst_state = BackfillState(running=bool(todo), total=len(todo))
+        for d in todo:
+            try:
+                rows = await self._fetch_inst(d)
+                local = self._clock().astimezone(TAIPEI)
+                if rows is None and d == local.date() and local.time() < DAILY_GIVE_UP:
+                    pass  # published later in the evening: try again next pass
+                else:
+                    self.store.save_inst_day(d, rows, self._clock())
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:
+                log.warning("institutional data for %s failed: %s", d, exc)
+                self.inst_state.error = f"{d}: {exc}"
+            self.inst_state.done += 1
+            await self._sleep(self._delay)
+        self.inst_state.running = False
 
     async def run(self) -> None:
         while True:

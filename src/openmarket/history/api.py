@@ -8,7 +8,7 @@ from fastapi import APIRouter, HTTPException, Query
 from ..config import TAIPEI
 
 from .ingest import INDEX_MARKETS, HistoryCollector, index_window
-from .metrics import METRICS, Grouping, day_stocks, group_stats, industry_grouping, movers, rotation, stock_history, group_index, group_periods, group_rank_change
+from .metrics import METRICS, Grouping, day_stocks, flow_baseline, group_flows, group_stats, industry_grouping, movers, rotation, stock_history, group_index, group_periods, group_rank_change
 from .store import HistoryStore
 
 
@@ -123,6 +123,17 @@ def create_history_router(
     def periods(day: str = Query(..., alias="date"), grouping: str = "industry") -> dict:
         g = grouping_of(grouping, _date(day))
         return {"date": day, "groups": group_periods(get_store(), _date(day), grouping=g)}
+
+    # money flow (spec 2026-10-23-money-flow-design.md)
+    @r.get("/flows")
+    def flows(day: str = Query(..., alias="date"), grouping: str = "industry") -> dict:
+        d = _date(day)
+        return {"date": day, "groups": group_flows(get_store(), d, grouping_of(grouping, d))}
+
+    @r.get("/flow-baseline")
+    def baseline(grouping: str = "industry") -> dict:
+        store = get_store()
+        return flow_baseline(store, grouping_of(grouping), before=live_quote_day(store, datetime.now(TAIPEI)))
 
     # bonus-14: breadth calendar (one row per stored trading day)
     @r.get("/calendar")

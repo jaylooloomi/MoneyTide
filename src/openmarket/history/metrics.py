@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 from collections.abc import Callable, Iterable
-from datetime import date
+from datetime import date, timedelta
 
 from .store import HistoryStore
 
@@ -13,7 +13,7 @@ WEEK_DAYS = 5
 PERIOD_20 = 20  # bonus-13: 20-trading-day colour option for the history heatmap
 
 Grouping = Callable[[dict], Iterable[str]]
-METRICS = ("avg_pct", "cap_pct", "strong_ratio", "breadth", "limit_up")
+METRICS = ("avg_pct", "cap_pct", "strong_ratio", "breadth", "limit_up", "share_z")  # share_z: money-flow spec
 
 
 def industry_grouping(row: dict) -> list[str]:
@@ -138,6 +138,8 @@ def rotation(
 ) -> dict:
     if metric not in METRICS:
         raise ValueError(f"metric must be one of {METRICS}")
+    if metric == "share_z":
+        return share_z_rotation(store, days, up_to, grouping)
     dates = sorted(store.trading_dates(up_to=up_to, limit=days))
     table: dict[str, list] = defaultdict(lambda: [None] * len(dates))
     for i, stats in enumerate(daily_group_stats(store, dates, threshold, grouping)):
@@ -371,3 +373,148 @@ def group_rank_change(store: HistoryStore, day: date, grouping: Grouping = indus
         g: {"rank": r, "rank_change": prev[g] - r if g in prev else None}
         for g, r in today.items()
     }
+
+
+
+# ---- money flow: turnover share (+ its z-score), CLV money flow, turnover rate, 三大法人 ---------
+
+FLOW_WINDOW = 20
+STD_FLOOR = 0.05  # percentage points: thin groups would otherwise divide by ~0
+
+
+def clv(r: dict) -> float:
+    """Close location value in [-1, 1]: +1 closes at the high, -1 at the low, 0 flat or no range."""
+    h, lo, c = r.get("high"), r.get("low"), r.get("close")
+    if h is None or lo is None or c is None or h <= lo:
+        return 0.0
+    return ((c - lo) - (h - c)) / (h - lo)
+
+
+def flow_day(rows: list[dict], grouping: Grouping, inst: dict[str, float]) -> dict:
+    """One day: market turnover and per-group sums (common stocks, each code once per group)."""
+    market = 0.0
+    groups: dict[str, dict] = {}
+    seen: set[tuple[str, str]] = set()
+    for r in rows:
+        if r.get("kind") != "stock":
+            continue
+        t = r.get("turnover_yuan") or 0.0
+        market += t
+        close = r.get("close")
+        cap = r.get("market_cap") or 0.0
+        for g in grouping(r):
+            if (g, r["code"]) in seen:
+                continue
+            seen.add((g, r["code"]))
+            acc = groups.setdefault(g, {"turnover": 0.0, "mf": 0.0, "volume": 0.0, "shares": 0.0, "cap": 0.0, "inst": 0.0})
+            acc["turnover"] += t
+            acc["mf"] += clv(r) * t
+            acc["volume"] += r.get("volume_shares") or 0.0
+            if cap and close:
+                acc["shares"] += cap / close
+            acc["cap"] += cap
+            if close and r["code"] in inst:
+                acc["inst"] += inst[r["code"]] * close
+    return {"market": market, "groups": groups}
+
+
+def daily_group_flows(store: HistoryStore, dates: list[date], grouping: Grouping) -> list[dict]:
+    key = getattr(grouping, "cache_key", None)
+    version = store.inst_version()
+    cache = store.derived_cache
+    hits = {d: cache.get(("flows", key, d, version)) for d in dates} if key is not None else {}
+    missing = [d for d in dates if hits.get(d) is None]
+    rows = store.rows(missing) if missing else {}
+    inst = store.inst_net(missing) if missing else {}
+    out = []
+    for d in dates:
+        day = hits.get(d)
+        if day is None:
+            day = flow_day(rows[d], grouping, inst.get(d, {}))
+            if key is not None:
+                cache[("flows", key, d, version)] = day
+        out.append(day)
+    return out
+
+
+def share_of(day: dict, name: str) -> float:
+    g = day["groups"].get(name)
+    return g["turnover"] / day["market"] * 100 if g and day["market"] else 0.0
+
+
+def zscore(value: float, history: list[float]) -> float | None:
+    if len(history) < 3:
+        return None
+    mean = sum(history) / len(history)
+    var = sum((x - mean) ** 2 for x in history) / len(history)
+    return (value - mean) / max(var ** 0.5, STD_FLOOR)
+
+
+def group_flows(store: HistoryStore, day: date, grouping: Grouping = industry_grouping) -> dict[str, dict]:
+    """{group: {share, z5, z20, mf, turnover_rate, inst_net, inst_ratio}} for `day` (see the spec)."""
+    dates = sorted(store.trading_dates(up_to=day, limit=FLOW_WINDOW + 1))
+    if not dates or dates[-1] != day:
+        return {}
+    flows = daily_group_flows(store, dates, grouping)
+    today, prev = flows[-1], flows[:-1]
+    has_inst = day in store.inst_dates()
+    out = {}
+    for name, g in today["groups"].items():
+        share = share_of(today, name)
+        hist = [share_of(p, name) for p in prev]
+        out[name] = {
+            "share": share,
+            "z5": zscore(share, hist[-5:]),
+            "z20": zscore(share, hist),
+            "mf": g["mf"] / g["turnover"] * 100 if g["turnover"] else None,
+            "turnover_rate": g["volume"] / g["shares"] * 100 if g["shares"] else None,
+            "inst_net": g["inst"] if has_inst else None,
+            "inst_ratio": g["inst"] / g["cap"] * 100 if has_inst and g["cap"] else None,
+        }
+    return out
+
+
+def flow_baseline(store: HistoryStore, grouping: Grouping = industry_grouping, before: date | None = None) -> dict:
+    """Share mean/std per group over the latest 5 and 20 stored days before `before` (the live
+    z-score baseline: the day the live quotes show must not be part of its own baseline)."""
+    up_to = before - timedelta(days=1) if before else None
+    dates = sorted(store.trading_dates(up_to=up_to, limit=FLOW_WINDOW))
+    if not dates:
+        return {"as_of": None, "groups": {}}
+    flows = daily_group_flows(store, dates, grouping)
+    names = {n for f in flows for n in f["groups"]}
+
+    def stats(xs: list[float]) -> tuple[float, float]:
+        m = sum(xs) / len(xs)
+        return m, max((sum((x - m) ** 2 for x in xs) / len(xs)) ** 0.5, STD_FLOOR)
+
+    out = {}
+    for n in names:
+        hist = [share_of(f, n) for f in flows]
+        m5, s5 = stats(hist[-5:])
+        m20, s20 = stats(hist)
+        out[n] = {"m5": m5, "s5": s5, "m20": m20, "s20": s20}
+    return {"as_of": dates[-1].isoformat(), "groups": out}
+
+
+def share_z_rotation(store: HistoryStore, days: int, up_to: date | None, grouping: Grouping) -> dict:
+    """C matrix metric: each day's 20-day turnover-share z-score per group."""
+    dates = sorted(store.trading_dates(up_to=up_to, limit=days + FLOW_WINDOW))
+    flows = daily_group_flows(store, dates, grouping)
+    shown = list(range(max(0, len(dates) - days), len(dates)))
+    names = {n for i in shown for n in flows[i]["groups"]}
+    groups = []
+    for n in names:
+        values = []
+        for i in shown:
+            hist = [share_of(flows[j], n) for j in range(max(0, i - FLOW_WINDOW), i)]
+            z = zscore(share_of(flows[i], n), hist) if n in flows[i]["groups"] else None
+            values.append(round(z, 2) if z is not None else None)
+        groups.append({"name": n, "values": values})
+
+    def recent(g):
+        tail = [x for x in g["values"][-3:] if x is not None]
+        return sum(tail) / len(tail) if tail else float("-inf")
+
+    groups.sort(key=recent, reverse=True)
+    return {"dates": [dates[i].isoformat() for i in shown], "metric": "share_z", "groups": groups}

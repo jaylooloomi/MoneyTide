@@ -229,6 +229,7 @@ async function loadGroups_() {
     if (t !== tickets.groups) return;
     st.groups = data.groups.map((g) => ({ ...g, leader_pct: g.leader?.change_pct ?? null })); // bonus-09
     loadPeriods({ cachedOnly: true }); // bonus-10: fetch is deferred until A/B/D have loaded
+    loadFlows(); // money flow columns
   } catch {
     if (t !== tickets.groups) return;
     st.groups = [];
@@ -248,7 +249,7 @@ function renderGroups() {
   table.tBodies[0].innerHTML = sortRows(filterGroupRows(st.groups), st.groupSort.key, st.groupSort.dir) // bonus-20
     .map(
       (g) => `<tr data-group="${escapeHtml(g.name)}"${g.name === st.zoom ? ' class="hl"' : ''}>
-        <td class="l"><span class="clip" title="${escapeHtml(g.name)}">${escapeHtml(g.name)}</span></td>
+        <td class="l"><span class="clip" title="${escapeHtml(g.name)}">${g.z20 >= IGNITE_Z ? '<span title="成交比重暴增（Z ≥ 2）">🔥</span>' : ''}${escapeHtml(g.name)}</span></td>
         ${rankCell(g)}
         ${pct(g.avg_pct, 3)}
         ${pct(g.cap_pct, 3)}
@@ -257,6 +258,7 @@ function renderGroups() {
         <td>${g.limit_up || ''}</td>
         <td class="c" style="background:${colorFor(g.limit_ratio, 20)}">${g.limit_ratio === null || g.limit_ratio === undefined ? '—' : g.limit_ratio.toFixed(0) + '%'}</td>
         <td class="c" style="background:${breadthColor(g.up, g.down)}">${g.up}/${g.down}</td>
+        ${flowCells(g)}
         <td class="l">${g.leader ? `<a href="#" class="leader" data-code="${escapeHtml(g.leader.code)}">${escapeHtml(g.leader.name)} <span class="${g.leader.change_pct > 0 ? 'up' : g.leader.change_pct < 0 ? 'down' : ''}">${fmtPct(g.leader.change_pct)}</span></a>` : '—'}</td>
         <td class="muted">${g.count}</td>
       </tr>`,
@@ -271,13 +273,13 @@ function rotationColor(metric, v) {
   if (metric === 'strong_ratio') return colorFor(v, 30);
   if (metric === 'breadth') return colorFor(v - 50, 50);
   if (metric === 'limit_up') return colorFor(v, 5);
-  return colorFor(v, 3); // avg_pct: industry averages rarely exceed ±3%
+  return colorFor(v, 3); // avg_pct: industry averages rarely exceed ±3%; share_z: ±3σ
 }
 
 function rotationText(metric, v) {
   if (v === null || v === undefined) return '';
   if (metric === 'limit_up') return v ? String(v) : '';
-  if (metric === 'avg_pct') return v.toFixed(1);
+  if (metric === 'avg_pct' || metric === 'share_z') return v.toFixed(1);
   return v.toFixed(0);
 }
 
@@ -871,9 +873,9 @@ function downloadCsv(name, header, rows) {
 const CSV_EXPORTS = {
   hB: () => [
     `強勢族群_${st.date}_${GROUPING_LABEL[st.grouping]}.csv`,
-    ['日期', '族群', '平均漲幅%', '市值加權%', `漲幅≥${st.threshold}%家數`, `≥${st.threshold}%佔比%`, '漲停', '漲停佔比%', '跌停', '上漲', '下跌', '家數', '成交值(元)'],
+    ['日期', '族群', '平均漲幅%', '市值加權%', `漲幅≥${st.threshold}%家數`, `≥${st.threshold}%佔比%`, '漲停', '漲停佔比%', '比重%', '比重Z(20日)', '資金流', '週轉率%', '法人淨買超(元)', '跌停', '上漲', '下跌', '家數', '成交值(元)'],
     sortRows(st.groups, st.groupSort.key, st.groupSort.dir).map((g) => [
-      st.date, g.name, g.avg_pct, g.cap_pct, g.strong_count, g.strong_ratio, g.limit_up, g.limit_ratio, g.limit_down, g.up, g.down, g.count, g.turnover,
+      st.date, g.name, g.avg_pct, g.cap_pct, g.strong_count, g.strong_ratio, g.limit_up, g.limit_ratio, g.share, g.z20, g.mf, g.turnover_rate, g.inst_net, g.limit_down, g.up, g.down, g.count, g.turnover,
     ]),
   ],
   hC: () => {
@@ -1160,7 +1162,8 @@ const groupFilter = { text: '' };
 function filterGroupRows(rows) {
   ensureGroupFilterBox();
   const t = groupFilter.text.trim().toLowerCase();
-  return t ? rows.filter((g) => g.name.toLowerCase().includes(t)) : rows;
+  const named = t ? rows.filter((g) => g.name.toLowerCase().includes(t)) : rows;
+  return flowState.igniteOnly ? named.filter((g) => g.z20 >= IGNITE_Z) : named;
 }
 
 function ensureGroupFilterBox() {
@@ -1416,5 +1419,52 @@ function setupColResizer() {
     } catch {
       /* ignore */
     }
+  });
+}
+
+// ---- money flow columns in B (spec 2026-10-23-money-flow-design.md) ----------------------------
+const IGNITE_Z = 2;
+const flowState = { ticket: 0, igniteOnly: false };
+
+function flowCells(g) {
+  if (g.z20 === undefined) return '<td class="muted">…</td>'.repeat(4);
+  const z = g.z20 === null ? '<td class="muted">—</td>' : `<td class="c" style="background:${colorFor(g.z20, 3)}" title="5 日 Z ${g.z5 === null ? '—' : g.z5.toFixed(1)}，比重 ${g.share.toFixed(2)}%">${g.z20.toFixed(1)}</td>`;
+  const mf = g.mf === null ? '<td class="muted">—</td>' : `<td class="c" style="background:${colorFor(g.mf, 60)}">${g.mf.toFixed(0)}</td>`;
+  const tr = g.turnover_rate === null ? '<td class="muted">—</td>' : `<td>${g.turnover_rate.toFixed(2)}%</td>`;
+  const inst =
+    g.inst_net === null
+      ? '<td class="muted" title="這天還沒有法人資料（盤後公布，或背景回補中）">—</td>'
+      : `<td class="c" style="background:${colorFor(g.inst_ratio, 0.3)}" title="佔族群市值 ${g.inst_ratio === null ? '—' : g.inst_ratio.toFixed(3) + '%'}">${(g.inst_net / 1e8).toFixed(1)}</td>`;
+  return z + mf + tr + inst;
+}
+
+async function loadFlows() {
+  const t = ++flowState.ticket;
+  ensureIgniteBox();
+  let data;
+  try {
+    data = await getJson(`/api/history/flows?date=${st.date}&grouping=${st.grouping}`);
+  } catch {
+    return;
+  }
+  if (t !== flowState.ticket) return;
+  const by = data.groups || {};
+  for (const g of st.groups) {
+    const f = by[g.name];
+    Object.assign(g, f ? { ...f } : { share: null, z5: null, z20: null, mf: null, turnover_rate: null, inst_net: null, inst_ratio: null });
+  }
+  renderGroups();
+}
+
+function ensureIgniteBox() {
+  if ($('#hIgnite')) return;
+  const label = document.createElement('label');
+  label.className = 'chk';
+  label.title = '只顯示成交比重暴增（比重 Z ≥ 2）的族群：冷門題材突然被資金點火';
+  label.innerHTML = '<input type="checkbox" id="hIgnite"> 只看🔥點火';
+  ($('#hGroupFilter') || $('#hBDate')).after(label);
+  $('#hIgnite').addEventListener('change', (e) => {
+    flowState.igniteOnly = e.target.checked;
+    renderGroups();
   });
 }

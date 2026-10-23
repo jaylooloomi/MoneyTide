@@ -35,6 +35,17 @@ CREATE TABLE IF NOT EXISTS index_daily (
     open REAL, high REAL, low REAL, close REAL, change REAL, turnover_yuan REAL,
     PRIMARY KEY (date, market)
 );
+CREATE TABLE IF NOT EXISTS inst_daily (
+    date TEXT NOT NULL,
+    code TEXT NOT NULL,
+    foreign_net REAL, trust_net REAL, dealer_net REAL, total_net REAL,
+    PRIMARY KEY (date, code)
+);
+CREATE TABLE IF NOT EXISTS inst_day (
+    date TEXT PRIMARY KEY,
+    rows INTEGER NOT NULL DEFAULT 0,
+    fetched_at TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS news_day (
     date TEXT PRIMARY KEY,
     themes TEXT NOT NULL,
@@ -73,6 +84,7 @@ class HistoryStore:
         # results derived from immutable past days (e.g. per-day group averages); cleared on writes
         self.derived_cache: dict = {}
         self._news_version = 0  # bumped on news writes; part of the hot-themes cache key
+        self._inst_version = 0  # bumped on institutional writes; part of the money-flow cache key
         path.parent.mkdir(parents=True, exist_ok=True)
         with self._conn() as c:
             c.executescript(SCHEMA)
@@ -347,3 +359,40 @@ class HistoryStore:
 
     def news_version(self) -> int:
         return self._news_version
+
+
+    # ---- 三大法人 net buy/sell (shares) ------------------------------------------------------
+
+    def save_inst_day(self, day: date, rows: list | None, fetched_at: datetime) -> None:
+        """rows: InstRow-like objects, or None/[] for a day without data (recorded so it is not refetched)."""
+        with self._lock, self._conn() as c:
+            c.execute("DELETE FROM inst_daily WHERE date = ?", (day.isoformat(),))
+            c.executemany(
+                "INSERT INTO inst_daily (date, code, foreign_net, trust_net, dealer_net, total_net) VALUES (?, ?, ?, ?, ?, ?)",
+                [(day.isoformat(), r.code, r.foreign, r.trust, r.dealer, r.total) for r in rows or []],
+            )
+            c.execute(
+                "INSERT OR REPLACE INTO inst_day (date, rows, fetched_at) VALUES (?, ?, ?)",
+                (day.isoformat(), len(rows or []), fetched_at.isoformat()),
+            )
+        self._inst_version += 1
+
+    def inst_dates(self) -> set[date]:
+        with self._conn() as c:
+            return {date.fromisoformat(r["date"]) for r in c.execute("SELECT date FROM inst_day")}
+
+    def inst_net(self, days: list[date]) -> dict[date, dict[str, float]]:
+        """{day: {code: 三大法人 net shares}}"""
+        if not days:
+            return {}
+        out: dict[date, dict[str, float]] = {d: {} for d in days}
+        marks = ", ".join("?" for _ in days)
+        with self._conn() as c:
+            for d, code, net in c.execute(
+                f"SELECT date, code, total_net FROM inst_daily WHERE date IN ({marks})", [d.isoformat() for d in days]
+            ):
+                out[date.fromisoformat(d)][code] = net or 0.0
+        return out
+
+    def inst_version(self) -> int:
+        return self._inst_version
