@@ -154,11 +154,11 @@ button { font: inherit; color: inherit; cursor: pointer; }
   display: grid; gap: 8px;
   grid-template-columns: minmax(0, 3fr) minmax(360px, 2fr);
   /* max-content: auto rows collapse to ~0 inside this fixed-height scroll container */
-  grid-template-rows: 480px max-content max-content;
+  grid-template-rows: 480px max-content max-content max-content;
   grid-auto-rows: max-content;
-  grid-template-areas: "a b" "c c" "d d";
+  grid-template-areas: "a b" "j j" "c c" "d d";
 }
-.hA { grid-area: a; } .hB { grid-area: b; } .hC { grid-area: c; } .hD { grid-area: d; }
+.hA { grid-area: a; } .hB { grid-area: b; } .hC { grid-area: c; } .hD { grid-area: d; } .hJ { grid-area: j; }
 /* A and B stay pinned while the panels below scroll under them; the shadow hides the grid gap */
 .hA, .hB { position: sticky; top: 0; z-index: 5; box-shadow: 0 0 0 8px var(--bg); }
 .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; display: flex; flex-direction: column; min-height: 0; min-width: 0; }
@@ -181,7 +181,7 @@ table.rot td.sel { outline: 1px solid #fff; }
 .tag { padding: 2px 7px; border-radius: 3px; color: #fff; font-size: 12px; text-decoration: none; white-space: nowrap; }
 .tag small { opacity: .85; margin-left: 4px; }
 @media (max-width: 1100px) {
-  .hist { grid-template-columns: 1fr; grid-template-rows: 420px 420px max-content max-content; grid-template-areas: "a" "b" "c" "d"; }
+  .hist { grid-template-columns: 1fr; grid-template-rows: 420px 420px max-content max-content max-content; grid-template-areas: "a" "b" "j" "c" "d"; }
   .hA, .hB { position: static; box-shadow: none; } /* stacked, pinning both would fill the screen */
 }
 
@@ -231,3 +231,9 @@ table.rot td.sel { outline: 1px solid #fff; }
   content: '載入中…'; position: absolute; top: 8px; right: 12px; z-index: 3;
   padding: 2px 8px; border-radius: 4px; background: #2b3a55; color: #cfe0ff; font-size: 12px;
 }
+
+/* J · 新聞熱門族群 */
+table.news-themes td { vertical-align: top; padding-top: 5px; padding-bottom: 5px; }
+table.news-themes .news-cell { font-size: 12px; line-height: 1.5; max-width: 420px; }
+table.news-themes .news-cell a { color: var(--muted); }
+table.news-themes a.theme-pick { color: #fff; font-weight: 600; }

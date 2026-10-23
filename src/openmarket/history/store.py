@@ -35,6 +35,18 @@ CREATE TABLE IF NOT EXISTS index_daily (
     open REAL, high REAL, low REAL, close REAL, change REAL, turnover_yuan REAL,
     PRIMARY KEY (date, market)
 );
+CREATE TABLE IF NOT EXISTS news_day (
+    date TEXT PRIMARY KEY,
+    themes TEXT NOT NULL,
+    headlines INTEGER NOT NULL DEFAULT 0,
+    fetched_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS news_ai (
+    date TEXT PRIMARY KEY,
+    themes TEXT NOT NULL,
+    model TEXT,
+    created_at TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS ai_reason (
     date TEXT NOT NULL,
     code TEXT NOT NULL,
@@ -60,6 +72,7 @@ class HistoryStore:
         self._lock = threading.Lock()
         # results derived from immutable past days (e.g. per-day group averages); cleared on writes
         self.derived_cache: dict = {}
+        self._news_version = 0  # bumped on news writes; part of the hot-themes cache key
         path.parent.mkdir(parents=True, exist_ok=True)
         with self._conn() as c:
             c.executescript(SCHEMA)
@@ -277,3 +290,60 @@ class HistoryStore:
                 "INSERT OR REPLACE INTO ai_reason (date, code, reason, links, model, created_at) VALUES (?, ?, ?, ?, ?, ?)",
                 (day.isoformat(), code, reason, json.dumps(links, ensure_ascii=False), model, datetime.now().astimezone().isoformat()),
             )
+
+
+    # ---- news-driven hot groups (one keyword result per day, optional AI clean-up) ---------------
+
+    def save_news_day(self, day: date, themes: dict, headlines: int) -> None:
+        import json
+
+        with self._lock, self._conn() as c:
+            c.execute(
+                "INSERT OR REPLACE INTO news_day (date, themes, headlines, fetched_at) VALUES (?, ?, ?, ?)",
+                (day.isoformat(), json.dumps(themes, ensure_ascii=False), headlines, datetime.now().astimezone().isoformat()),
+            )
+        self._news_version += 1
+
+    def news_dates(self) -> set[date]:
+        with self._conn() as c:
+            return {date.fromisoformat(r["date"]) for r in c.execute("SELECT date FROM news_day")}
+
+    def news_dates_sorted(self, up_to: date | None = None, limit: int | None = None) -> list[date]:
+        """Stored news days, newest first."""
+        sql, args = "SELECT date FROM news_day", []
+        if up_to is not None:
+            sql += " WHERE date <= ?"
+            args.append(up_to.isoformat())
+        sql += " ORDER BY date DESC"
+        if limit is not None:
+            sql += " LIMIT ?"
+            args.append(limit)
+        with self._conn() as c:
+            return [date.fromisoformat(r["date"]) for r in c.execute(sql, args)]
+
+    def news_day(self, day: date) -> dict:
+        import json
+
+        with self._conn() as c:
+            row = c.execute("SELECT themes FROM news_day WHERE date = ?", (day.isoformat(),)).fetchone()
+        return json.loads(row["themes"]) if row else {}
+
+    def save_news_ai(self, day: date, themes: list[dict], model: str | None) -> None:
+        import json
+
+        with self._lock, self._conn() as c:
+            c.execute(
+                "INSERT OR REPLACE INTO news_ai (date, themes, model, created_at) VALUES (?, ?, ?, ?)",
+                (day.isoformat(), json.dumps(themes, ensure_ascii=False), model, datetime.now().astimezone().isoformat()),
+            )
+        self._news_version += 1
+
+    def news_ai(self, day: date) -> list[dict] | None:
+        import json
+
+        with self._conn() as c:
+            row = c.execute("SELECT themes FROM news_ai WHERE date = ?", (day.isoformat(),)).fetchone()
+        return json.loads(row["themes"]) if row else None
+
+    def news_version(self) -> int:
+        return self._news_version

@@ -19,7 +19,7 @@ def _date(text: str) -> date:
         raise HTTPException(422, f"invalid date {text!r}, expected YYYY-MM-DD") from exc
 
 
-GROUPINGS = ("industry", "custom", "concept", "chain")
+GROUPINGS = ("industry", "custom", "concept", "chain", "news")
 
 
 def create_history_router(
@@ -29,8 +29,10 @@ def create_history_router(
 ) -> APIRouter:
     r = APIRouter(prefix="/api/history")
 
-    def grouping_of(name: str) -> Grouping:
-        g = get_grouping(name) if name in GROUPINGS else None
+    def grouping_of(name: str, day: date | None = None) -> Grouping:
+        # the news grouping changes with the day: endpoints that have a date ask for that day's themes
+        lookup = f"news@{day.isoformat()}" if name == "news" and day else name
+        g = get_grouping(lookup) if name in GROUPINGS else None
         if g is None:
             raise HTTPException(422, f"unknown or unavailable grouping {name!r}")
         return g
@@ -50,7 +52,7 @@ def create_history_router(
         d = _date(day)
         if not get_store().day_rows(d):
             raise HTTPException(404, f"no data for {day}")
-        stocks = day_stocks(get_store(), d, None if grouping == "industry" else grouping_of(grouping))
+        stocks = day_stocks(get_store(), d, None if grouping == "industry" else grouping_of(grouping, d))
         return {"date": d.isoformat(), "stocks": stocks}
 
     @r.get("/groups")
@@ -58,7 +60,7 @@ def create_history_router(
         day: str = Query(..., alias="date"), threshold: float = Query(5, ge=0, le=10), grouping: str = "industry"
     ) -> dict:
         d = _date(day)
-        g = grouping_of(grouping)
+        g = grouping_of(grouping, d)
         rows = get_store().day_rows(d)
         if not rows:
             raise HTTPException(404, f"no data for {day}")
@@ -89,7 +91,7 @@ def create_history_router(
         start: str | None = Query(None, alias="from"),
         grouping: str = "industry",
     ) -> dict:
-        g = grouping_of(grouping)
+        g = grouping_of(grouping, _date(to))
         try:
             return movers(get_store(), _date(to), mode, value, start=_date(start) if start else None, grouping=g)
         except ValueError as exc:
@@ -119,7 +121,7 @@ def create_history_router(
     # bonus-10: 5/20/60-day group returns (loaded separately so the ranking renders first)
     @r.get("/periods")
     def periods(day: str = Query(..., alias="date"), grouping: str = "industry") -> dict:
-        g = grouping_of(grouping)
+        g = grouping_of(grouping, _date(day))
         return {"date": day, "groups": group_periods(get_store(), _date(day), grouping=g)}
 
     # bonus-14: breadth calendar (one row per stored trading day)

@@ -45,7 +45,7 @@ try {
 }
 try {
   const saved = JSON.parse(localStorage.getItem('openmarket.live.grouping') || '""');
-  if (['industry', 'custom', 'concept', 'chain'].includes(saved)) liveGrouping.by = saved;
+  if (['industry', 'custom', 'concept', 'chain', 'news'].includes(saved)) liveGrouping.by = saved;
 } catch {
   /* default */
 }
@@ -807,7 +807,7 @@ async function loadLiveMapping(name, force = false) {
   liveGrouping.loading[name] = true;
   try {
     const resp = await fetch(`/api/groupings/${name}`, { cache: 'no-store' });
-    if (!resp.ok) throw new Error(resp.status === 404 ? `${name === 'chain' ? '細產業' : '概念股'}分類尚未載入完成` : `HTTP ${resp.status}`);
+    if (!resp.ok) throw new Error(resp.status === 404 ? `${{ chain: '細產業', news: '新聞族群', concept: '概念股' }[name] || name}分類尚未載入完成` : `HTTP ${resp.status}`);
     liveGrouping.maps[name] = (await resp.json()).mapping;
     render();
   } catch (err) {
@@ -845,7 +845,7 @@ function renderLiveGroupingSeg() {
     seg.id = 'liveGrouping';
     seg.setAttribute('role', 'group');
     seg.setAttribute('aria-label', '族群分類');
-    seg.innerHTML = '<button data-value="industry">官方產業</button><button data-value="custom">自訂族群</button><button data-value="concept">概念股</button><button data-value="chain" title="櫃買中心產業價值鏈平台的細分類">細產業</button>';
+    seg.innerHTML = '<button data-value="industry">官方產業</button><button data-value="custom">自訂族群</button><button data-value="concept">概念股</button><button data-value="chain" title="櫃買中心產業價值鏈平台的細分類">細產業</button><button data-value="news" title="近 3 個交易日新聞最常提到的族群（每日更新）">新聞族群</button>';
     $('#liveControls .seg[data-group="market"]').before(seg);
     seg.addEventListener('click', (e) => {
       const b = e.target.closest('button[data-value]');

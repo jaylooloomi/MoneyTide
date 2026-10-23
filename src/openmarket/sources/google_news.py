@@ -40,13 +40,13 @@ def news_url(name: str, code: str, day: date) -> str:
     return f"{RSS_URL}?{urllib.parse.urlencode({'q': q, 'hl': 'zh-TW', 'gl': 'TW', 'ceid': 'TW:zh-Hant'})}"
 
 
-def parse_rss(xml_text: str, day: date, limit: int = MAX_ITEMS) -> list[Headline]:
-    """Items published within ±WINDOW_DAYS of `day` (Taipei), newest first, deduplicated by title."""
+def parse_rss(xml_text: str, day: date, limit: int = MAX_ITEMS, window: int = WINDOW_DAYS) -> list[Headline]:
+    """Items published within ±`window` days of `day` (Taipei), newest first, deduplicated by title."""
     try:
         root = ET.fromstring(xml_text)
     except ET.ParseError:
         return []
-    lo, hi = day - timedelta(days=WINDOW_DAYS), day + timedelta(days=WINDOW_DAYS)
+    lo, hi = day - timedelta(days=window), day + timedelta(days=window)
     out: list[Headline] = []
     seen: set[str] = set()
     for item in root.iter("item"):

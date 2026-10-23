@@ -19,6 +19,7 @@ from pydantic import BaseModel
 from .ai import AIConfig
 from .config import STATIC_DIR, TAIPEI, USER_AGENT, AppConfig
 from .explain import explain_day
+from .news_themes import NewsThemeCollector, themes_for_day, themes_mapping
 from .concepts import ConceptLoader
 from .groups import GroupStore
 from .history.api import create_history_router, live_quote_day
@@ -32,6 +33,7 @@ from .sources.official import fetch_tpex_day, fetch_twse_day
 from .sources.official_index import fetch_index_month
 from .sources.company_address import fetch_county_groups
 from .sources.google_news import fetch_headlines
+from .sources.news_themes import fetch_day_headlines
 from .sources.tpex_chains import fetch_chains
 from .sources.yahoo_concepts import fetch_concepts
 from .sources.shares import fetch_shares
@@ -80,6 +82,19 @@ def create_app(
     watchlist = Watchlist(config.data_dir / "watchlist.json")
     groups = GroupStore(config.data_dir / "groups.json")
 
+    def stock_names() -> dict[str, str]:
+        """Common-stock code → name from the ISIN listing (empty until it has loaded)."""
+        p = app.state.poller
+        return {c: i.name for c, i in (p.infos if p else {}).items() if i.kind == "stock"}
+
+    def named_groups() -> dict[str, list[str]]:
+        """Concept + 細產業 groups by name: a news theme with the same name borrows their members."""
+        out: dict[str, list[str]] = {}
+        for loader in (app.state.concepts, app.state.chains):
+            if loader is not None:
+                out.update(loader.concepts)
+        return out
+
     def get_grouping(name: str):
         if name == "industry":
             return industry_grouping
@@ -94,6 +109,14 @@ def create_app(
                 return None
             g = mapping_grouping(loader.mapping)
             g.cache_key = f"concept:{loader.saved_at.isoformat() if loader.saved_at else ''}"
+            return g
+        if name == "news" or name.startswith("news@"):  # 新聞族群: that day's hot themes (latest without a date)
+            day = date.fromisoformat(name[5:]) if "@" in name else None
+            used, themes, _ = themes_for_day(app.state.history, day, named_groups(), stock_names())
+            if not themes:
+                return None
+            g = mapping_grouping(themes_mapping(themes))
+            g.cache_key = f"news:{used.isoformat()}:{app.state.history.news_version()}"
             return g
         if name == "chain":  # 細產業 (TPEx 產業價值鏈)
             loader = app.state.chains
@@ -125,6 +148,14 @@ def create_app(
                 fetch_index=lambda market, month: fetch_index_month(client, market, month, asyncio.sleep, REQUEST_DELAY_SECONDS),
             )
             tasks.append(asyncio.create_task(app.state.collector.run()))
+            app.state.news = NewsThemeCollector(
+                store=app.state.history,
+                fetch_day=lambda d: fetch_day_headlines(client, d, asyncio.sleep, REQUEST_DELAY_SECONDS),
+                reference=stock_names,
+                ai_config=app.state.ai,
+                http=client,
+            )
+            tasks.append(asyncio.create_task(app.state.news.run()))
         if start_concepts and app.state.concepts is None:
             if client is None:
                 client = make_client()
@@ -166,6 +197,7 @@ def create_app(
     app.state.poller = poller
     app.state.history = history_store or HistoryStore(config.data_dir / "history.sqlite")
     app.state.collector = None
+    app.state.news = None
     app.state.concepts = concepts
     app.state.chains = chains
     app.state.counties = counties
@@ -307,6 +339,49 @@ def create_app(
             raise HTTPException(403, "missing X-OpenMarket-Action header")
         return await run_explain(source, day, run=True)
 
+    # ---- 新聞熱門族群 (panel J and the `news` grouping) -------------------------------------------
+
+    @app.get("/api/news-themes/status")
+    def news_status() -> dict:
+        store = app.state.history
+        dates = store.news_dates_sorted(limit=1)
+        st = app.state.news.state if app.state.news else None
+        return {
+            "ready": bool(dates),
+            "count": len(store.news_dates()),
+            "saved_at": dates[0].isoformat() if dates else None,
+            "running": bool(st and st.running),
+            "done": st.done if st else 0,
+            "total": st.total if st else 0,
+            "error": st.error if st else "",
+        }
+
+    @app.get("/api/news-themes")
+    def news_themes(day: str | None = Query(None, alias="date")) -> dict:
+        d = None
+        if day:
+            try:
+                d = date.fromisoformat(day)
+            except ValueError as exc:
+                raise HTTPException(422, f"invalid date {day!r}") from exc
+        names = stock_names()
+        used, themes, method = themes_for_day(app.state.history, d, named_groups(), names)
+        rows = {r["code"]: r for r in app.state.history.day_rows(d)} if d else {}
+        out = []
+        for t in themes:
+            pcts = [rows[c]["change_pct"] for c in t["codes"] if c in rows and rows[c]["change_pct"] is not None]
+            out.append({
+                "name": t["name"],
+                "aliases": t["aliases"],
+                "score": t["score"],
+                "prev_score": t["prev_score"],
+                "titles": t["titles"][:3],
+                "members": [{"code": c, "name": names.get(c, c), "change_pct": rows[c]["change_pct"] if c in rows else None} for c in t["codes"]],
+                "avg_pct": sum(pcts) / len(pcts) if pcts else None,
+                "strong_ratio": sum(p >= 5 for p in pcts) / len(pcts) * 100 if pcts else None,
+            })
+        return {"date": day, "news_date": used.isoformat() if used else None, "method": method, "themes": out}
+
     @app.get("/api/counties/status")
     def counties_status() -> dict:
         loader = app.state.counties
@@ -341,12 +416,17 @@ def create_app(
             if loader is None or not loader.mapping:
                 raise HTTPException(404, "細產業分類尚未載入完成")
             return {"name": name, "mapping": loader.mapping}
+        if name == "news":
+            _, themes, _ = themes_for_day(app.state.history, None, named_groups(), stock_names())
+            if not themes:
+                raise HTTPException(404, "新聞族群尚未整理完成")
+            return {"name": name, "mapping": themes_mapping(themes)}
         if name == "county":  # code → [head-office county] for the map view
             loader = app.state.counties
             if loader is None or not loader.mapping:
                 raise HTTPException(404, "公司地址資料尚未載入完成")
             return {"name": name, "mapping": loader.mapping}
-        raise HTTPException(422, "grouping must be custom, concept, chain or county")
+        raise HTTPException(422, "grouping must be custom, concept, chain, news or county")
 
     @app.get("/api/groups")
     def list_groups() -> dict:
@@ -378,3 +458,4 @@ def create_app(
         mimetypes.add_type("text/javascript", ".js")
         app.mount("/", StaticFiles(directory=static_dir, html=True), name="static")
     return app
+

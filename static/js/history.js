@@ -20,6 +20,7 @@ import { getGroups, loadGroups, onGroupsChange, openGroupPanel, setStockNames } 
 import { mountIndexPanel } from './indexchart.js';
 import { mountCountyMap } from './countymap.js';
 import { mountHistoryAiPanel } from './ainews.js';
+import { mountNewsPanel } from './newsthemes.js';
 
 const PREFS_KEY = 'openmarket.history.v1';
 const $ = (sel) => document.querySelector(sel);
@@ -49,6 +50,7 @@ let started = false;
 let daysTimer = null;
 let indexPanel = null; // G: TAIEX + TPEx timeline (indexchart.js)
 let aiPanel = null; // I: AI news explanations (ainews.js)
+let newsPanel = null; // J: news-driven hot groups (newsthemes.js)
 const countyPanel = { ctl: null, ticket: 0, cache: new Map() }; // H: county money map (countymap.js)
 
 function loadPrefs() {
@@ -149,6 +151,7 @@ async function selectDate(date) {
   markCalendar(); // bonus-14
   indexPanel?.mark(st.date); // G
   aiPanel?.load(); // I: cached explanations for the day
+  newsPanel?.load(); // J: that day's hot groups
 }
 
 // ---- A: day heatmap ---------------------------------------------------------
@@ -381,6 +384,7 @@ function renderGrouping() {
 // third-party groupings that load in the background: concept (Yahoo) and chain (TPEx 細產業)
 const LOADED_GROUPINGS = {
   concept: { url: '/api/concepts/status', label: '概念股分類', source: 'Yahoo 股市概念股分類', timer: null },
+  news: { url: '/api/news-themes/status', label: '新聞族群', source: '新聞熱門族群（依當天新聞，每日更新）', timer: null },
   chain: { url: '/api/chains/status', label: '細產業分類', source: '櫃買中心產業價值鏈平台', timer: null },
 };
 
@@ -571,6 +575,8 @@ export async function showHistory() {
     renderCountyPanel();
     aiPanel = mountHistoryAiPanel($('#historyView'), () => st.date);
     aiPanel.load();
+    newsPanel = mountNewsPanel($('#historyView'), { getDate: () => st.date, onPick: pickNewsTheme, onStock: openHistCard });
+    newsPanel.load();
     return;
   }
   chart.resize();
@@ -847,7 +853,7 @@ if (document.readyState !== 'loading') replayControls();
 
 // ---- bonus-07: CSV export of B / C / D ----------------------------------------------
 
-const GROUPING_LABEL = { industry: '官方產業', custom: '自訂族群', concept: '概念股', chain: '細產業' };
+const GROUPING_LABEL = { industry: '官方產業', custom: '自訂族群', concept: '概念股', chain: '細產業', news: '新聞族群' };
 
 function downloadCsv(name, header, rows) {
   const blob = new Blob([toCsv(header, rows)], { type: 'text/csv;charset=utf-8' });
@@ -938,10 +944,10 @@ async function loadPeriods({ cachedOnly = false } = {}) {
 
 // ---- bonus-12: bookmarkable view state in the URL hash (#history/<date>/<grouping>) ----
 
-const GROUPINGS_OK = new Set(['industry', 'custom', 'concept', 'chain']);
+const GROUPINGS_OK = new Set(['industry', 'custom', 'concept', 'chain', 'news']);
 
 function parseHash() {
-  const m = /^#history(?:\/(\d{4}-\d{2}-\d{2}))?(?:\/(industry|custom|concept|chain))?$/.exec(location.hash);
+  const m = /^#history(?:\/(\d{4}-\d{2}-\d{2}))?(?:\/(industry|custom|concept|chain|news))?$/.exec(location.hash);
   return m ? { date: m[1] || null, grouping: m[2] || null } : null;
 }
 
@@ -1270,4 +1276,18 @@ function panelLoading(sel, key, t) {
   return () => {
     if (t === tickets[key]) el?.classList.remove('loading');
   };
+}
+
+// ---- J: picking a news theme switches to the news grouping and zooms into it ----------------------
+function pickNewsTheme(name) {
+  stopReplay();
+  const changed = st.grouping !== 'news';
+  st.grouping = 'news';
+  st.zoom = name; // renderChart zooms once the regrouped day has loaded
+  idx.picked = [];
+  members.group = null;
+  savePrefs();
+  if (changed) reloadGrouped();
+  else renderChart();
+  document.querySelector('#historyView .hA').scrollIntoView({ block: 'nearest' });
 }
