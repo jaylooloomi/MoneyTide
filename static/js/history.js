@@ -254,6 +254,7 @@ function renderGroups() {
       (g) => `<tr data-group="${escapeHtml(g.name)}"${g.name === st.zoom ? ' class="hl"' : ''}>
         <td class="l"><span class="clip" title="${escapeHtml(g.name)}">${g.z20 >= IGNITE_Z ? '<span title="成交比重暴增（Z ≥ 2）">🔥</span>' : ''}${escapeHtml(g.name)}</span></td>
         ${rankCell(g)}
+        <td class="muted">${g.count}</td>
         ${pct(g.avg_pct, 3)}
         ${pct(g.cap_pct, 3)}
         ${periodCells(g)}
@@ -263,7 +264,6 @@ function renderGroups() {
         <td class="c" style="background:${breadthColor(g.up, g.down)}">${g.up}/${g.down}</td>
         ${flowCells(g)}
         <td class="l">${g.leader ? `<a href="#" class="leader" data-code="${escapeHtml(g.leader.code)}">${escapeHtml(g.leader.name)} <span class="${g.leader.change_pct > 0 ? 'up' : g.leader.change_pct < 0 ? 'down' : ''}">${fmtPct(g.leader.change_pct)}</span></a>` : '—'}</td>
-        <td class="muted">${g.count}</td>
       </tr>`,
     )
     .join('');
