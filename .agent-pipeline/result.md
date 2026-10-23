@@ -21,6 +21,7 @@
 | 10 | N 卡片「📰 新聞題材」 | 3.7（scores-13.md） | Finviz screener News 欄／Daily Digest；Benzinga Why Is It Moving | 卡片多一行「📰 題材：被動元件（2）」，成員 tooltip 列各自題材；近 3 個新聞日裡提到這檔的關鍵字，回傳時附上（不改快取），過濾「音量🔊」這類解析殘渣。實測抓到 api.py 裡同名的 news_themes 路由遮住匯入（500），已改名並補端點測試。新聞多半只點名大型股，小型股配對常沒有題材。改 finder.py、api.py、finder.js、app.css、兩邊測試 | `uv run pytest`（244 ✅）、`npm test`（82 ✅）；10/22 瀏覽器實測 | ✅ | ① 算進快取（新聞會補抓，存進去會過期）② 每檔都列一長串題材（卡片會爆；只取前 3） |
 | 11 | 卡片明細帶入 🔁／📰 | 7.5（scores-15.md） | Finviz screener → quote 頁帶 News | 點卡片展開的 K 檢視標題列，帶上卡片的「🔁 近 5 天第 N 次」與「📰 題材」（直接取卡片上已畫好的內容，不動卡片程式）。改 finder.js、app.css | `npm test`（82 ✅）；瀏覽器實測展開 10/22 卡片 | ✅ | ① 抽共用函式重寫卡片（會動到 bonus-09／10 的程式）② 明細再打一次 API 取資料（資料已在卡片上） |
 | 12 | 工具列「💡 資金連動」摘要 | 3.3（scores-16.md） | moomoo Market Monitor float bar／bottom bar | 歷史頁工具列（狀態燈前）「💡 資金連動：找法1 6 群（🔁 3）／找法2 1 群」，點了捲到 N（避開黏在上方的 A／B）；只讀已存結果，沒存過的日子（如 9/01）不顯示。改 history.js、finder.js、app.css、finder.test.js | `npm test`（83 ✅）；瀏覽器實測 10/22 文字、點擊後 N 位於可視區頂端 8px、9/01 隱藏 | ✅ | ① 放進黏在頂端的 A／B 面板（會擠到熱力圖）② 共用 bonus-08 的讀取（會改到 bonus-08 的程式） |
+| 13 | C 族群輪動捲到才載入 | 7.0（scores-17.md） | Front-End Checklist section-level deferral／import on visibility；Core Web Vitals：別延後首屏內容 | 所有觸發 C 的地方都經過 loadRotation：開頁先等 3 秒讓 K／N／J 撐開版面，之後 C 在可視範圍 300px 內才真的發請求，否則記著、捲近時才載（換日期時 C 不在畫面也一樣）。改 history.js | `npm test`（83 ✅）；瀏覽器實測：開頁 0 個 rotation 請求 → 捲到 C 觸發後 36 列 | ✅ | ① 改後端讓 rotation 變快（冷啟動慢的根因在同時太多冷計算，不在 rotation 演算法）② C 改成按鈕才載入（多一個動作） |
 
 ## 判斷不值得做
 - C4 N 卡片可排序（1.5，scores-04.md）：每天篩完通常只剩幾張卡，排序幫助不大，還會改到現有預設順序。

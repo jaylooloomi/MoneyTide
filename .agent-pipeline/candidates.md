@@ -122,3 +122,15 @@
 因為原始需求是**看動機與持續性**，所以頂尖做法會順便做**明細頁帶著清單上的摘要資訊**；目前的成果**只有部分**——卡片上有，但點開的明細（K 動畫）沒有。
 - 參考：Finviz screener → quote 頁帶 News（https://finviz.com/blog/news-column-and-stock-flags-now-in-the-finviz-screener/）
 - 預估：finder.js（展開時在明細標題帶入）；1 檔、約 15 行。
+
+# 加分候選（第 10 輪）
+
+## L7 · C 族群輪動改成「捲到才載入」（避開重啟後的冷啟動塞車）（✅ 已完成 bonus-13）
+因為原始需求是**整個流程要快（1 分鐘內），而且你抱怨過「跑太久」**，所以頂尖做法會順便做**畫面外的區塊等接近可視範圍才載入（section-level deferral）**；目前的成果**只有部分**——N 已經是捲到才載入，但 C 一開頁就算最重的冷啟動（今晚量到 C 一次 94 秒，還拖慢同時間的 N／K）；A／B／K 才是開頁要看的。
+- 參考：Front-End Checklist「Use Intersection Observer for Section-Level Deferral」「import on visibility」（https://frontendchecklist.io/rules/performance/lazy-loading、https://frontendchecklist.io/rules/performance/import-on-visibility）；「Don't lazy-load above-the-fold content」（https://corewebvitals.io/pagespeed/fix-defer-offscreen-images-lighthouse）
+- 預估：history.js（loadRotation 改成 C 進入可視範圍前 600px 才發；換日期時若 C 不在畫面就標記待載）；1 檔、約 40 行。
+
+## L2 · 即時頁收盤後也顯示「💡 資金連動」摘要，點了開歷史頁 N
+因為原始需求是**每天先看資金往哪裡**，所以頂尖做法會順便做**常駐的訊號摘要列**；目前的成果**只有部分**——bonus-12 只在歷史頁；收盤後停在即時頁看不到。
+- 參考：moomoo Market Monitor float bar（https://www.moomoo.com/us/support/topic3_70）
+- 預估：app.js（收盤後讀最新已存日期的 stored_only 結果，工具列一顆按鈕）；1～2 檔、約 40 行。

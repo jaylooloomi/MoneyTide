@@ -367,7 +367,48 @@ const BENCH_HINT = {
   share_z: '占上市櫃總成交值比重的 Z 值',
 };
 
-async function loadRotation() {
+// C is below the fold and its first computation after a restart is the heaviest on the page (94 s
+// once, slowing A/B/K/N meanwhile): ask for it only when C is near the screen; until then a request
+// is just remembered and runs as soon as C scrolls within C_NEAR px. At start-up the panels above C
+// are still placeholders, so the first decision waits C_SETTLE_MS.
+const C_NEAR = 300;
+const C_SETTLE_MS = 3000; // K / N / J fill in during the first seconds and push C down
+const rotationLazy = { pending: false, watching: false, ready: false }; // ready: the panels above C are mounted
+
+function rotationNear() {
+  const el = document.querySelector('#historyView .hC');
+  if (!el || el.offsetParent === null) return false;
+  const r = el.getBoundingClientRect();
+  return r.top < innerHeight + C_NEAR && r.bottom > -C_NEAR;
+}
+
+function loadRotation() {
+  if (!rotationLazy.ready) {
+    // start-up: K/N/J are not mounted yet, so C looks near the top; decide once they are
+    rotationLazy.pending = true;
+    return Promise.resolve();
+  }
+  if (rotationNear()) {
+    rotationLazy.pending = false;
+    return loadRotationNow();
+  }
+  rotationLazy.pending = true;
+  if (!rotationLazy.watching) {
+    rotationLazy.watching = true;
+    const wake = () => {
+      if (rotationLazy.pending && rotationNear()) {
+        rotationLazy.pending = false;
+        loadRotationNow();
+      }
+    };
+    const el = document.querySelector('#historyView .hC');
+    if (el) new IntersectionObserver(wake, { rootMargin: `${C_NEAR}px` }).observe(el);
+    $('#historyView')?.addEventListener('scroll', wake, { passive: true }); // the observer can lag in background tabs
+  }
+  return Promise.resolve();
+}
+
+async function loadRotationNow() {
   const table = $('#hRotation');
   let data;
   const t = ++tickets.rotation;
@@ -658,7 +699,6 @@ export async function showHistory() {
     setupColResizer(); // and the A/B width ratio
     await loadDays();
     await applyHashDate(); // bonus-12
-    loadRotation(); // C can be slow on a cold start: the panels below must not wait for it
     loadIndex(); // bonus-04
     loadCalendar(); // bonus-14 (creates F synchronously, so G lands after it)
     indexPanel = mountIndexPanel($('#historyView'), (date) => {
@@ -676,6 +716,11 @@ export async function showHistory() {
     linkPanel = mountLinkagePanel($('#historyView'), { onStock: openHistCard });
     finderPanel = mountFinderPanel($('#historyView'), { onStock: openHistCard });
     finderPanel.refresh(st.date);
+    setTimeout(() => {
+      // once K/N/J have their content, C's real position decides (it loads when scrolled near)
+      rotationLazy.ready = true;
+      loadRotation();
+    }, C_SETTLE_MS);
     return;
   }
   chart.resize();
