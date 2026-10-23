@@ -287,6 +287,16 @@ function rotationText(metric, v) {
   return v.toFixed(0);
 }
 
+// what the 大盤 / 櫃買 rows hold under each metric (tooltip on the row name)
+const BENCH_HINT = {
+  avg_pct: '官方指數漲跌幅',
+  cap_pct: '官方指數漲跌幅',
+  strong_ratio: '全市場普通股的強勢佔比',
+  breadth: '全市場普通股的上漲家數比',
+  limit_up: '全市場普通股的漲停家數',
+  share_z: '占上市櫃總成交值比重的 Z 值',
+};
+
 async function loadRotation() {
   const table = $('#hRotation');
   let data;
@@ -303,10 +313,11 @@ async function loadRotation() {
   done();
   csvData.rotation = data; // bonus-07
   const head = data.dates.map((d) => `<th data-date="${d}" title="${d}">${d.slice(5).replace('-', '/')}</th>`).join('');
-  const rows = data.groups
+  const bench = (data.benchmarks || []).map((g) => ({ ...g, bench: true }));
+  const rows = [...bench, ...data.groups]
     .map(
       (g) =>
-        `<tr><td class="name"><span class="clip" title="${escapeHtml(g.name)}">${escapeHtml(g.name)}</span></td>` +
+        `<tr${g.bench ? ' class="bench"' : ''}><td class="name"><span class="clip" title="${escapeHtml(g.bench ? `${g.name}：${BENCH_HINT[data.metric] || ''}` : g.name)}">${escapeHtml(g.name)}</span></td>` +
         g.values
           .map(
             (v, i) =>
@@ -317,6 +328,12 @@ async function loadRotation() {
     )
     .join('');
   table.innerHTML = `<thead><tr><th></th>${head}</tr></thead><tbody>${rows}</tbody>`;
+  // 大盤 / 櫃買 stay pinned under the date header while the groups scroll
+  let top = table.tHead.offsetHeight;
+  for (const tr of table.querySelectorAll('tr.bench')) {
+    for (const td of tr.cells) td.style.top = `${top}px`;
+    top += tr.offsetHeight + 2; // border-spacing
+  }
   renderRotationSelection();
   const wrap = table.parentElement;
   wrap.scrollLeft = wrap.scrollWidth; // newest on the right
@@ -890,7 +907,7 @@ const CSV_EXPORTS = {
     return [
       `族群輪動_${d.metric}_${d.dates[d.dates.length - 1] || ''}_${GROUPING_LABEL[st.grouping]}.csv`,
       ['族群', ...d.dates],
-      d.groups.map((g) => [g.name, ...g.values]),
+      [...(d.benchmarks || []), ...d.groups].map((g) => [g.name, ...g.values]),
     ];
   },
   hD: () => {

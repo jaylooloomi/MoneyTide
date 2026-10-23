@@ -23,6 +23,18 @@ def industry_grouping(row: dict) -> list[str]:
 
 industry_grouping.cache_key = "industry"  # groupings with a cache_key may reuse per-day results
 
+# C's two benchmark rows: the whole listed (TWSE) / OTC (TPEx) market as one "group" each
+BENCHMARKS = {"上市": "大盤（加權）", "上櫃": "櫃買（OTC）"}
+
+
+def market_grouping(row: dict) -> list[str]:
+    """Common stocks by market, named as C's benchmark rows."""
+    name = BENCHMARKS.get(row.get("market") or "")
+    return [name] if name and row.get("kind") == "stock" else []
+
+
+market_grouping.cache_key = "market"
+
 
 def daily_group_avgs(store: HistoryStore, dates: list[date], grouping: Grouping) -> list[tuple[dict, float | None]]:
     """Per day: ({group: equal-weight avg change_pct}, market avg over common stocks).
@@ -139,19 +151,49 @@ def rotation(
     if metric not in METRICS:
         raise ValueError(f"metric must be one of {METRICS}")
     if metric == "share_z":
-        return share_z_rotation(store, days, up_to, grouping)
+        out = share_z_rotation(store, days, up_to, grouping)
+        bench = share_z_rotation(store, days, up_to, market_grouping)["groups"]
+        out["benchmarks"] = _benchmark_rows(bench, out["dates"])
+        return out
     dates = sorted(store.trading_dates(up_to=up_to, limit=days))
-    table: dict[str, list] = defaultdict(lambda: [None] * len(dates))
-    for i, stats in enumerate(daily_group_stats(store, dates, threshold, grouping)):
-        for g in stats:
-            table[g["name"]][i] = g[metric]
-    groups = [{"name": n, "values": v} for n, v in table.items()]
+    groups = _rotation_rows(daily_group_stats(store, dates, threshold, grouping), dates, metric)
     # strongest recent groups first: mean of the last 3 values
     def recent(g):
         tail = [x for x in g["values"][-3:] if x is not None]
         return sum(tail) / len(tail) if tail else float("-inf")
     groups.sort(key=recent, reverse=True)
-    return {"dates": [d.isoformat() for d in dates], "metric": metric, "groups": groups}
+    bench = _rotation_rows(daily_group_stats(store, dates, threshold, market_grouping), dates, metric)
+    if metric in ("avg_pct", "cap_pct"):
+        _use_index_change(store, bench, dates)
+    return {"dates": [d.isoformat() for d in dates], "metric": metric, "groups": groups, "benchmarks": _benchmark_rows(bench, [d.isoformat() for d in dates])}
+
+
+def _rotation_rows(stats_by_day: list[list[dict]], dates: list[date], metric: str) -> list[dict]:
+    table: dict[str, list] = defaultdict(lambda: [None] * len(dates))
+    for i, stats in enumerate(stats_by_day):
+        for g in stats:
+            table[g["name"]][i] = g[metric]
+    return [{"name": n, "values": v} for n, v in table.items()]
+
+
+def _use_index_change(store: HistoryStore, bench: list[dict], dates: list[date]) -> None:
+    """The change rows show the official index move (加權／櫃買指數) where the index is stored."""
+    index = store.index_rows()
+    by_name = {g["name"]: g for g in bench}
+    for market, name in BENCHMARKS.items():
+        row = by_name.setdefault(name, {"name": name, "values": [None] * len(dates)})
+        if row not in bench:
+            bench.append(row)
+        for i, d in enumerate(dates):
+            ix = index.get(d.isoformat(), {}).get(market)
+            if ix and ix.get("close") is not None and ix.get("change") is not None and ix["close"] != ix["change"]:
+                row["values"][i] = ix["change"] / (ix["close"] - ix["change"]) * 100
+
+
+def _benchmark_rows(bench: list[dict], dates: list[str]) -> list[dict]:
+    """Both benchmark rows in a fixed order (大盤 then 櫃買), all-null when a market has no data."""
+    by_name = {g["name"]: g for g in bench}
+    return [by_name.get(n, {"name": n, "values": [None] * len(dates)}) for n in BENCHMARKS.values()]
 
 
 def day_stocks(store: HistoryStore, day: date, grouping: Grouping | None = None) -> list[dict]:

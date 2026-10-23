@@ -5,7 +5,7 @@ import contextlib
 import json
 import mimetypes
 from dataclasses import asdict
-from datetime import date, datetime
+from datetime import date, datetime, time
 from collections.abc import AsyncIterator
 from pathlib import Path
 
@@ -24,7 +24,7 @@ from .history.linkage import (
     peak_stats, returns, top_members, verdict_r, verdict_timing,
 )
 from .intraday import IntradayRecorder
-from .sources.yahoo_intraday import fetch_bars
+from .sources.yahoo_intraday import ONE_MINUTE_DAYS, fetch_bars, fetch_day_1m
 from .news_themes import NewsThemeCollector, heat_bursts, themes_for_day, themes_mapping
 from .concepts import ConceptLoader
 from .groups import GroupStore
@@ -430,6 +430,23 @@ def create_app(
                 return have, f"Yahoo 失敗：{type(exc).__name__}"
         return have, ""
 
+    async def minute_bars_for(http: httpx.AsyncClient, code: str, market: str, day: date) -> tuple[list | None, str]:
+        """1-minute bars for the peak time, cached once the session is over; None when unavailable."""
+        store = app.state.history
+        cached = store.yahoo_1m(code, day)
+        if cached is not None:
+            return cached or None, ""
+        now = datetime.now(TAIPEI)
+        if (now.date() - day).days > ONE_MINUTE_DAYS:
+            return None, ""
+        try:
+            bars = await fetch_day_1m(http, code, market, day)
+        except Exception as exc:  # unofficial source: fall back to the 5-minute bars
+            return None, f"Yahoo 1 分 K 失敗：{type(exc).__name__}"
+        if day < now.date() or now.time() >= time(13, 35):
+            store.save_yahoo_1m(code, day, bars)
+        return bars or None, ""
+
     @app.get("/api/history/linkage")
     async def linkage(group: str, day: str = Query(..., alias="date"), grouping: str = "industry") -> dict:
         try:
@@ -454,6 +471,7 @@ def create_app(
         per_code_sessions: dict[str, dict[date, dict]] = {c: {} for c in codes}
         peaks: dict[str, int | None] = {c: None for c in codes}
         sources = {}
+        coarse: set[str] = set()  # members whose peak time is only known to 5 minutes
         async with httpx.AsyncClient(timeout=20, headers={"User-Agent": USER_AGENT}, follow_redirects=True) as http:
             for s in sessions:
                 if s in recorded:
@@ -476,6 +494,16 @@ def create_app(
                         per_code_sessions[m["code"]][s] = {int(x[0][:2]) * 12 + int(x[0][3:5]) // 5 - 108: x[3] for x in b}
                         if s == d:
                             peaks[m["code"]] = peak_minute_from_bars(b)
+                if d in yahoo_sessions:
+                    # the peak time to the minute: 1-minute bars where Yahoo still has them
+                    for m in members:
+                        mb, err = await minute_bars_for(http, m["code"], m["market"], d)
+                        if err and err not in notes:
+                            notes.append(err)
+                        if mb:
+                            peaks[m["code"]] = peak_minute_from_bars(mb)
+                        else:
+                            coarse.add(m["code"])
         axis = list(range(0, 55))
         series = []
         for c in codes:
@@ -493,6 +521,7 @@ def create_app(
             "daily": daily,
             "intraday": {"sessions": [{"date": s.isoformat(), "source": sources.get(s, "none")} for s in sessions], "r": r_intraday, "matrix": matrix},
             "peaks": [{"code": c, "time": fmt_minute(p)} for c, p in zip(codes, peak_list)],
+            "peak_resolution_min": 5 if any(peaks[c] is not None for c in coarse) else 1,
             "peak_std_min": std,
             "leader_lag_min": lag,
             "verdict": {"daily": verdict_r(daily.get("r20")), "intraday": verdict_r(r_intraday, INTRADAY_HIGH_R, INTRADAY_LOW_R), "timing": verdict_timing(std)},

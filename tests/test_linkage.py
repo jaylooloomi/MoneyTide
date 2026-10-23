@@ -47,6 +47,7 @@ def test_verdicts_and_peaks():
     assert verdict_timing(5) == "高度同步" and verdict_timing(70) == "時間錯落" and verdict_timing(30) == "普通"
     assert peak_minute_from_ticks([("09:01:00", 10), ("09:15:30", 12), ("10:00:00", 12)]) == 15
     assert peak_minute_from_bars([("09:00", 10, 9, 9.5), ("09:05", 11, 10, 10.5), ("09:10", 11, 10, 10)]) == 5
+    assert peak_minute_from_ticks([("09:30:00", 10), ("13:00:40", 11), ("13:20:00", 15)]) == 240  # 13:00 window
     assert peak_stats([15, 17, 19]) == (pytest.approx(1.6, abs=0.1), 3.0)
     assert peak_stats([15, None]) == (None, None)
     assert fmt_minute(75) == "10:15" and fmt_minute(None) is None
@@ -125,13 +126,43 @@ def test_linkage_api_uses_cached_bars(store, tmp_path):
     for code, base in (("A", 100), ("B", 50), ("C", 20)):
         bars = {s: [(f"{9 + k // 12:02d}:{(k % 12) * 5:02d}", base * (1 + 0.01 * ((k % 7) - 3)) + 1, base, base * (1 + 0.01 * ((k % 7) - 3))) for k in range(54)] for s in sessions}
         store.save_yahoo_bars(code, bars, now)  # fresh: the endpoint must not call Yahoo
+        # 1-minute bars of the shown day: peaks at 09:00, 10:07, 12:59 (to the minute); the 13:10 spike is after the 09:00–13:00 window
+        peak = {"A": "09:00", "B": "10:07", "C": "12:59"}[code]
+        store.save_yahoo_1m(code, d, [("09:00", base, base, base), (peak, base * 2, base, base * 2), ("13:10", base * 3, base, base * 3)])
     app = create_app(AppConfig(data_dir=tmp_path), start_polling=False, start_history=False, start_concepts=False, history_store=store)
     with TestClient(app, base_url="http://127.0.0.1") as client:
         body = client.get("/api/history/linkage", params={"date": d.isoformat(), "group": "G"}).json()
         assert [m["code"] for m in body["members"]] == ["A", "B", "C"]
         assert body["daily"]["r20"] is not None and body["intraday"]["r"] == pytest.approx(1)  # identical shapes
         assert all(s["source"] == "yahoo" for s in body["intraday"]["sessions"])
-        assert body["peak_std_min"] == 0 and body["verdict"]["timing"] == "高度同步" and body["notes"] == []
+        assert [p["time"] for p in body["peaks"]] == ["09:00", "10:07", "12:59"] and body["peak_resolution_min"] == 1
+        assert body["verdict"]["timing"] == "時間錯落" and body["notes"] == []
+        assert body["leader_lag_min"] == pytest.approx((67 + 239) / 2)
         assert client.get("/api/history/linkage", params={"date": d.isoformat(), "group": "nope"}).status_code == 404
         flows = client.get("/api/history/flows", params={"date": d.isoformat()}).json()["groups"]
         assert "r20" in flows["G"]
+
+
+def test_fetch_day_1m_asks_for_one_session():
+    import asyncio
+
+    import httpx
+
+    from openmarket.sources.yahoo_intraday import fetch_day_1m
+
+    payload = json.loads((FIX / "yahoo_5m_2330_TW.json").read_text())
+    day = next(iter(parse_chart(payload)))
+    seen = []
+
+    def handler(request):
+        seen.append(request.url)
+        return httpx.Response(200, json=payload)
+
+    async def run():
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as c:
+            return await fetch_day_1m(c, "2330", "上市", day)
+
+    bars = asyncio.run(run())
+    assert bars == parse_chart(payload)[day]
+    q = seen[0].params
+    assert q["interval"] == "1m" and int(q["period2"]) - int(q["period1"]) == (4 * 60 + 31) * 60

@@ -174,6 +174,9 @@ table.rot th.sel { color: #fff; box-shadow: inset 0 -2px var(--accent); }
 table.rot td { min-width: 34px; height: 22px; text-align: center; color: #fff; cursor: pointer; border-radius: 2px; }
 table.rot td.name { position: sticky; left: 0; background: var(--panel); text-align: left; color: var(--text); padding-right: 8px; white-space: nowrap; z-index: 1; cursor: default; }
 table.rot td.sel { outline: 1px solid #fff; }
+table.rot tr.bench td { position: sticky; z-index: 1; }
+table.rot tr.bench td.name { z-index: 2; color: #ffd400; font-weight: 600; }
+table.rot tr.bench:nth-child(2) td { box-shadow: 0 3px 0 -1px #ffd40066; } /* line under the benchmarks */
 .movers { padding: 8px 10px; display: flex; flex-direction: column; gap: 10px; max-height: 420px; overflow: auto; } /* D scrolls inside */
 .mgroup b { color: #fff; }
 .mgroup .count { color: var(--muted); margin-left: 6px; }

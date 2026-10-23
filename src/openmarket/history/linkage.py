@@ -5,8 +5,9 @@
 - Intraday: correlation of 5-minute returns (within each session, never across the overnight gap)
   over the last 1–3 sessions, from the app's own recorded polls or, for days it did not record,
   Yahoo 5-minute bars.
-- Peak timing: the minute each member first reaches its session high; the spread (std, minutes) and
-  how long after the leader (largest cap) the others peak.
+- Peak timing (日內最高點時間): the minute each member first reaches its 09:00–13:00 high (recorded polls, else Yahoo
+  1-minute bars for the last ~30 days, else the 5-minute bars); the spread (std, minutes) and how
+  long after the leader (largest cap) the others peak.
 """
 
 from __future__ import annotations
@@ -148,7 +149,11 @@ def returns(closes: Mapping[int, float], buckets: list[int]) -> list[float | Non
     return out
 
 
+PEAK_END = 240  # minutes after 09:00: the intraday high is taken over 09:00–13:00
+
+
 def peak_minute_from_ticks(points: list[tuple[str, float]]) -> int | None:
+    points = [p for p in points if minutes(p[0]) <= PEAK_END]
     if not points:
         return None
     best = max(p for _, p in points)
@@ -156,7 +161,8 @@ def peak_minute_from_ticks(points: list[tuple[str, float]]) -> int | None:
 
 
 def peak_minute_from_bars(bars: list[tuple]) -> int | None:
-    """bars: (HH:MM, high, low, close); the bar start of the first bar reaching the session high."""
+    """bars: (HH:MM, high, low, close); the bar start of the first bar reaching the 09:00–13:00 high."""
+    bars = [b for b in bars if minutes(b[0]) <= PEAK_END]
     if not bars:
         return None
     best = max(b[1] for b in bars)

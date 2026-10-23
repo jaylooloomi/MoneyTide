@@ -16,7 +16,7 @@ test('timeline: dots positioned on the session axis, leader crowned', () => {
     { code: '1', name: '龍頭', change_pct: 3 }, { code: '2', name: '二線', change_pct: 1 }, { code: '3', name: '三線', change_pct: 0 }]);
   assert.match(html, /👑龍頭/);
   assert.match(html, /left:0%/);
-  assert.match(html, /left:50%/); // 135 of 270 minutes
+  assert.match(html, /left:56.25%/); // 135 of 240 minutes
   assert.match(html, /三線<\/span><span class="muted">—/);
   assert.match(timelineHtml([{ code: '1', time: null }], [{ code: '1', name: 'x' }]), /沒有分時資料/);
 });

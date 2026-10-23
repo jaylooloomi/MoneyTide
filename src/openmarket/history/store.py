@@ -59,6 +59,12 @@ CREATE TABLE IF NOT EXISTS yahoo_5m (
     fetched_at TEXT NOT NULL,
     PRIMARY KEY (code, date)
 );
+CREATE TABLE IF NOT EXISTS yahoo_1m (
+    code TEXT NOT NULL,
+    date TEXT NOT NULL,
+    bars TEXT NOT NULL,
+    PRIMARY KEY (code, date)
+);
 CREATE TABLE IF NOT EXISTS ptt_day (
     date TEXT PRIMARY KEY,
     titles TEXT NOT NULL,
@@ -503,6 +509,21 @@ class HistoryStore:
                 date.fromisoformat(r["date"]): [tuple(x) for x in json.loads(r["bars"])]
                 for r in c.execute(f"SELECT date, bars FROM yahoo_5m WHERE code = ? AND date IN ({marks})", [code, *[d.isoformat() for d in days]])
             }
+
+    def save_yahoo_1m(self, code: str, day: date, bars: list) -> None:
+        """One finished session's 1-minute bars (kept: a past session never changes)."""
+        import json
+
+        with self._lock, self._conn() as c:
+            c.execute("INSERT OR REPLACE INTO yahoo_1m (code, date, bars) VALUES (?, ?, ?)", (code, day.isoformat(), json.dumps(bars)))
+
+    def yahoo_1m(self, code: str, day: date) -> list | None:
+        """Cached 1-minute bars, [] when Yahoo had none, None when never fetched."""
+        import json
+
+        with self._conn() as c:
+            row = c.execute("SELECT bars FROM yahoo_1m WHERE code = ? AND date = ?", (code, day.isoformat())).fetchone()
+        return [tuple(x) for x in json.loads(row["bars"])] if row else None
 
     def yahoo_fetched_at(self, code: str) -> datetime | None:
         with self._conn() as c:

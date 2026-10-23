@@ -4,11 +4,14 @@ for days the app did not record itself).
 https://query1.finance.yahoo.com/v8/finance/chart/<code>.TW (上市) or .TWO (上櫃)?interval=5m&range=60d
 → chart.result[0]: timestamp[] (epoch, bar start), indicators.quote[0]: open/high/low/close/volume
 (null for empty bars). About 54 bars per session (09:00–13:25 starts) and up to 60 days back.
+
+1-minute bars (for the peak time) come from the same API with interval=1m and a period1/period2
+window; Yahoo keeps them for about 30 days and serves at most 8 days per request.
 """
 
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import date, datetime, time
 
 import httpx
 
@@ -17,6 +20,8 @@ from ..models import ParseError
 from .http import get_with_retry
 
 CHART_URL = "https://query1.finance.yahoo.com/v8/finance/chart/{symbol}?interval=5m&range={range}"
+DAY_1M_URL = "https://query1.finance.yahoo.com/v8/finance/chart/{symbol}?interval=1m&period1={start}&period2={end}"
+ONE_MINUTE_DAYS = 29  # Yahoo drops 1m bars after about 30 days
 
 
 def symbol_for(code: str, market: str) -> str:
@@ -44,3 +49,11 @@ def parse_chart(payload: dict) -> dict[date, list[tuple[str, float, float, float
 async def fetch_bars(client: httpx.AsyncClient, code: str, market: str, range_: str = "60d") -> dict[date, list]:
     resp = await get_with_retry(client, CHART_URL.format(symbol=symbol_for(code, market), range=range_))
     return parse_chart(resp.json())
+
+
+async def fetch_day_1m(client: httpx.AsyncClient, code: str, market: str, day: date) -> list:
+    """One session's 1-minute bars [(HH:MM, high, low, close)]; empty when Yahoo has none."""
+    start = int(datetime.combine(day, time(9, 0), TAIPEI).timestamp())
+    end = int(datetime.combine(day, time(13, 31), TAIPEI).timestamp())
+    resp = await get_with_retry(client, DAY_1M_URL.format(symbol=symbol_for(code, market), start=start, end=end))
+    return parse_chart(resp.json()).get(day, [])
