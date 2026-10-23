@@ -267,3 +267,10 @@
 因為原始需求是 **N 要快（使用者要求「優化到 1min 以下」，並且頁面每次載入會打 3 次 N 的 stored_only）**，所以頂尖做法會順便做 **回應組裝只讀需要的列**；目前的成果 **只有部分**：bonus-19／24c 的連續天數各讀 20 天 × 全市場約 2,000 檔（各 0.125 秒），實際只需要卡片上的十幾檔；實測暖機後每次回應從 0.28 秒升到 0.38 秒。
 - 參考：Use The Index, Luke!「Partial results / only fetch what you need」；SQLite query planner（WHERE date IN … AND code IN … 走主鍵）。
 - 預估：store.inst_net／inst_trust 加可選 codes 參數（不給＝原行為，B／metrics 不受影響）；api with_history 傳成員 codes；測試確認結果相同。3 檔、約 25 行。
+
+## 第 24 輪調研
+
+## Z1 · K 摘要列加「法人（成員合計）」與買超／賣超檔數
+因為原始需求是 **看族群連動的同時看出資金是誰的**，所以頂尖做法會順便做 **連動摘要旁就有籌碼摘要**；目前的成果 **只有部分**：從 B 點族群打開的 K，摘要列只有日 R／分時 R／高點標準差／龍頭領先；bonus-21 把逐檔法人放在時間軸 tooltip，要一列一列滑。
+- 參考：Goodinfo!「族群／產業 法人買賣超」摘要；CMoney 族群籌碼摘要。
+- 預估：linkage.js summaryHtml 加一格「法人（前 N 大成員）+1,234 張　買超 5／賣超 3」（資料 bonus-21 已在 members.inst_net），無法人就不顯示；linkage.test.js。2 檔、約 15 行。

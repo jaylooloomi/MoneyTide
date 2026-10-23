@@ -103,7 +103,18 @@ export function summaryHtml(d) {
     <div><span class="muted">分時相關（5 分 K）</span> <b>${fmtR(d.intraday.r)}</b> ${badge(d.verdict.intraday)} <small class="muted">${escapeHtml(src)}</small></div>
     <div><span class="muted">日內最高點時間標準差</span> <b>${d.peak_std_min === null ? '—' : d.peak_std_min.toFixed(0) + ' 分'}</b> ${badge(d.verdict.timing)}</div>
     <div title="龍頭（族群市值最大）到達日內最高點後，其他成員平均晚幾分鐘到達"><span class="muted">龍頭領先</span> <b>${lag}</b></div>
+    ${instSummaryHtml(d.members)}
   </div>`;
+}
+
+/** 法人 of the members shown here (K takes the largest by market cap, not the whole group: B has that). */
+export function instSummaryHtml(members) {
+  const nets = (members || []).map((m) => m.inst_net).filter((v) => v != null);
+  if (!nets.length) return '';
+  const lots = Math.round(nets.reduce((a, b) => a + b, 0) / 1000);
+  const buy = nets.filter((v) => v > 0).length;
+  const sell = nets.filter((v) => v < 0).length;
+  return `<div title="只加總這裡列出的 ${members.length} 檔（族群市值前幾大），不是整個族群；整個族群看 B 的法人欄"><span class="muted">法人（前 ${members.length} 大成員）</span> <b class="${lots > 0 ? 'up' : lots < 0 ? 'down' : ''}">${lots > 0 ? '+' : lots < 0 ? '−' : ''}${Math.abs(lots).toLocaleString()} 張</b> <small class="muted">買超 ${buy}／賣超 ${sell}</small></div>`;
 }
 
 // ---- panels -------------------------------------------------------------------------------------
