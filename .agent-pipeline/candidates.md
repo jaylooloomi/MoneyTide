@@ -155,3 +155,15 @@
 因為原始需求是**用分時相關判斷是否共同注資（你也同意「漲停會破壞分時相關」）**，所以頂尖做法會順便做**計算相關前處理漲跌停限制造成的失真**；目前的成果**只有部分**——N 的分時相關已排除鎖漲停的平線，但 K 的分時相關矩陣沒有，同一對股票在 K、N 可能得到不同的 R，最強的漲停股在 K 反而看起來「不連動」。
 - 參考：台灣股市研究「limit observations distort the true relationship among stock returns … price-limit effect has a stronger impact on the correlation than the trading volume」（https://ah.lib.nccu.edu.tw/bitstream/140.119/73973/1/S0927538X98000110.pdf）；Kim & Rhee (1997) 價格限制的延遲價格發現（https://www.bayes.citystgeorges.ac.uk/__data/assets/pdf_file/0007/29077/Price_Limits.pdf）
 - 預估：linkage.py returns() 或 api.py linkage_payload（每個交易日依當日漲停價把兩端都在漲停的 5 分 K 報酬設為空）＋測試；2～3 檔、約 40 行。
+
+## 第 14 輪調研
+
+## P1 · N 卡片「🏦 法人」：群組三大法人合計買賣超
+因為原始需求是 **多維度分析金錢為什麼這樣流動，尋找資金＝背後的動機**，所以頂尖做法會順便做 **把「誰在買」（三大法人買賣超）掛在共同注資的組合上**；目前的成果 **沒有**：N 卡片只有成交值（💰）、新聞（📰）、持續（🔁），沒有資金是誰的。
+- 參考：Goodinfo! 台灣股市資訊網「三大法人買賣超—依產業／族群」；CMoney／財報狗 籌碼面「法人連買」；TWSE T86 三大法人買賣超日報（資料本專案已入庫 inst_day）。
+- 預估：describe 或 api with_history 依 store.inst_net 取當天，合計淨買（張與億元＝股數×收盤／1e8）＋買超檔數／賣超檔數；finder.js 卡片多一行；當天法人資料未出 → 不顯示。改 api.py／finder.py／finder.js／2 個測試檔，約 60 行。不新增套件、不新表。
+
+## P2 · K 右側個股走勢疊上大盤／OTC 漲幅線
+因為原始需求是 **觀察類股／個股相對大盤強弱（使用者要求在 K 放大盤、OTC 方便比較）**，所以頂尖做法會順便做 **個股分時圖可疊加指數線（Compare）**；目前的成果 **只有部分**：K 時間軸有大盤／OTC 列，但點個股後右側走勢圖只有個股自己。
+- 參考：TradingView「Compare or Add Symbol」；Yahoo 奇摩股市個股走勢「加權指數」對照。
+- 預估：intradaychart.js 加一條淡色 % 線（benchmarks 已在 K payload），race.js 傳入；約 40 行、2–3 檔。

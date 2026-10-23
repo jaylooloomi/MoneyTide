@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { buildIntradayOption, infoHtml, priceRange, statsAt, vwapPath } from '../../static/js/intradaychart.js';
+import { benchPath, buildIntradayOption, infoHtml, priceRange, statsAt, vwapPath } from '../../static/js/intradaychart.js';
 
 // prev close 100, limit-up +10% (110): locks at 09:02, opens at 09:03, locks again at 09:04
 const data = {
@@ -56,4 +56,15 @@ test('buildIntradayOption draws up to the playhead with the playhead line in bot
   assert.ok(o.series[2].markLine.data.some((l) => l.xAxis === 2));
   assert.equal(o.series[1].data.length, 3); // 均價
   assert.match(infoHtml(data, statsAt(data, 270), 270), /收盤[\s\S]*鎖漲停[\s\S]*09:02[\s\S]*開板[\s\S]*1 次/);
+});
+
+test('benchPath / buildIntradayOption: 大盤／櫃買 drawn at the same % of this stock, up to the playhead', () => {
+  const pts = [[0, 2, 2, 2], [2, -1, -1, -1], [270, -14, -14, -14]];
+  assert.deepEqual(benchPath(pts, 100, 2), [[0, 102], [2, 99]]);
+  assert.deepEqual(benchPath(null, 100, 2), []);
+  const opt = buildIntradayOption(data, 3, [{ name: '大盤（加權）', points: pts }]);
+  const s = opt.series.find((x) => x.name === '大盤（加權）');
+  assert.deepEqual(s.data, [[0, 102], [2, 99]]);
+  assert.ok(opt.yAxis[0].min <= 86); // the whole index line fits, not just what has been played
+  assert.equal(buildIntradayOption(data, 3).series.length, 3); // no benchmarks: unchanged
 });

@@ -224,7 +224,7 @@ export function mountRace(box, d, { onStock } = {}) {
           .join('')}
       </div>
     </div></div><div class="race-side"></div></div>`;
-  const chart = mountIntraday(box.querySelector('.race-side'), { date: d.date, onCard: onStock });
+  const chart = mountIntraday(box.querySelector('.race-side'), { date: d.date, onCard: onStock, benchmarks: benches });
   const rows = new Map([...box.querySelectorAll('.rt-row[data-code]')].map((el) => [el.dataset.code, el]));
   const benchRows = [...box.querySelectorAll('.rt-row.bench')].map((el) => [el, benchFrames[el.dataset.bench]]);
   const clock = box.querySelector('.race-clock');
