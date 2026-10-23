@@ -35,6 +35,15 @@ CREATE TABLE IF NOT EXISTS index_daily (
     open REAL, high REAL, low REAL, close REAL, change REAL, turnover_yuan REAL,
     PRIMARY KEY (date, market)
 );
+CREATE TABLE IF NOT EXISTS ai_reason (
+    date TEXT NOT NULL,
+    code TEXT NOT NULL,
+    reason TEXT NOT NULL,
+    links TEXT NOT NULL,
+    model TEXT,
+    created_at TEXT NOT NULL,
+    PRIMARY KEY (date, code)
+);
 CREATE TABLE IF NOT EXISTS index_month (
     market TEXT NOT NULL,
     month TEXT NOT NULL,
@@ -246,3 +255,25 @@ class HistoryStore:
         result = {d: {"strong_ratio": round(ratio, 2), "limit_up": int(n)} for d, ratio, n in rows}
         self.derived_cache[key] = result
         return result
+
+
+    # ---- ⑤ AI news explanations (one answer per date and code) ------------------------------
+
+    def ai_reasons(self, day: date) -> dict[str, dict]:
+        """{code: {reason, links, model, created_at}} for `day`."""
+        import json
+
+        with self._conn() as c:
+            return {
+                r["code"]: {"reason": r["reason"], "links": json.loads(r["links"]), "model": r["model"], "created_at": r["created_at"]}
+                for r in c.execute("SELECT * FROM ai_reason WHERE date = ?", (day.isoformat(),))
+            }
+
+    def save_ai_reason(self, day: date, code: str, reason: str, links: list[dict], model: str | None) -> None:
+        import json
+
+        with self._lock, self._conn() as c:
+            c.execute(
+                "INSERT OR REPLACE INTO ai_reason (date, code, reason, links, model, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+                (day.isoformat(), code, reason, json.dumps(links, ensure_ascii=False), model, datetime.now().astimezone().isoformat()),
+            )

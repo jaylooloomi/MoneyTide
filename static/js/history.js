@@ -19,6 +19,7 @@ import { breadthBarHtml, breadthShare, marketBreadth } from './transform.js';
 import { getGroups, loadGroups, onGroupsChange, openGroupPanel, setStockNames } from './groups.js';
 import { mountIndexPanel } from './indexchart.js';
 import { mountCountyMap } from './countymap.js';
+import { mountHistoryAiPanel } from './ainews.js';
 
 const PREFS_KEY = 'openmarket.history.v1';
 const $ = (sel) => document.querySelector(sel);
@@ -47,6 +48,7 @@ const csvData = { rotation: null, movers: null }; // bonus-07: last data shown i
 let started = false;
 let daysTimer = null;
 let indexPanel = null; // G: TAIEX + TPEx timeline (indexchart.js)
+let aiPanel = null; // I: AI news explanations (ainews.js)
 const countyPanel = { ctl: null, ticket: 0, cache: new Map() }; // H: county money map (countymap.js)
 
 function loadPrefs() {
@@ -146,6 +148,7 @@ async function selectDate(date) {
   renderRotationSelection();
   markCalendar(); // bonus-14
   indexPanel?.mark(st.date); // G
+  aiPanel?.load(); // I: cached explanations for the day
 }
 
 // ---- A: day heatmap ---------------------------------------------------------
@@ -556,6 +559,8 @@ export async function showHistory() {
     indexPanel.mark(st.date);
     mountCountyPanel();
     renderCountyPanel();
+    aiPanel = mountHistoryAiPanel($('#historyView'), () => st.date);
+    aiPanel.load();
     return;
   }
   chart.resize();

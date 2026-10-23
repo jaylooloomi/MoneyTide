@@ -21,6 +21,7 @@ import {
 } from './transform.js';
 import { showHistory } from './history.js';
 import { mountCountyMap } from './countymap.js';
+import { mountLiveAiButton } from './ainews.js';
 import { GROUP_LABELS, MIN_FILTERS, TODAY_SCALES, breadthBarHtml, findStock, marketBreadth, regroupStocks, withRelVolume } from './transform.js';
 import { addToGroup, getGroups, loadGroups, onGroupsChange, openGroupPanel, setStockNames } from './groups.js';
 
@@ -36,6 +37,7 @@ const RVOL_RETRY_MS = 5 * 60_000;
 const liveSearch = { shown: [], listFor: null };
 // ③: main area shows the heatmap or the county money map (declared before main() runs)
 const liveMap = { on: false, ctl: null };
+let liveAi = null; // ⑤ AI 解讀 button
 try {
   liveMap.on = localStorage.getItem('openmarket.live.view') === 'map';
 } catch {
@@ -245,6 +247,8 @@ function render() {
   renderLiveBreadth(filtered); // bonus-05 (each stock once, whatever the grouping)
   renderLiveSearch(snap, stocks); // bonus-23
   renderLiveMap(filtered); // ③
+  liveAi ??= mountLiveAiButton($('#liveControls'), () => !!state.snapshot?.market_open); // ⑤
+  liveAi.sync();
   renderWatch(snap ? snap.stocks : []);
   renderCard();
 }

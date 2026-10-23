@@ -4,20 +4,24 @@ import asyncio
 import contextlib
 import json
 import mimetypes
+from dataclasses import asdict
+from datetime import date, datetime
 from collections.abc import AsyncIterator
 from pathlib import Path
 
 import httpx
-from fastapi import FastAPI, HTTPException, Request, Response
+from fastapi import FastAPI, HTTPException, Query, Request, Response
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 from pydantic import BaseModel
 
-from .config import STATIC_DIR, AppConfig
+from .ai import AIConfig
+from .config import STATIC_DIR, TAIPEI, USER_AGENT, AppConfig
+from .explain import explain_day
 from .concepts import ConceptLoader
 from .groups import GroupStore
-from .history.api import create_history_router
+from .history.api import create_history_router, live_quote_day
 from .history.metrics import industry_grouping, mapping_grouping
 from .history.ingest import REQUEST_DELAY_SECONDS, HistoryCollector
 from .history.store import HistoryStore
@@ -27,6 +31,7 @@ from .sources.http import make_client
 from .sources.official import fetch_tpex_day, fetch_twse_day
 from .sources.official_index import fetch_index_month
 from .sources.company_address import fetch_county_groups
+from .sources.google_news import fetch_headlines
 from .sources.tpex_chains import fetch_chains
 from .sources.yahoo_concepts import fetch_concepts
 from .sources.shares import fetch_shares
@@ -64,6 +69,9 @@ def create_app(
     start_concepts: bool = True,  # also starts the 細產業 (TPEx chain) loader
     chains: ConceptLoader | None = None,
     counties: ConceptLoader | None = None,
+    ai_config: AIConfig | None = None,
+    headline_fetcher=None,  # tests: (client, name, code, day) -> [Headline]
+    ai_transport: httpx.AsyncBaseTransport | None = None,  # tests: mock HTTP for news + AI
     static_dir: Path = STATIC_DIR,
     allowed_hosts: tuple[str, ...] = ("127.0.0.1", "localhost"),
 ) -> FastAPI:
@@ -161,6 +169,7 @@ def create_app(
     app.state.concepts = concepts
     app.state.chains = chains
     app.state.counties = counties
+    app.state.ai = ai_config or AIConfig.from_env()
     app.include_router(create_history_router(lambda: app.state.history, lambda: app.state.collector, get_grouping))
     # Local-only app: reject other Host headers (DNS rebinding could otherwise reach the PUT routes).
     app.add_middleware(TrustedHostMiddleware, allowed_hosts=list(allowed_hosts))
@@ -235,6 +244,68 @@ def create_app(
     def concepts_status() -> dict:
         loader = app.state.concepts
         return loader.status() if loader is not None else {"ready": False, "count": 0, "running": False, "done": 0, "total": 0, "error": "", "saved_at": None}
+
+    # ---- ⑤ AI news explanations for the day's top movers ----------------------------------
+
+    @app.get("/api/ai/status")
+    def ai_status() -> dict:
+        return app.state.ai.public()
+
+    def explain_input(source: str, day: str | None) -> tuple[date, list[dict]]:
+        if source == "live":
+            p = get_poller()
+            snap = p.snapshot
+            if snap.market_open:
+                raise HTTPException(409, "盤中不分析，收盤後再試")
+            if not snap.stocks:
+                raise HTTPException(404, "目前沒有即時資料")
+            d = live_quote_day(app.state.history, datetime.now(TAIPEI))
+            return d, [asdict(s) for s in snap.stocks]
+        if source != "history" or not day:
+            raise HTTPException(422, "source must be history (with date) or live")
+        try:
+            d = date.fromisoformat(day)
+        except ValueError as exc:
+            raise HTTPException(422, f"invalid date {day!r}") from exc
+        rows = app.state.history.day_rows(d)
+        if not rows:
+            raise HTTPException(404, f"no data for {day}")
+        stocks = [
+            {"code": r["code"], "name": r["name"], "kind": r["kind"], "industry": r["industry"], "change_pct": r["change_pct"],
+             "turnover_100m": (r["turnover_yuan"] or 0) / 1e8}
+            for r in rows
+        ]
+        return d, stocks
+
+    async def run_explain(source: str, day: str | None, run: bool) -> dict:
+        d, stocks = explain_input(source, day)
+        cfg = app.state.ai
+        if run and not cfg.configured:
+            raise HTTPException(400, "AI 未設定：請設定環境變數 OPENMARKET_AI_KEY（以及 OPENMARKET_AI_FORMAT／BASE_URL／MODEL）後重新啟動")
+        async with httpx.AsyncClient(
+            timeout=30, headers={"User-Agent": USER_AGENT}, follow_redirects=True, transport=ai_transport
+        ) as http:
+            fetcher = headline_fetcher or fetch_headlines
+
+            async def headlines(name: str, code: str, when: date):
+                return await fetcher(http, name, code, when)
+
+            out = await explain_day(app.state.history, http, cfg, headlines, d, stocks, run=run)
+        out["ai"] = cfg.public()
+        return out
+
+    @app.get("/api/ai/reasons")
+    async def ai_reasons(source: str = "history", day: str | None = Query(None, alias="date")) -> dict:
+        """Movers with cached explanations only — never calls the AI."""
+        return await run_explain(source, day, run=False)
+
+    @app.post("/api/ai/reasons")
+    async def ai_explain(request: Request, source: str = "history", day: str | None = Query(None, alias="date")) -> dict:
+        """Ask the AI for the movers that have no cached explanation yet (costs API calls)."""
+        # a custom header forces a CORS preflight, so other web pages cannot trigger paid calls
+        if request.headers.get("x-openmarket-action") != "explain":
+            raise HTTPException(403, "missing X-OpenMarket-Action header")
+        return await run_explain(source, day, run=True)
 
     @app.get("/api/counties/status")
     def counties_status() -> dict:
