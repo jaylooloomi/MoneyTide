@@ -5,7 +5,7 @@
 
 import { addToGroup, createGroup } from './groups.js';
 import { renderBody } from './linkage.js';
-import { colorFor, escapeHtml, fmtPct } from './transform.js';
+import { colorFor, escapeHtml, fmtPct, fmtTurnover } from './transform.js';
 
 export const METHODS = { known: '找法1 · 已知分類', new: '找法2 · 排行候選' };
 const KIND_COLOR = { 已知族群: '#2c4a6b', 已知族群的延伸: '#6b5a1e', 跨族群新組合: '#b8301a' };
@@ -72,6 +72,9 @@ export function cardHtml(g, i) {
       return `<span class="fd-chip${outside.has(m.code) ? ' out' : ''}" style="background:${colorFor(m.change_pct, 7)}" title="${escapeHtml(m.code)} ${escapeHtml(m.name)}${pool}　${extra}${m.turnover_rate != null ? `　週轉率 ${m.turnover_rate.toFixed(1)}%` : ''}${outside.has(m.code) ? '　（不在最接近的分類裡）' : ''}">${escapeHtml(m.name)} <small>${fmtPct(m.change_pct)}</small>${m.locked_at ? ' 🔒' : ''}</span>`;
     })
     .join('');
+  const money = g.turnover_100m != null
+    ? `<div class="fd-money">💰 成交值 <b>${fmtTurnover(g.turnover_100m)}</b>${g.turnover_share != null ? `（占全市場 <b>${g.turnover_share.toFixed(2)}%</b>）` : ''}　平均漲幅 <b class="${g.avg_pct > 0 ? 'up' : g.avg_pct < 0 ? 'down' : ''}">${fmtPct(g.avg_pct)}</b></div>`
+    : '';
   const facts = [
     `日 R <b>${fmtR(g.daily_r)}</b>`,
     `分時 R <b>${fmtR(g.intraday_r)}</b>`,
@@ -88,7 +91,7 @@ export function cardHtml(g, i) {
     <div class="fd-top"><span class="link-badge" style="background:${KIND_COLOR[g.kind] || '#3a3e48'}">${escapeHtml(g.kind)}</span>
       <span class="fd-title">${title}</span><span class="muted">${g.members.length} 檔</span>
       <button type="button" class="icon fd-save" data-save="${i}" title="把這群股票存成自訂族群，之後在 B／C／K 追蹤">＋族群</button></div>
-    <div class="fd-chips">${chips}</div>
+    <div class="fd-chips">${chips}</div>${money}
     <div class="fd-facts">${facts}</div>${news}
   </div>`;
 }

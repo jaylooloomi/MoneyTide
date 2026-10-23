@@ -29,7 +29,7 @@ from itertools import combinations
 from .linkage import align_bars, amplitude_pct, limit_up_pct, minutes, pearson, turnover_rate
 from .store import HistoryStore
 
-FINDER_VERSION = 2  # part of the cache key: bump when the search logic changes, so stored results are redone
+FINDER_VERSION = 3  # part of the cache key: bump when the search logic changes, so stored results are redone
 PEAK_END = 240  # the intraday high is taken over 09:00–13:00
 OPEN_MINUTES = 2  # a high at 09:00–09:02 is the open, not a signal (unless locked limit-up)
 BUCKETS = 54  # 5-minute buckets 09:00–13:25
@@ -410,7 +410,20 @@ def co_mentions(names: Mapping[str, str], titles: Iterable[str], limit: int = 3)
     return out
 
 
-def describe(g: dict, rows_by_code: Mapping[str, dict], feats: Mapping[str, Intraday], groupings: Mapping[str, Callable], titles: list[str], inst: Mapping[str, float]) -> dict:
+def money_size(members: list[str], rows_by_code: Mapping[str, dict], market_turnover: float) -> dict:
+    """資金規模 of a found group: its turnover (億), that as a share of all common stocks' turnover
+    that day, and the members' equal-weight average change."""
+    rows = [rows_by_code[c] for c in members if c in rows_by_code]
+    total = sum(r.get("turnover_yuan") or 0 for r in rows)
+    pcts = [r["change_pct"] for r in rows if r.get("change_pct") is not None]
+    return {
+        "turnover_100m": round(total / 1e8, 2),
+        "turnover_share": round(total / market_turnover * 100, 3) if market_turnover else None,
+        "avg_pct": round(sum(pcts) / len(pcts), 2) if pcts else None,
+    }
+
+
+def describe(g: dict, rows_by_code: Mapping[str, dict], feats: Mapping[str, Intraday], groupings: Mapping[str, Callable], titles: list[str], inst: Mapping[str, float], market_turnover: float = 0.0) -> dict:
     members = g["members"]
     fmt = lambda m: None if m is None else f"{9 + m // 60:02d}:{m % 60:02d}"  # noqa: E731
     pairs = g.get("pairs", {})
@@ -447,6 +460,7 @@ def describe(g: dict, rows_by_code: Mapping[str, dict], feats: Mapping[str, Intr
         "kind": kind_of(matches, len(members)),
         "news": co_mentions(names, titles),
         "inst_net": sum(v for c in members if (v := inst.get(c)) is not None) or None,
+        **money_size(members, rows_by_code, market_turnover),
         "resolution": max((feats[c].resolution for c in members if c in feats), default=1),
     }
 
@@ -529,7 +543,8 @@ async def run_search(
         feats[code] = intraday_features(aligned, {s: session_rows.get(s, {}).get(code, {}) for s in sessions}, day, p, resolution)
     found = confirm(cands, feats, p)
     inst = store.inst_net([day]).get(day, {})
-    groups = [describe(g, by_code, feats, groupings, titles or [], inst) for g in found]
+    market_turnover = sum(r.get("turnover_yuan") or 0 for r in rows)  # common stocks only (rows above)
+    groups = [describe(g, by_code, feats, groupings, titles or [], inst, market_turnover) for g in found]
     groups.sort(key=lambda g: (-len(g["members"]), -(g["intraday_r"] or 0)))
     timing["intraday"] = round(time.perf_counter() - t, 2)
     return {

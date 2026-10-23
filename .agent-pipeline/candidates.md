@@ -2,7 +2,7 @@
 
 錨點：scope.md 第 1 節——「多維度分析金錢為什麼這樣流動」；N · 資金連動搜尋（找出共同注資的組合、找可能的新組合，門檻要保留彈性）。
 
-## C1 · N 的結果一鍵存成自訂族群
+## C1 · N 的結果一鍵存成自訂族群（✅ 已完成 bonus-01, 1c596b3）
 因為原始需求是**找出「可能的新組合」（找法2 跨族群新組合）並持續觀察資金是否還在**，所以頂尖做法會順便做**把篩選結果直接存成清單（watchlist／自訂族群），之後在其他畫面追蹤**；目前的成果**沒有**——N 找到的組合只能看當天，要追蹤得手動到「管理族群」一檔檔加。
 - 參考：TradingView Import watchlist（https://cn.tradingview.com/chart/NIFTY/qNGKMbgU-How-to-import-watchlist-in-TradingView）；Chartink / Screener.in 的「screener → watchlist」擴充（https://chromeboard.com/extension/screener-to-tradingview-mcfligcbhdnbfhkbcpoclgcanimnoiha）
 - 預估：finder.js（卡片按鈕）＋既有 /api/groups 端點；≤3 檔、<120 行。

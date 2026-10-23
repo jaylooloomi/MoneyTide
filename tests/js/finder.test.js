@@ -43,6 +43,10 @@ test('cardHtml: kind, closest grouping, members (outside one marked), facts and 
   assert.match(html, /法人 \+3\.2 億/);
   assert.match(html, /甲、乙同步大漲/);
   assert.match(cardHtml({ ...G, inst_net: -4.5e6 }, 2), /法人 −450 萬/);
+  const money = cardHtml({ ...G, turnover_100m: 40, turnover_share: 1.234, avg_pct: 7 }, 4);
+  assert.match(money, /成交值 <b>40\.00 億<\/b>（占全市場 <b>1\.23%<\/b>）/);
+  assert.match(money, /平均漲幅 <b class="up">\+7\.00%<\/b>/);
+  assert.doesNotMatch(html, /fd-money/); // older stored results without the fields
   assert.match(cardHtml({ ...G, sources: [{ label: '概念股', group: 'AI' }] }, 1), /概念股：AI/);
 });
 

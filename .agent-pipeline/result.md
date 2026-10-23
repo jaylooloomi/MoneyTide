@@ -10,6 +10,7 @@
 | # | 名稱 | Score | 參考來源（競品 / 專案 / 文章） | 做了什麼 | 驗證指令 | 測試狀態 | 否決的替代作法 |
 |---|---|---|---|---|---|---|---|
 | 01 | N 卡片「存成自訂族群」 | 6.0（scores-01.md） | TradingView Import watchlist；Chartink／Screener.in 的 screener→watchlist 擴充 | N 每張卡片右上「＋族群」：跳出名稱（預設「N1022 華經+驊宏資」，可改），用既有 /api/groups 建立並加入成員，按鈕變「✓ 已存」；不會同時展開卡片。改 finder.js、app.css、finder.test.js（49 行） | `npm test`（78 ✅）；瀏覽器實測存成「ZZ夜班測試」→ API 查到 2 檔 → 已刪除還原 | ✅ | ① 後端新增批次端點（不必要，既有 API 足夠）② 自動存不問名稱（會塞滿族群清單） |
+| 02 | N 卡片「資金規模」 | 5.0（scores-02.md） | TradingView screener volume／market cap 欄；Twelve Data 熱力圖文章 | 卡片多一行「💰 成交值 18.72 億（占全市場 0.18%）　平均漲幅 +9.98%」。改 finder.py（money_size、FINDER_VERSION→3）、finder.js、app.css、兩邊測試。順便看出找法2 有的組合只有 0.1 億（小錢） | `uv run pytest`（240 ✅）、`npm test`（78 ✅）；10/22 瀏覽器實測 | ✅ | ① 前端自己加總（拿不到全市場總成交值，占比算不出）② 只顯示成交值不顯示占比（不同日子無法比較） |
 
 ## 判斷不值得做
 - （待填）

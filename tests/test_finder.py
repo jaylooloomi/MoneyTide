@@ -132,6 +132,14 @@ def test_candidate_pool_and_match_known():
     assert kind_of([{"overlap": 0.4, "outside": ["a", "b", "c"]}], 5) == "跨族群新組合" and kind_of([], 2) == "跨族群新組合"
 
 
+def test_money_size():
+    from openmarket.history.finder import money_size
+
+    rows = {"A": {"turnover_yuan": 3e9, "change_pct": 9.9}, "B": {"turnover_yuan": 1e9, "change_pct": 4.1}}
+    assert money_size(["A", "B", "Z"], rows, 4e11) == {"turnover_100m": 40.0, "turnover_share": 1.0, "avg_pct": 7.0}
+    assert money_size(["A"], rows, 0)["turnover_share"] is None
+
+
 def test_co_mentions():
     names = {"2327": "國巨*", "2492": "華新科", "6173": "信昌電"}
     titles = ["被動元件大漲 國巨、華新科領軍", "國巨法說會", "信昌電與華新科同步攻頂", "國巨、華新科領軍"]
