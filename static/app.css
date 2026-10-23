@@ -299,12 +299,12 @@ table.link-matrix td, table.link-matrix th { padding: 2px 4px; font-size: 11px; 
 /* A header: 加權 / 櫃買 change of the shown day */
 .idx-chg { margin-left: 12px; font-size: 12px; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .rt { max-width: 1100px; }
-.rt-axis { position: relative; height: 13px; margin: 0 196px 2px 122px; color: var(--muted); font-size: 10px; }
+.rt-axis { position: relative; height: 13px; margin: 0 278px 2px 122px; color: var(--muted); font-size: 10px; }
 .rt-axis span { position: absolute; transform: translateX(-50%); white-space: nowrap; }
 .rt-axis span:first-child { transform: none; }
 .rt-axis span:last-child { transform: translateX(-100%); }
 .rt-board { position: relative; }
-.rt-layer { position: absolute; top: 0; bottom: 0; left: 122px; right: 196px; pointer-events: none; z-index: 1; }
+.rt-layer { position: absolute; top: 0; bottom: 0; left: 122px; right: 278px; pointer-events: none; z-index: 1; }
 .rt-after { position: absolute; top: 0; bottom: 0; right: 0; background: #ffffff08; border-left: 1px dashed #555a66; }
 .rt-head { position: absolute; top: -4px; bottom: 0; width: 2px; margin-left: -1px; background: #ffd400; box-shadow: 0 0 6px #ffd40088; pointer-events: auto; cursor: ew-resize; touch-action: none; }
 .rt-head::before { content: ''; position: absolute; top: 0; bottom: 0; left: -8px; right: -8px; } /* a wider grab area */
@@ -320,6 +320,7 @@ table.link-matrix td, table.link-matrix th { padding: 2px 4px; font-size: 11px; 
 .rt-path { fill: none; stroke-width: 1.6; vector-effect: non-scaling-stroke; }
 .rt-dot { position: absolute; width: 10px; height: 10px; margin: -5px 0 0 -5px; border-radius: 50%; border: 1px solid #fff; box-shadow: 0 0 4px #000; }
 .rt-now { width: 84px; flex: none; text-align: right; font-size: 13px; font-variant-numeric: tabular-nums; }
+.rt-amp { width: 76px; flex: none; color: #ffb300; font-size: 11px; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .rt-peak { width: 100px; flex: none; color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; white-space: nowrap; }
 
 /* K · the picked member's session beside the animation */

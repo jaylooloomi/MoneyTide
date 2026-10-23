@@ -14,19 +14,20 @@ const PAD = 3; // px above / below the path inside a row
 export const RACE_SPEEDS = { slow: ['慢', 160], mid: ['中', 70], fast: ['快', 25] }; // ms per minute
 
 /**
- * points {code: [[minute, close %, high %]]} → per code, for m = 0…RACE_END:
+ * points {code: [[minute, close %, high %, low %]]} → per code, for m = 0…RACE_END:
  * values[m] the last close % (null before the first trade), since[m] the minute that value was reached,
- * highs[m] the high % of minute m itself (null without data), and lockedAt[m] the minute the current
+ * highs[m] / lows[m] the high / low % of minute m itself (null without data), and lockedAt[m] the minute the current
  * limit-up streak began (null when not at limit-up at m).
  */
 export function raceFrames(points, codes, limits = {}) {
   const out = {};
   for (const c of codes) {
     const locked = isLimitUp(limits[c]);
-    const at = new Map((points?.[c] || []).map(([m, v, h]) => [m, [v, h ?? v]]));
+    const at = new Map((points?.[c] || []).map(([m, v, h, lo]) => [m, [v, h ?? v, lo ?? v]]));
     const values = new Array(RACE_END + 1).fill(null);
     const since = new Array(RACE_END + 1).fill(null);
     const highs = new Array(RACE_END + 1).fill(null);
+    const lows = new Array(RACE_END + 1).fill(null);
     const lockedAt = new Array(RACE_END + 1).fill(null);
     let v = null;
     let s = null;
@@ -35,6 +36,7 @@ export function raceFrames(points, codes, limits = {}) {
       const p = at.get(m);
       if (p) {
         highs[m] = p[1];
+        lows[m] = p[2];
         if (p[0] !== v) {
           v = p[0];
           s = m;
@@ -46,7 +48,7 @@ export function raceFrames(points, codes, limits = {}) {
       lock = locked(v) ? (lock ?? m) : null;
       lockedAt[m] = lock;
     }
-    out[c] = { values, since, highs, lockedAt };
+    out[c] = { values, since, highs, lows, lockedAt };
   }
   return out;
 }
@@ -108,6 +110,19 @@ export function peakSoFar(frame, m) {
     if (h !== null && (best === null || h > best.v)) best = { m: i, v: h };
   }
   return best;
+}
+
+/** 振幅 so far: highest high − lowest low up to minute m, in % of the previous close (null before a trade). */
+export function amplitudeSoFar(frame, m) {
+  let hi = null;
+  let lo = null;
+  for (let i = 0; i <= m; i++) {
+    const h = frame.highs[i];
+    const l = frame.lows?.[i];
+    if (h !== null && (hi === null || h > hi)) hi = h;
+    if (l !== null && l !== undefined && (lo === null || l < lo)) lo = l;
+  }
+  return hi === null || lo === null ? null : hi - lo;
 }
 
 export function fmtClock(m) {
@@ -189,7 +204,7 @@ export function mountRace(box, d, { onStock } = {}) {
                 <svg viewBox="0 0 ${RACE_END} ${ROW_H}" preserveAspectRatio="none"><line class="rt-zero" x1="0" x2="${RACE_END}" y1="${y(0)}" y2="${y(0)}"/><polyline class="rt-path"/></svg>
                 <span class="rt-dot"></span>
               </span>
-              <span class="rt-now"></span><span class="rt-peak"></span></div>`;
+              <span class="rt-now"></span><span class="rt-amp" title="振幅＝（到目前為止的最高 − 最低）÷ 昨收"></span><span class="rt-peak"></span></div>`;
           })
           .join('')}
       </div>
@@ -235,6 +250,8 @@ export function mountRace(box, d, { onStock } = {}) {
       el.querySelector('.rt-now').innerHTML =
         v === null ? '<span class="muted">未成交</span>' : `<b class="${v > 0 ? 'up' : v < 0 ? 'down' : ''}">${fmtPct(v)}</b>${tag ? ` <b class="race-tag">${tag}</b>` : ''}`;
       el.querySelector('.rt-peak').textContent = peak ? `高點 ${fmtClock(peak.m)} ${fmtPct(peak.v)}` : '';
+      const amp = amplitudeSoFar(f, m);
+      el.querySelector('.rt-amp').textContent = amp === null ? '' : `振幅 ${amp.toFixed(2)}%`;
     });
   }
 

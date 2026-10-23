@@ -182,8 +182,8 @@ def test_limit_up_pct_follows_the_tick_table():
 def test_race_points_last_value_per_minute_within_the_session():
     from openmarket.history.linkage import race_points
 
-    pts = [("08:59:00", 99, 99), ("09:00:05", 103, 101), ("09:00:50", 102, 102), ("09:07", 110, 108), ("13:30:00", 105, 105), ("13:40:00", 1, 1)]
-    assert race_points(pts, 100) == [[0, 2.0, 3.0], [7, 8.0, 10.0], [270, 5.0, 5.0]]  # close: last; high: max
+    pts = [("08:59:00", 99, 99, 99), ("09:00:05", 103, 100, 101), ("09:00:50", 102, 99.5, 102), ("09:07", 110, 107, 108), ("13:30:00", 105, 105, 105), ("13:40:00", 1, 1, 1)]
+    assert race_points(pts, 100) == [[0, 2.0, 3.0, -0.5], [7, 8.0, 10.0, 7.0], [270, 5.0, 5.0, 5.0]]  # close last, high max, low min
     assert race_points(pts, None) == []
 
 

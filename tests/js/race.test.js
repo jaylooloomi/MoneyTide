@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { RACE_END, fmtClock, isLimitUp, leadOf, pathPoints, peakSoFar, raceDomain, raceFrames, raceOrder } from '../../static/js/race.js';
+import { RACE_END, amplitudeSoFar, fmtClock, isLimitUp, leadOf, pathPoints, peakSoFar, raceDomain, raceFrames, raceOrder } from '../../static/js/race.js';
 
 test('raceFrames forward-fills closes, remembers when a value was reached, keeps highs per minute', () => {
   const f = raceFrames({ A: [[0, 1, 2], [5, 10, 10], [6, 10, 10], [30, 9, 9.5]] }, ['A', 'B']);
@@ -70,4 +70,12 @@ test('leadOf: first at the close, from the minute it held first place to the clo
   assert.deepEqual(leadOf(['A', 'B', 'C'], f), { code: 'B', from: 40 });
   // a first place that closed down is no 領漲
   assert.equal(leadOf(['A'], raceFrames({ A: [[0, -1]] }, ['A'])), null);
+});
+
+test('amplitudeSoFar: highest high − lowest low up to the playhead', () => {
+  const f = raceFrames({ A: [[0, 1, 2, -1], [30, 5, 6, 4], [60, -2, 0, -3]] }, ['A']).A;
+  assert.equal(amplitudeSoFar(f, 10), 3); // 2 − (−1)
+  assert.equal(amplitudeSoFar(f, 40), 7); // 6 − (−1)
+  assert.equal(amplitudeSoFar(f, 270), 9); // 6 − (−3)
+  assert.equal(amplitudeSoFar(raceFrames({}, ['X']).X, 270), null);
 });

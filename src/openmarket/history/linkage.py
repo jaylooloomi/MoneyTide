@@ -272,20 +272,21 @@ def with_close_bar(bars: list[list], day_row: dict) -> list[list]:
 
 
 def race_points(points: list[tuple], prev_close: float | None) -> list[list[float]]:
-    """(HH:MM[:SS], high, close) bars or (ts, price, price) polls → [[minute since 09:00, close %, high %]]:
-    the last close and the highest high per minute. K's animated timeline replays these from 09:00 to
-    13:30; its moving high dot uses the highs, so it lands where peak_minute_from_* put the 日內最高點."""
+    """(HH:MM[:SS], high, low, close) bars or (ts, price, price, price) polls →
+    [[minute since 09:00, close %, high %, low %]]: the last close, highest high and lowest low per
+    minute. K's animated timeline replays these from 09:00 to 13:30; its moving high dot uses the
+    highs (so it lands where peak_minute_from_* put the 日內最高點), the 振幅 so far the highs and lows."""
     if not prev_close:
         return []
     pct = lambda p: round((p / prev_close - 1) * 100, 2)  # noqa: E731
     by_minute: dict[int, list[float]] = {}
-    for ts, high, close in points:
+    for ts, high, low, close in points:
         m = minutes(ts)
-        if not (0 <= m <= 270 and high and close):
+        if not (0 <= m <= 270 and high and low and close):
             continue
         prev = by_minute.get(m)
-        by_minute[m] = [pct(close), max(pct(high), prev[1]) if prev else pct(high)]
-    return [[m, c, h] for m, (c, h) in sorted(by_minute.items())]
+        by_minute[m] = [pct(close), max(pct(high), prev[1]) if prev else pct(high), min(pct(low), prev[2]) if prev else pct(low)]
+    return [[m, c, h, lo] for m, (c, h, lo) in sorted(by_minute.items())]
 
 
 def peak_stats(peaks: list[int | None]) -> tuple[float | None, float | None]:

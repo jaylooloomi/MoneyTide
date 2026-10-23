@@ -483,7 +483,7 @@ def create_app(
                         per_code_sessions[c][s] = bucket_closes(ticks[c])
                         if s == d:
                             peaks[c] = peak_minute_from_ticks(ticks[c])
-                            race[c] = race_points([(ts, p, p) for ts, p in ticks[c]], prev[c])
+                            race[c] = race_points([(ts, p, p, p) for ts, p in ticks[c]], prev[c])
             yahoo_sessions = [s for s in sessions if s not in recorded]
             gate = asyncio.Semaphore(YAHOO_CONCURRENCY)
 
@@ -500,7 +500,7 @@ def create_app(
                         if s == d:
                             b = align_bars(b, m)  # Yahoo back-adjusts: back to the official prices
                             peaks[c] = peak_minute_from_bars(b)
-                            race[c] = race_points([(x[0], x[1], x[3]) for x in b], prev[c])
+                            race[c] = race_points([(x[0], x[1], x[2], x[3]) for x in b], prev[c])
                     if d in yahoo_sessions:
                         # the peak time to the minute: 1-minute bars where Yahoo still has them
                         mb, err = await minute_bars_for(http, c, m["market"], d)
@@ -508,7 +508,7 @@ def create_app(
                         mb = align_bars(mb, m) if mb else mb
                         if mb:
                             peaks[c] = peak_minute_from_bars(mb)
-                            race[c] = race_points([(x[0], x[1], x[3]) for x in mb], prev[c])
+                            race[c] = race_points([(x[0], x[1], x[2], x[3]) for x in mb], prev[c])
                         else:
                             coarse.add(c)
 
@@ -525,7 +525,7 @@ def create_app(
         for m in members:  # 13:30 = the official close (no Yahoo bar covers the closing auction)
             if race[m["code"]] and m.get("change_pct") is not None:
                 close = round(m["change_pct"], 2)
-                race[m["code"]] = [p for p in race[m["code"]] if p[0] < 270] + [[270, close, close]]
+                race[m["code"]] = [p for p in race[m["code"]] if p[0] < 270] + [[270, close, close, close]]
         peak_list = [peaks[c] for c in codes]
         std, lag = peak_stats(peak_list)
         return {
