@@ -232,6 +232,26 @@ def limit_down_pct(prev_close: float | None) -> float | None:
     return round((price / prev_close - 1) * 100, 2)
 
 
+def align_bars(bars: list[tuple], day_row: dict) -> list[tuple]:
+    """Scale Yahoo bars back to the official prices of that day.
+
+    Yahoo back-adjusts history for capital reductions / splits (信昌電 before 2026-10-19 comes 1/0.94
+    too high), while % changes here are taken against the exchange's own previous close. When the
+    official high and low both differ from Yahoo's by the same factor, every price is scaled by it."""
+    hi, lo = day_row.get("high"), day_row.get("low")
+    if not bars or not hi or not lo:
+        return bars
+    y_hi = max(b[1] for b in bars)
+    y_lo = min(b[2] for b in bars)
+    if not y_hi or not y_lo:
+        return bars
+    k_hi, k_lo = hi / y_hi, lo / y_lo
+    if abs(k_hi - 1) < 0.003 or abs(k_hi - k_lo) / k_hi > 0.01:
+        return bars  # same prices, or not one clean factor: leave them
+    k = (k_hi + k_lo) / 2
+    return [(b[0], *[round(x * k, 4) if x is not None else None for x in b[1:5]], *b[5:]) for b in bars]
+
+
 def minute_bars(bars: list[tuple]) -> list[list]:
     """Yahoo bars (HH:MM, high, low, close[, open, volume]) → [[minute, open, high, low, close, volume]]."""
     out = []

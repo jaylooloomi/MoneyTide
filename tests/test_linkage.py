@@ -243,3 +243,18 @@ def test_hot_members_turnover_and_amplitude():
     assert {m["code"] for m in members} == {"A", "D", "F"}
     members, total = hot_members(rows, min_turnover=2.5, limit=2)
     assert {m["code"] for m in members} == {"A", "F"} and total == 3  # the highest turnover kept
+
+
+
+def test_align_bars_undoes_yahoo_back_adjustment():
+    from openmarket.history.linkage import align_bars
+
+    # official 314 / 296.5; Yahoo 1/0.94 higher (a later capital reduction)
+    yahoo = [("09:00", 334.0425, 320.0, 330.0, 325.0, 1000.0), ("09:01", 330.0, 315.4255, 318.0851, 330.0, 2000.0)]
+    out = align_bars(yahoo, {"high": 314.0, "low": 296.5})
+    assert out[0][1] == pytest.approx(314.0, abs=0.01) and out[1][2] == pytest.approx(296.5, abs=0.01)
+    assert out[1][3] == pytest.approx(318.0851 * 0.94, abs=0.01) and out[1][5] == 2000.0  # volume untouched
+    same = [("09:00", 314.0, 296.5, 300.0, 300.0, 1.0)]
+    assert align_bars(same, {"high": 314.0, "low": 296.5}) == same
+    odd = [("09:00", 334.0, 296.5, 300.0, 300.0, 1.0)]  # high off, low equal: not one factor → untouched
+    assert align_bars(odd, {"high": 314.0, "low": 296.5}) == odd

@@ -21,7 +21,7 @@ from .config import STATIC_DIR, TAIPEI, USER_AGENT, AppConfig
 from .explain import explain_day
 from .history.linkage import (
     INTRADAY_HIGH_R, INTRADAY_LOW_R, bucket_closes, daily_linkage, fmt_minute, pair_matrix, peak_minute_from_bars, peak_minute_from_ticks,
-    HOT_AMPLITUDE, HOT_TURNOVER, amplitude_pct, hot_members, limit_down_pct, limit_up_pct, minute_bars, turnover_rate, peak_stats, tick_bars, with_close_bar, race_points, returns, top_members, verdict_r, verdict_timing,
+    HOT_AMPLITUDE, HOT_TURNOVER, align_bars, amplitude_pct, hot_members, limit_down_pct, limit_up_pct, minute_bars, turnover_rate, peak_stats, tick_bars, with_close_bar, race_points, returns, top_members, verdict_r, verdict_timing,
 )
 from .intraday import IntradayRecorder
 from .sources.yahoo_intraday import ONE_MINUTE_DAYS, fetch_bars, fetch_day_1m
@@ -495,12 +495,14 @@ def create_app(
                             sources.setdefault(s, "yahoo")
                         per_code_sessions[c][s] = {int(x[0][:2]) * 12 + int(x[0][3:5]) // 5 - 108: x[3] for x in b}
                         if s == d:
+                            b = align_bars(b, m)  # Yahoo back-adjusts: back to the official prices
                             peaks[c] = peak_minute_from_bars(b)
                             race[c] = race_points([(x[0], x[1], x[3]) for x in b], prev[c])
                     if d in yahoo_sessions:
                         # the peak time to the minute: 1-minute bars where Yahoo still has them
                         mb, err = await minute_bars_for(http, c, m["market"], d)
                         note(err)
+                        mb = align_bars(mb, m) if mb else mb
                         if mb:
                             peaks[c] = peak_minute_from_bars(mb)
                             race[c] = race_points([(x[0], x[1], x[3]) for x in mb], prev[c])
@@ -599,11 +601,11 @@ def create_app(
         async with httpx.AsyncClient(timeout=20, headers={"User-Agent": USER_AGENT}, follow_redirects=True) as http:
             mb, err = await minute_bars_for(http, code, r["market"], d)
             if mb:
-                bars, source = minute_bars(mb), "yahoo"
+                bars, source = minute_bars(align_bars(mb, r)), "yahoo"
             else:
                 got, err5 = await bars_for(http, code, r["market"], [d])
                 if got.get(d):
-                    bars, step, source = minute_bars(got[d]), 5, "yahoo"
+                    bars, step, source = minute_bars(align_bars(got[d], r)), 5, "yahoo"
                 elif d in store.tick_dates():
                     ticks = await asyncio.to_thread(store.ticks, d, {code})
                     bars, source = tick_bars(ticks.get(code, [])), "recorded"
