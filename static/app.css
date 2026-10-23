@@ -152,7 +152,7 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .hist {
   flex: 1; min-height: 0; overflow: auto; padding: 8px;
   display: grid; gap: 8px;
-  grid-template-columns: minmax(0, 3fr) minmax(360px, 2fr);
+  grid-template-columns: minmax(0, var(--ha-fr, 3fr)) minmax(320px, var(--hb-fr, 2fr)); /* A/B width: draggable */
   /* max-content: auto rows collapse to ~0 inside this fixed-height scroll container */
   grid-template-rows: var(--hab-h, 480px) max-content max-content max-content; /* A/B height: draggable */
   grid-auto-rows: max-content;
@@ -183,6 +183,7 @@ table.rot td.sel { outline: 1px solid #fff; }
 @media (max-width: 1100px) {
   .hist { grid-template-columns: 1fr; grid-template-rows: var(--hab-h, 420px) var(--hab-h, 420px) max-content max-content max-content; grid-template-areas: "a" "b" "j" "c" "d"; }
   .hA, .hB { position: relative; box-shadow: none; } /* stacked, pinning both would fill the screen */
+  .panel-resizer-v { display: none; }
 }
 
 /* ---- custom groups panel ---- */
@@ -249,3 +250,15 @@ table.news-themes a.theme-pick { color: #fff; font-weight: 600; }
 }
 .panel-resizer:hover::after, .panel-resizer.dragging::after { background: var(--accent); width: 120px; margin-left: -60px; }
 body.resizing-rows { cursor: ns-resize; user-select: none; }
+
+/* drag handle between A and B: changes their width ratio */
+.panel-resizer-v {
+  position: absolute; top: 0; bottom: 0; right: -9px; width: 10px; z-index: 7;
+  cursor: ew-resize; touch-action: none;
+}
+.panel-resizer-v::after {
+  content: ''; position: absolute; top: 50%; left: 2px; width: 6px; height: 80px; margin-top: -40px;
+  border-radius: 3px; background: #8a90a0; box-shadow: 0 0 0 1px #0f1115; transition: background .15s, height .15s, margin .15s;
+}
+.panel-resizer-v:hover::after, .panel-resizer-v.dragging::after { background: var(--accent); height: 160px; margin-top: -80px; }
+body.resizing-cols { cursor: ew-resize; user-select: none; }

@@ -561,6 +561,7 @@ export async function showHistory() {
     renderCrumb();
     window.addEventListener('hashchange', onHashChange); // bonus-12
     setupRowResizer(); // A/B height can be dragged
+    setupColResizer(); // and the A/B width ratio
     await loadDays();
     await applyHashDate(); // bonus-12
     await loadRotation();
@@ -1351,4 +1352,69 @@ function setupRowResizer() {
       }
     });
   }
+}
+
+// ---- A/B width ratio: drag the edge between A and B; double-click restores 3:2 -----------------
+const COL_KEY = 'openmarket.history.abRatio';
+const COL_MIN = 0.3;
+const COL_MAX = 0.8;
+
+function applyColRatio(r) {
+  const view = $('#historyView');
+  if (r) {
+    view.style.setProperty('--ha-fr', `${r}fr`);
+    view.style.setProperty('--hb-fr', `${1 - r}fr`);
+  } else {
+    view.style.removeProperty('--ha-fr');
+    view.style.removeProperty('--hb-fr');
+  }
+}
+
+function setupColResizer() {
+  try {
+    const saved = Number(localStorage.getItem(COL_KEY));
+    if (saved >= COL_MIN && saved <= COL_MAX) applyColRatio(saved);
+  } catch {
+    /* default */
+  }
+  const a = document.querySelector('#historyView .hA');
+  const b = document.querySelector('#historyView .hB');
+  const grip = document.createElement('div');
+  grip.className = 'panel-resizer-v';
+  grip.title = '拖動調整 A、B 的寬度（雙擊恢復預設）';
+  a.appendChild(grip);
+  grip.addEventListener('pointerdown', (e) => {
+    e.preventDefault();
+    grip.setPointerCapture(e.pointerId);
+    const left = a.getBoundingClientRect().left;
+    const total = b.getBoundingClientRect().right - left; // both columns incl. the gap
+    grip.classList.add('dragging');
+    document.body.classList.add('resizing-cols');
+    let r = a.getBoundingClientRect().width / total;
+    const move = (ev) => {
+      r = Math.min(COL_MAX, Math.max(COL_MIN, (ev.clientX - left) / total));
+      applyColRatio(Math.round(r * 1000) / 1000);
+    };
+    const up = () => {
+      grip.removeEventListener('pointermove', move);
+      grip.classList.remove('dragging');
+      document.body.classList.remove('resizing-cols');
+      try {
+        localStorage.setItem(COL_KEY, String(Math.round(r * 1000) / 1000));
+      } catch {
+        /* ignore */
+      }
+    };
+    grip.addEventListener('pointermove', move);
+    grip.addEventListener('pointerup', up, { once: true });
+    grip.addEventListener('pointercancel', up, { once: true });
+  });
+  grip.addEventListener('dblclick', () => {
+    applyColRatio(null);
+    try {
+      localStorage.removeItem(COL_KEY);
+    } catch {
+      /* ignore */
+    }
+  });
 }
