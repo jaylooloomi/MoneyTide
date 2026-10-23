@@ -303,7 +303,11 @@ table.link-matrix td, table.link-matrix th { padding: 2px 4px; font-size: 11px; 
 .rt-board { position: relative; }
 .rt-layer { position: absolute; top: 0; bottom: 0; left: 122px; right: 196px; pointer-events: none; z-index: 1; }
 .rt-after { position: absolute; top: 0; bottom: 0; right: 0; background: #ffffff08; border-left: 1px dashed #555a66; }
-.rt-head { position: absolute; top: -4px; bottom: 0; width: 2px; margin-left: -1px; background: #ffd400; box-shadow: 0 0 6px #ffd40088; }
+.rt-head { position: absolute; top: -4px; bottom: 0; width: 2px; margin-left: -1px; background: #ffd400; box-shadow: 0 0 6px #ffd40088; pointer-events: auto; cursor: ew-resize; touch-action: none; }
+.rt-head::before { content: ''; position: absolute; top: 0; bottom: 0; left: -8px; right: -8px; } /* a wider grab area */
+.rt-knob { position: absolute; top: -7px; left: -6px; width: 14px; height: 14px; border-radius: 50%; background: #ffd400; box-shadow: 0 0 6px #ffd400aa; }
+.rt-head:hover .rt-knob, .rt-head.drag .rt-knob { transform: scale(1.25); }
+.rt-head.drag { box-shadow: 0 0 10px #ffd400; }
 .rt-row { position: absolute; left: 0; right: 0; height: 38px; display: flex; align-items: center; gap: 6px; font-size: 12px; cursor: pointer; transition: transform .35s ease; }
 .rt-rank { width: 18px; flex: none; text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; }
 .rt-name { width: 92px; flex: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

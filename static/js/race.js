@@ -157,7 +157,7 @@ export function mountRace(box, d, { onStock } = {}) {
     <div class="rt">
       <div class="rt-axis">${TICKS.map(([label, m]) => `<span style="left:${pctX(m)}%">${label}</span>`).join('')}</div>
       <div class="rt-board" style="height:${codes.length * ROW_H}px">
-        <div class="rt-layer"><span class="rt-after" style="left:${pctX(PEAK_END)}%" title="13:00 之後不計入日內最高點"></span><span class="rt-head"></span></div>
+        <div class="rt-layer"><span class="rt-after" style="left:${pctX(PEAK_END)}%" title="13:00 之後不計入日內最高點"></span><span class="rt-head" title="拖動黃線選時間"><span class="rt-knob"></span></span></div>
         ${codes
           .map((c) => {
             const m = byCode.get(c);
@@ -257,6 +257,29 @@ export function mountRace(box, d, { onStock } = {}) {
     stop();
     show(Number(seek.value));
   });
+  // the yellow playhead is a handle too: dragging it moves the time like the slider above
+  const layer = box.querySelector('.rt-layer');
+  const minuteAt = (x) => {
+    const r = layer.getBoundingClientRect();
+    return Math.round(Math.min(1, Math.max(0, (x - r.left) / r.width)) * RACE_END);
+  };
+  head.addEventListener('pointerdown', (e) => {
+    e.preventDefault();
+    stop();
+    head.setPointerCapture(e.pointerId);
+    head.classList.add('drag');
+  });
+  head.addEventListener('pointermove', (e) => {
+    if (!head.hasPointerCapture(e.pointerId)) return;
+    const m = minuteAt(e.clientX);
+    if (m !== state.m) show(m);
+  });
+  const release = (e) => {
+    if (head.hasPointerCapture(e.pointerId)) head.releasePointerCapture(e.pointerId);
+    head.classList.remove('drag');
+  };
+  head.addEventListener('pointerup', release);
+  head.addEventListener('pointercancel', release);
   pick(leader); // the leader's chart until another row is clicked
   show(RACE_END); // the finished day first: the same picture as the static timeline; ▶ replays from 09:00
   return stop;
