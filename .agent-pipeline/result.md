@@ -9,6 +9,7 @@
 ## 加分項（每行一個，可獨立 revert）
 | # | 名稱 | Score | 參考來源（競品 / 專案 / 文章） | 做了什麼 | 驗證指令 | 測試狀態 | 否決的替代作法 |
 |---|---|---|---|---|---|---|---|
+| 01 | N 卡片「存成自訂族群」 | 6.0（scores-01.md） | TradingView Import watchlist；Chartink／Screener.in 的 screener→watchlist 擴充 | N 每張卡片右上「＋族群」：跳出名稱（預設「N1022 華經+驊宏資」，可改），用既有 /api/groups 建立並加入成員，按鈕變「✓ 已存」；不會同時展開卡片。改 finder.js、app.css、finder.test.js（49 行） | `npm test`（78 ✅）；瀏覽器實測存成「ZZ夜班測試」→ API 查到 2 檔 → 已刪除還原 | ✅ | ① 後端新增批次端點（不必要，既有 API 足夠）② 自動存不問名稱（會塞滿族群清單） |
 
 ## 判斷不值得做
 - （待填）

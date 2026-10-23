@@ -378,3 +378,4 @@ table.link-heat td.self { background: #3a3e48; }
 .fd-filter button:disabled { opacity: .35; cursor: default; }
 .rt-row.bench { cursor: default; background: #ffd4000a; border-bottom: 1px solid #ffd40033; }
 .rt-row.bench .rt-name { color: #ffd400; font-weight: 600; }
+.fd-save { margin-left: 4px; font-size: 11px; padding: 0 6px; }

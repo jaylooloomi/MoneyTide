@@ -3,6 +3,7 @@
 // tunable here and kept in localStorage. A result card opens K's view for its members
 // (/api/history/linkage-codes). Pure HTML builders on top (node --test); panel wiring below.
 
+import { addToGroup, createGroup } from './groups.js';
 import { renderBody } from './linkage.js';
 import { colorFor, escapeHtml, fmtPct } from './transform.js';
 
@@ -43,6 +44,18 @@ export function queryOf(method, params) {
 }
 
 const fmtR = (r) => (r === null || r === undefined ? '—' : r.toFixed(2));
+const NAME_MAX = 30; // groups.py MAX_NAME_LEN
+
+/**
+ * Default name when a found group is saved as a 自訂族群: "N1022 華經+驊宏資…" — the date and the
+ * members, cut to the server's 30-character limit, without the characters a group name may not hold.
+ */
+export function defaultGroupName(g, date) {
+  const md = String(date || '').slice(5).replace('-', '');
+  const names = g.members.map((m) => m.name.replace(/[*＊]/g, '')).join('+');
+  const raw = `N${md} ${names}`.replace(/[/\\<>"',]/g, '');
+  return raw.length > NAME_MAX ? `${raw.slice(0, NAME_MAX - 1)}…` : raw;
+}
 
 export function cardHtml(g, i) {
   const title =
@@ -73,7 +86,8 @@ export function cardHtml(g, i) {
   const news = g.news?.length ? `<div class="fd-news">📰 ${g.news.map((t) => escapeHtml(t)).join('<br>📰 ')}</div>` : '';
   return `<div class="fd-card" data-i="${i}">
     <div class="fd-top"><span class="link-badge" style="background:${KIND_COLOR[g.kind] || '#3a3e48'}">${escapeHtml(g.kind)}</span>
-      <span class="fd-title">${title}</span><span class="muted">${g.members.length} 檔</span></div>
+      <span class="fd-title">${title}</span><span class="muted">${g.members.length} 檔</span>
+      <button type="button" class="icon fd-save" data-save="${i}" title="把這群股票存成自訂族群，之後在 B／C／K 追蹤">＋族群</button></div>
     <div class="fd-chips">${chips}</div>
     <div class="fd-facts">${facts}</div>${news}
   </div>`;
@@ -319,7 +333,29 @@ export function mountFinderPanel(container, { onStock }) {
     detail.innerHTML = '';
     for (const c of body.querySelectorAll('.fd-card')) c.classList.remove('on');
   }
+  // ＋族群: save a found group as a 自訂族群 (the existing group API; creating one is idempotent)
   body.addEventListener('click', async (e) => {
+    const btn = e.target.closest('button[data-save]');
+    if (!btn || !state.data) return;
+    e.stopPropagation();
+    const g = state.data.groups[Number(btn.dataset.save)];
+    const name = window.prompt('存成自訂族群，名稱：', defaultGroupName(g, state.date));
+    if (!name || !name.trim()) return;
+    btn.disabled = true;
+    btn.textContent = '儲存中…';
+    try {
+      await createGroup(name.trim());
+      for (const m of g.members) await addToGroup(name.trim(), m.code);
+      btn.textContent = '✓ 已存';
+      btn.title = `已存成自訂族群「${name.trim()}」，可在「管理族群」修改`;
+    } catch (err) {
+      btn.disabled = false;
+      btn.textContent = '＋族群';
+      window.alert(`儲存失敗：${err.message}`);
+    }
+  }, true);
+  body.addEventListener('click', async (e) => {
+    if (e.target.closest('button[data-save]')) return;
     const card = e.target.closest('.fd-card');
     if (!card || !state.data) return;
     const g = state.data.groups[Number(card.dataset.i)];

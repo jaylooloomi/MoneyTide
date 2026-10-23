@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { cardHtml, filterHtml, filterOptions, matchesFilter, progressView, queryOf, statsText } from '../../static/js/finder.js';
+import { cardHtml, defaultGroupName, filterHtml, filterOptions, matchesFilter, progressView, queryOf, statsText } from '../../static/js/finder.js';
 
 test('queryOf sends only the fields of the chosen method; blank 起漲差 means not required', () => {
   const p = { daily_r: 0.75, daily_window: 20, new_daily_r: 0.85, pool_top: 30, intraday_r: 0.5, peak_gap: 8, start_gap: '', require_burst: true, groupings: ['custom', 'news'], pool_sources: ['gain'] };
@@ -81,4 +81,13 @@ test('filter chips: 找法1 by source grouping (a group can count twice), 找法
   const html = filterHtml(fresh, '跨族群新組合');
   assert.match(html, /data-filter="跨族群新組合" class="on"/);
   assert.match(html, /data-filter="已知族群的延伸" disabled/);
+});
+
+test('defaultGroupName: date + members, legal characters, 30 characters at most', () => {
+  assert.equal(defaultGroupName({ members: [{ name: '國巨*' }, { name: '華新科' }] }, '2026-10-22'), 'N1022 國巨+華新科');
+  const long = defaultGroupName({ members: Array.from({ length: 8 }, (_, i) => ({ name: `公司名稱${i}號'` })) }, '2026-10-22');
+  assert.equal(long.length, 30);
+  assert.ok(long.endsWith('…'));
+  assert.ok(!/['"\\/,<>]/.test(long));
+  assert.match(cardHtml({ ...G }, 3), /data-save="3"/);
 });
