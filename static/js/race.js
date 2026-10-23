@@ -182,7 +182,8 @@ export function mountRace(box, d, { onStock } = {}) {
         ${codes
           .map((c) => {
             const m = byCode.get(c);
-            return `<div class="rt-row" data-code="${escapeHtml(c)}" title="${escapeHtml(c)} ${escapeHtml(m.name)}：點一下看右邊的走勢圖">
+            const extra = m.turnover_rate != null ? `　週轉率 ${m.turnover_rate.toFixed(1)}%　振幅 ${m.amplitude_pct?.toFixed(1) ?? '—'}%` : '';
+            return `<div class="rt-row" data-code="${escapeHtml(c)}" title="${escapeHtml(c)} ${escapeHtml(m.name)}${extra}：點一下看右邊的走勢圖">
               <span class="rt-rank"></span><span class="rt-name">${c === leader ? '<span title="龍頭：族群市值最大">👑</span>' : ''}${escapeHtml(m.name)}<span class="rt-lead" title="領漲：這一分鐘排第一（有漲停時是最早鎖住的）" hidden>${LEAD_ICON}</span></span>
               <span class="rt-track">
                 <svg viewBox="0 0 ${RACE_END} ${ROW_H}" preserveAspectRatio="none"><line class="rt-zero" x1="0" x2="${RACE_END}" y1="${y(0)}" y2="${y(0)}"/><polyline class="rt-path"/></svg>

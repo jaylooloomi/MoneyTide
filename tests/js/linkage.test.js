@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { matrixHtml, summaryHtml } from '../../static/js/linkage.js';
+import { clusterOrder, loners, matrixBlock, matrixHtml, summaryHtml, topPairs } from '../../static/js/linkage.js';
 
 test('matrix: diagonal dash, values, escaping', () => {
   const html = matrixHtml(['A', '<b>'], [[1, 0.82], [0.82, 1]]);
@@ -20,4 +20,37 @@ test('summary shows verdicts and sources', () => {
   assert.match(html, /群體圍攻/);
   assert.match(html, /10-22 自錄、10-21 Yahoo/);
   assert.match(html, /\+3 分/);
+});
+
+// two blocks that move together (A,C) and (B,D), and E on its own
+const M5 = [
+  [1, 0.1, 0.9, 0.2, 0.0],
+  [0.1, 1, 0.2, 0.8, 0.1],
+  [0.9, 0.2, 1, 0.1, -0.1],
+  [0.2, 0.8, 0.1, 1, 0.0],
+  [0.0, 0.1, -0.1, 0.0, 1],
+];
+const N5 = ['A', 'B', 'C', 'D', 'E'];
+
+test('clusterOrder puts members that move together next to each other', () => {
+  const o = clusterOrder(M5).map((i) => N5[i]);
+  const at = (x) => o.indexOf(x);
+  assert.equal(Math.abs(at('A') - at('C')), 1);
+  assert.equal(Math.abs(at('B') - at('D')), 1);
+  assert.equal(o.length, 5);
+});
+
+test('topPairs / loners give the conclusions', () => {
+  assert.deepEqual(topPairs(N5, M5, 2).map((p) => [p.a, p.b, p.r]), [['A', 'C', 0.9], ['B', 'D', 0.8]]);
+  assert.equal(loners(N5, M5, 1)[0].name, 'E');
+});
+
+test('matrixBlock: numbers up to 12 members, a heat grid with conclusions above that', () => {
+  assert.match(matrixBlock(N5, M5), /link-matrix/);
+  const n = 13;
+  const big = Array.from({ length: n }, (_, i) => Array.from({ length: n }, (_, j) => (i === j ? 1 : 0.5)));
+  const html = matrixBlock(Array.from({ length: n }, (_, i) => `S${i}`), big);
+  assert.match(html, /link-heat/);
+  assert.match(html, /連動最強的 10 對/);
+  assert.match(html, /最獨立的 5 檔/);
 });

@@ -21,7 +21,7 @@ from .config import STATIC_DIR, TAIPEI, USER_AGENT, AppConfig
 from .explain import explain_day
 from .history.linkage import (
     INTRADAY_HIGH_R, INTRADAY_LOW_R, bucket_closes, daily_linkage, fmt_minute, pair_matrix, peak_minute_from_bars, peak_minute_from_ticks,
-    limit_down_pct, limit_up_pct, minute_bars, peak_stats, tick_bars, with_close_bar, race_points, returns, top_members, verdict_r, verdict_timing,
+    HOT_AMPLITUDE, HOT_TURNOVER, amplitude_pct, hot_members, limit_down_pct, limit_up_pct, minute_bars, turnover_rate, peak_stats, tick_bars, with_close_bar, race_points, returns, top_members, verdict_r, verdict_timing,
 )
 from .intraday import IntradayRecorder
 from .sources.yahoo_intraday import ONE_MINUTE_DAYS, fetch_bars, fetch_day_1m
@@ -450,33 +450,27 @@ def create_app(
             store.save_yahoo_1m(code, day, bars)
         return bars or None, ""
 
-    @app.get("/api/history/linkage")
-    async def linkage(group: str, day: str = Query(..., alias="date"), grouping: str = "industry") -> dict:
-        try:
-            d = date.fromisoformat(day)
-        except ValueError as exc:
-            raise HTTPException(422, f"invalid date {day!r}") from exc
+    YAHOO_CONCURRENCY = 6  # members fetched at the same time (M can hold dozens of stocks)
+
+    async def linkage_payload(d: date, members: list[dict]) -> dict:
+        """K / M body for `members` (day rows, the largest market cap first) on day d."""
         store = app.state.history
-        g = get_grouping(f"news@{d.isoformat()}" if grouping == "news" else grouping)
-        if g is None:
-            raise HTTPException(422, f"grouping {grouping!r} is not available")
-        rows = store.day_rows(d)
-        if not rows:
-            raise HTTPException(404, f"no data for {day}")
-        members = top_members(rows, g, group)
-        if len(members) < 2:
-            raise HTTPException(404, "這個族群少於 2 檔普通股，無法計算連動性")
         codes = [m["code"] for m in members]
         daily = await asyncio.to_thread(daily_linkage, store, d, codes)
         recorded = store.tick_dates()
         sessions = sorted(store.trading_dates(up_to=d, limit=3))
-        notes = []
+        notes: list[str] = []
         per_code_sessions: dict[str, dict[date, dict]] = {c: {} for c in codes}
         peaks: dict[str, int | None] = {c: None for c in codes}
         sources = {}
         coarse: set[str] = set()  # members whose peak time is only known to 5 minutes
         prev = {m["code"]: m.get("prev_close") for m in members}
-        race: dict[str, list] = {c: [] for c in codes}  # 漲幅賽跑: the shown day minute by minute
+        race: dict[str, list] = {c: [] for c in codes}  # the shown day minute by minute
+
+        def note(err: str) -> None:
+            if err and err not in notes:
+                notes.append(err)
+
         async with httpx.AsyncClient(timeout=20, headers={"User-Agent": USER_AGENT}, follow_redirects=True) as http:
             for s in sessions:
                 if s in recorded:
@@ -488,30 +482,33 @@ def create_app(
                             peaks[c] = peak_minute_from_ticks(ticks[c])
                             race[c] = race_points([(ts, p, p) for ts, p in ticks[c]], prev[c])
             yahoo_sessions = [s for s in sessions if s not in recorded]
-            if yahoo_sessions:
-                for m in members:
-                    bars, err = await bars_for(http, m["code"], m["market"], yahoo_sessions)
-                    if err and err not in notes:
-                        notes.append(err)
+            gate = asyncio.Semaphore(YAHOO_CONCURRENCY)
+
+            async def one(m: dict) -> None:
+                c = m["code"]
+                async with gate:
+                    bars, err = await bars_for(http, c, m["market"], yahoo_sessions)
+                    note(err)
                     for s in yahoo_sessions:
                         b = bars.get(s, [])
                         if b:
                             sources.setdefault(s, "yahoo")
-                        per_code_sessions[m["code"]][s] = {int(x[0][:2]) * 12 + int(x[0][3:5]) // 5 - 108: x[3] for x in b}
+                        per_code_sessions[c][s] = {int(x[0][:2]) * 12 + int(x[0][3:5]) // 5 - 108: x[3] for x in b}
                         if s == d:
-                            peaks[m["code"]] = peak_minute_from_bars(b)
-                            race[m["code"]] = race_points([(x[0], x[1], x[3]) for x in b], prev[m["code"]])
-                if d in yahoo_sessions:
-                    # the peak time to the minute: 1-minute bars where Yahoo still has them
-                    for m in members:
-                        mb, err = await minute_bars_for(http, m["code"], m["market"], d)
-                        if err and err not in notes:
-                            notes.append(err)
+                            peaks[c] = peak_minute_from_bars(b)
+                            race[c] = race_points([(x[0], x[1], x[3]) for x in b], prev[c])
+                    if d in yahoo_sessions:
+                        # the peak time to the minute: 1-minute bars where Yahoo still has them
+                        mb, err = await minute_bars_for(http, c, m["market"], d)
+                        note(err)
                         if mb:
-                            peaks[m["code"]] = peak_minute_from_bars(mb)
-                            race[m["code"]] = race_points([(x[0], x[1], x[3]) for x in mb], prev[m["code"]])
+                            peaks[c] = peak_minute_from_bars(mb)
+                            race[c] = race_points([(x[0], x[1], x[3]) for x in mb], prev[c])
                         else:
-                            coarse.add(m["code"])
+                            coarse.add(c)
+
+            if yahoo_sessions:
+                await asyncio.gather(*(one(m) for m in members))
         axis = list(range(0, 55))
         series = []
         for c in codes:
@@ -520,17 +517,20 @@ def create_app(
                 r.extend(returns(per_code_sessions[c].get(s, {}), axis))
             series.append(r)
         matrix, r_intraday = pair_matrix(series, min_points=20)
-        for m in members:  # 13:30 = the official close (Yahoo's bars stop before the closing auction)
+        for m in members:  # 13:30 = the official close (no Yahoo bar covers the closing auction)
             if race[m["code"]] and m.get("change_pct") is not None:
                 close = round(m["change_pct"], 2)
                 race[m["code"]] = [p for p in race[m["code"]] if p[0] < 270] + [[270, close, close]]
         peak_list = [peaks[c] for c in codes]
         std, lag = peak_stats(peak_list)
         return {
-            "date": day,
-            "group": group,
+            "date": d.isoformat(),
             "members": [
-                {"code": m["code"], "name": m["name"], "market_cap": m["market_cap"], "change_pct": m["change_pct"], "limit_up_pct": limit_up_pct(m.get("prev_close"))}
+                {
+                    "code": m["code"], "name": m["name"], "market_cap": m["market_cap"], "change_pct": m["change_pct"],
+                    "limit_up_pct": limit_up_pct(m.get("prev_close")),
+                    "turnover_rate": turnover_rate(m), "amplitude_pct": amplitude_pct(m),
+                }
                 for m in members
             ],
             "daily": daily,
@@ -543,6 +543,44 @@ def create_app(
             "verdict": {"daily": verdict_r(daily.get("r20")), "intraday": verdict_r(r_intraday, INTRADAY_HIGH_R, INTRADAY_LOW_R), "timing": verdict_timing(std)},
             "notes": notes,
         }
+
+    def _day(day: str) -> date:
+        try:
+            return date.fromisoformat(day)
+        except ValueError as exc:
+            raise HTTPException(422, f"invalid date {day!r}") from exc
+
+    @app.get("/api/history/linkage")
+    async def linkage(group: str, day: str = Query(..., alias="date"), grouping: str = "industry") -> dict:
+        d = _day(day)
+        store = app.state.history
+        g = get_grouping(f"news@{d.isoformat()}" if grouping == "news" else grouping)
+        if g is None:
+            raise HTTPException(422, f"grouping {grouping!r} is not available")
+        rows = store.day_rows(d)
+        if not rows:
+            raise HTTPException(404, f"no data for {day}")
+        members = top_members(rows, g, group)
+        if len(members) < 2:
+            raise HTTPException(404, "這個族群少於 2 檔普通股，無法計算連動性")
+        return {**await linkage_payload(d, members), "group": group}
+
+    @app.get("/api/history/hot-linkage")
+    async def hot_linkage(
+        day: str = Query(..., alias="date"),
+        turnover: float = Query(HOT_TURNOVER, ge=0.5, le=50),
+        amplitude: float = Query(HOT_AMPLITUDE, ge=0, le=20),
+    ) -> dict:
+        """M · 高週轉連動性: every common stock with 週轉率 ≥ turnover % and 振幅 > amplitude % that day."""
+        d = _day(day)
+        rows = app.state.history.day_rows(d)
+        if not rows:
+            raise HTTPException(404, f"no data for {day}")
+        members, total = hot_members(rows, turnover, amplitude)
+        if len(members) < 2:
+            raise HTTPException(404, f"這一天週轉率 ≥ {turnover:g}% 且振幅 > {amplitude:g}% 的股票少於 2 檔")
+        out = await linkage_payload(d, members)
+        return {**out, "criteria": {"turnover": turnover, "amplitude": amplitude, "matched": total, "shown": len(members)}}
 
     @app.get("/api/history/intraday")
     async def stock_intraday(code: str, day: str = Query(..., alias="date")) -> dict:

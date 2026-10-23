@@ -89,6 +89,40 @@ def top_members(rows: list[dict], grouping: Grouping, group: str, n: int = TOP_N
     return members[:n]
 
 
+HOT_TURNOVER = 5.0  # M: 週轉率 ≥ 5%
+HOT_AMPLITUDE = 3.0  # and 振幅 > 3%
+HOT_MAX = 60  # at most this many (the highest turnover first); keeps the Yahoo fetches bounded
+
+
+def turnover_rate(r: dict) -> float | None:
+    """週轉率 %: shares traded / shares outstanding (market cap ÷ close)."""
+    cap, close, vol = r.get("market_cap"), r.get("close"), r.get("volume_shares")
+    if not cap or not close or vol is None:
+        return None
+    return vol / (cap / close) * 100
+
+
+def amplitude_pct(r: dict) -> float | None:
+    """振幅 %: (high − low) / previous close."""
+    h, lo, prev = r.get("high"), r.get("low"), r.get("prev_close")
+    return (h - lo) / prev * 100 if h and lo and prev else None
+
+
+def hot_members(rows: list[dict], min_turnover: float = HOT_TURNOVER, min_amp: float = HOT_AMPLITUDE, limit: int = HOT_MAX) -> tuple[list[dict], int]:
+    """Common stocks with 週轉率 ≥ min_turnover and 振幅 > min_amp → (members, how many matched).
+    The `limit` highest-turnover ones are kept, then ordered by market cap (the leader first, like K)."""
+    hot = [
+        r for r in rows
+        if r.get("kind") == "stock"
+        and (turnover_rate(r) or 0) >= min_turnover
+        and (amplitude_pct(r) or 0) > min_amp
+    ]
+    hot.sort(key=lambda r: -(turnover_rate(r) or 0))
+    kept = hot[:limit]
+    kept.sort(key=lambda r: -(r.get("market_cap") or 0))
+    return kept, len(hot)
+
+
 def daily_linkage(store: HistoryStore, day: date, codes: list[str], windows: Iterable[int] = (20, 60)) -> dict:
     windows = list(windows)
     dates = sorted(store.trading_dates(up_to=day, limit=max(windows)))
