@@ -1,6 +1,7 @@
 // K · 族群連動性: daily / intraday correlation of a group's top members and their peak timing
 // (server: /api/history/linkage). Pure HTML builders on top (node --test); panel wiring below.
 
+import { mountRace } from './race.js';
 import { colorFor, escapeHtml, fmtPct } from './transform.js';
 
 const SESSION_MINUTES = 240; // 09:00–13:00: the intraday-high window
@@ -71,8 +72,9 @@ export function mountLinkagePanel(container, { onStock }) {
     <div id="hLinkBody" style="padding:8px 10px">${HINT}</div>`;
   container.appendChild(sec);
   const body = sec.querySelector('#hLinkBody');
-  const state = { ticket: 0, data: null, win: '20', group: null, date: null, grouping: null };
+  const state = { ticket: 0, data: null, win: '20', group: null, date: null, grouping: null, stopRace: () => {} };
   const draw = () => {
+    state.stopRace();
     const d = state.data;
     if (!d) return;
     const names = d.members.map((m) => m.name);
@@ -81,7 +83,9 @@ export function mountLinkagePanel(container, { onStock }) {
         <div><div class="muted">日相關（${state.win} 日漲跌幅）</div>${matrixHtml(names, d.daily[`matrix${state.win}`])}</div>
         <div><div class="muted">分時相關（最近 ${d.intraday.sessions.length} 個交易日 5 分 K）</div>${matrixHtml(names, d.intraday.matrix)}</div>
         <div><div class="muted" title="每檔在 09:00–13:00 之間價格最高的那個時間點（同價取最早）">${escapeHtml(d.date)} 日內最高點時間（09:00–13:00；${d.peak_resolution_min === 5 ? '5 分 K：超過 30 天沒有 1 分資料' : '1 分精度'}；👑 龍頭）</div>${timelineHtml(d.peaks, d.members)}</div>
-      </div>`;
+      </div>
+      <div class="race"><div class="muted">${escapeHtml(d.date)} 漲幅賽跑（09:00 → 13:30，依當下漲跌幅排名；點股票看卡片）</div><div class="race-box"></div></div>`;
+    state.stopRace = mountRace(body.querySelector('.race-box'), d, { onStock });
   };
   sec.querySelector('#hLinkWin').addEventListener('click', (e) => {
     const b = e.target.closest('button[data-value]');
@@ -94,6 +98,7 @@ export function mountLinkagePanel(container, { onStock }) {
     state.ticket += 1; // drop a request still in flight
     state.group = null;
     state.data = null;
+    state.stopRace();
     sec.querySelector('#hLinkTitle').textContent = '';
     sec.querySelector('#hLinkNote').textContent = '';
     sec.classList.remove('loading');

@@ -818,6 +818,43 @@ function renderHistBreadth() {
   const seen = new Set();
   const unique = st.stocks.filter((s) => !seen.has(s.code) && seen.add(s.code));
   el.innerHTML = breadthBarHtml(marketBreadth(unique));
+  renderIndexChange();
+}
+
+// ---- A header: the day's 加權 / 櫃買 change, to judge each group against the market ----------
+const idxChange = { byDate: null, loading: null, at: 0 };
+
+/** {date: {twse, tpex}} % change from the stored official index rows (close vs previous close). */
+function indexChanges(days) {
+  const pct = (r) => (r && r.close != null && r.change != null && r.close !== r.change ? (r.change / (r.close - r.change)) * 100 : null);
+  return Object.fromEntries(days.map((d) => [d.date, { twse: pct(d.twse), tpex: pct(d.tpex) }]));
+}
+
+async function renderIndexChange() {
+  let el = $('#hIdxChg');
+  if (!el) {
+    el = document.createElement('span');
+    el.id = 'hIdxChg';
+    el.className = 'idx-chg';
+    el.title = '當天加權指數、櫃買指數漲跌幅：拿來和族群比強弱';
+    $('#mbarHist').after(el);
+  }
+  // refetch at most every 10 minutes (a new day's index arrives after the close)
+  if ((!idxChange.byDate || Date.now() - idxChange.at > 600_000) && !idxChange.loading) {
+    idxChange.loading = getJson('/api/history/market-index?days=500')
+      .then((data) => {
+        idxChange.byDate = indexChanges(data.days);
+        idxChange.at = Date.now();
+      })
+      .catch(() => {})
+      .finally(() => {
+        idxChange.loading = null;
+      });
+  }
+  if (!idxChange.byDate) await idxChange.loading;
+  const c = idxChange.byDate?.[st.date] || {};
+  const part = (label, v) => `<span class="muted">${label}</span> <b class="${v > 0 ? 'up' : v < 0 ? 'down' : ''}">${v == null ? '—' : fmtPct(v)}</b>`;
+  el.innerHTML = `${part('加權', c.twse)}　${part('櫃買', c.tpex)}`;
 }
 
 // ---- bonus-06: day-by-day replay ------------------------------------------------

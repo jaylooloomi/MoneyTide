@@ -137,6 +137,7 @@ def test_linkage_api_uses_cached_bars(store, tmp_path):
         assert all(s["source"] == "yahoo" for s in body["intraday"]["sessions"])
         assert [p["time"] for p in body["peaks"]] == ["09:00", "10:07", "12:59"] and body["peak_resolution_min"] == 1
         assert body["verdict"]["timing"] == "時間錯落" and body["notes"] == []
+        assert body["race"]["step_min"] == 1 and body["race"]["points"]["B"][1][0] == 67  # 10:07 from the 1m bars
         assert body["leader_lag_min"] == pytest.approx((67 + 239) / 2)
         assert client.get("/api/history/linkage", params={"date": d.isoformat(), "group": "nope"}).status_code == 404
         flows = client.get("/api/history/flows", params={"date": d.isoformat()}).json()["groups"]
@@ -166,3 +167,11 @@ def test_fetch_day_1m_asks_for_one_session():
     assert bars == parse_chart(payload)[day]
     q = seen[0].params
     assert q["interval"] == "1m" and int(q["period2"]) - int(q["period1"]) == (4 * 60 + 31) * 60
+
+
+def test_race_points_last_value_per_minute_within_the_session():
+    from openmarket.history.linkage import race_points
+
+    pts = [("08:59:00", 99), ("09:00:05", 101), ("09:00:50", 102), ("09:07", 110), ("13:30:00", 105), ("13:40:00", 1)]
+    assert race_points(pts, 100) == [[0, 2.0], [7, 10.0], [270, 5.0]]
+    assert race_points(pts, None) == []

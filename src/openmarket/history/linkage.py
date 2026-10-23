@@ -169,6 +169,19 @@ def peak_minute_from_bars(bars: list[tuple]) -> int | None:
     return next(minutes(b[0]) for b in bars if b[1] == best)
 
 
+def race_points(points: list[tuple], prev_close: float | None) -> list[list[float]]:
+    """(HH:MM[:SS], price) polls or bar closes → [[minute since 09:00, % change]], last value per minute.
+    The 漲幅賽跑 animation in K replays these from 09:00 to 13:30."""
+    if not prev_close:
+        return []
+    by_minute: dict[int, float] = {}
+    for ts, price in points:
+        m = minutes(ts)
+        if 0 <= m <= 270 and price:
+            by_minute[m] = round((price / prev_close - 1) * 100, 2)
+    return [[m, v] for m, v in sorted(by_minute.items())]
+
+
 def peak_stats(peaks: list[int | None]) -> tuple[float | None, float | None]:
     """(std of peak minutes, mean delay of the others after the leader = peaks[0])."""
     known = [p for p in peaks if p is not None]

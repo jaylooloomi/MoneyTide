@@ -21,7 +21,7 @@ from .config import STATIC_DIR, TAIPEI, USER_AGENT, AppConfig
 from .explain import explain_day
 from .history.linkage import (
     INTRADAY_HIGH_R, INTRADAY_LOW_R, bucket_closes, daily_linkage, fmt_minute, pair_matrix, peak_minute_from_bars, peak_minute_from_ticks,
-    peak_stats, returns, top_members, verdict_r, verdict_timing,
+    peak_stats, race_points, returns, top_members, verdict_r, verdict_timing,
 )
 from .intraday import IntradayRecorder
 from .sources.yahoo_intraday import ONE_MINUTE_DAYS, fetch_bars, fetch_day_1m
@@ -472,6 +472,8 @@ def create_app(
         peaks: dict[str, int | None] = {c: None for c in codes}
         sources = {}
         coarse: set[str] = set()  # members whose peak time is only known to 5 minutes
+        prev = {m["code"]: m.get("prev_close") for m in members}
+        race: dict[str, list] = {c: [] for c in codes}  # 漲幅賽跑: the shown day minute by minute
         async with httpx.AsyncClient(timeout=20, headers={"User-Agent": USER_AGENT}, follow_redirects=True) as http:
             for s in sessions:
                 if s in recorded:
@@ -481,6 +483,7 @@ def create_app(
                         per_code_sessions[c][s] = bucket_closes(ticks[c])
                         if s == d:
                             peaks[c] = peak_minute_from_ticks(ticks[c])
+                            race[c] = race_points(ticks[c], prev[c])
             yahoo_sessions = [s for s in sessions if s not in recorded]
             if yahoo_sessions:
                 for m in members:
@@ -494,6 +497,7 @@ def create_app(
                         per_code_sessions[m["code"]][s] = {int(x[0][:2]) * 12 + int(x[0][3:5]) // 5 - 108: x[3] for x in b}
                         if s == d:
                             peaks[m["code"]] = peak_minute_from_bars(b)
+                            race[m["code"]] = race_points([(x[0], x[3]) for x in b], prev[m["code"]])
                 if d in yahoo_sessions:
                     # the peak time to the minute: 1-minute bars where Yahoo still has them
                     for m in members:
@@ -502,6 +506,7 @@ def create_app(
                             notes.append(err)
                         if mb:
                             peaks[m["code"]] = peak_minute_from_bars(mb)
+                            race[m["code"]] = race_points([(x[0], x[3]) for x in mb], prev[m["code"]])
                         else:
                             coarse.add(m["code"])
         axis = list(range(0, 55))
@@ -512,6 +517,9 @@ def create_app(
                 r.extend(returns(per_code_sessions[c].get(s, {}), axis))
             series.append(r)
         matrix, r_intraday = pair_matrix(series, min_points=20)
+        for m in members:  # 13:30 = the official close (Yahoo's bars stop before the closing auction)
+            if race[m["code"]] and m.get("change_pct") is not None:
+                race[m["code"]] = [p for p in race[m["code"]] if p[0] < 270] + [[270, round(m["change_pct"], 2)]]
         peak_list = [peaks[c] for c in codes]
         std, lag = peak_stats(peak_list)
         return {
@@ -523,6 +531,7 @@ def create_app(
             "peaks": [{"code": c, "time": fmt_minute(p)} for c, p in zip(codes, peak_list)],
             "peak_resolution_min": 5 if any(peaks[c] is not None for c in coarse) else 1,
             "peak_std_min": std,
+            "race": {"step_min": 5 if coarse else 1, "points": race},
             "leader_lag_min": lag,
             "verdict": {"daily": verdict_r(daily.get("r20")), "intraday": verdict_r(r_intraday, INTRADAY_HIGH_R, INTRADAY_LOW_R), "timing": verdict_timing(std)},
             "notes": notes,

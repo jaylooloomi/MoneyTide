@@ -295,3 +295,22 @@ table.link-matrix td, table.link-matrix th { padding: 2px 4px; font-size: 11px; 
 .wc-stats { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px; }
 .wc-head button { align-self: flex-start; }
 @media (max-width: 760px) { .wc-side { width: 46%; } }
+
+/* K · 漲幅賽跑 */
+.race { margin-top: 12px; }
+.race-ctl { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 6px 0; }
+.race-clock { font-size: 20px; font-variant-numeric: tabular-nums; min-width: 3.2em; color: #ffd400; }
+.race-seek { flex: 1; min-width: 160px; max-width: 520px; }
+.race-board { position: relative; max-width: 900px; }
+.race-row { position: absolute; left: 0; right: 0; height: 22px; display: flex; align-items: center; gap: 6px; font-size: 12px; cursor: pointer; transition: transform .35s ease; }
+.race-rank { width: 1.6em; text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; }
+.race-name { width: 92px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.race-track { position: relative; flex: 1; height: 16px; background: #1d2028; border-radius: 2px; }
+.race-zero { position: absolute; top: -2px; bottom: -2px; width: 1px; background: #666b78; }
+.race-bar { position: absolute; top: 2px; bottom: 2px; border-radius: 2px; transition: width .2s linear, left .2s linear; }
+.race-bar.limit { box-shadow: 0 0 0 1px #ffd400; }
+.race-pct { width: 92px; font-variant-numeric: tabular-nums; }
+.race-tag { color: #ffd400; font-size: 11px; }
+
+/* A header: 加權 / 櫃買 change of the shown day */
+.idx-chg { margin-left: 12px; font-size: 12px; white-space: nowrap; font-variant-numeric: tabular-nums; }
