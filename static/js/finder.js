@@ -243,6 +243,20 @@ export function finderMarkTitle(found) {
     .join('\n')}`;
 }
 
+/**
+ * The toolbar digest from N's stored results of the day (stored_only reads): '' when neither method
+ * has a stored result, else e.g. '💡 資金連動：找法1 6 群（🔁 3）／找法2 1 群'.
+ */
+export function digestText(known, fresh) {
+  const part = (label, d) => {
+    if (!d || d.stored === false || !Array.isArray(d.groups)) return null;
+    const again = d.groups.filter((g) => g.seen_days?.length).length;
+    return `${label} ${d.groups.length} 群${again ? `（🔁 ${again}）` : ''}`;
+  };
+  const parts = [part('找法1', known), part('找法2', fresh)].filter(Boolean);
+  return parts.length ? `💡 資金連動：${parts.join('／')}` : '';
+}
+
 // ---- panel --------------------------------------------------------------------------------------
 
 const PREF_KEY = 'openmarket.history.finder';

@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { PRESETS, cardHtml, finderMarkIndex, finderMarkTitle, csvExport, defaultGroupName, filterHtml, funnelText, presetOf, filterOptions, matchesFilter, progressView, queryOf, statsText } from '../../static/js/finder.js';
+import { PRESETS, cardHtml, digestText, finderMarkIndex, finderMarkTitle, csvExport, defaultGroupName, filterHtml, funnelText, presetOf, filterOptions, matchesFilter, progressView, queryOf, statsText } from '../../static/js/finder.js';
 
 test('queryOf sends only the fields of the chosen method; blank 起漲差 means not required', () => {
   const p = { daily_r: 0.75, daily_window: 20, new_daily_r: 0.85, pool_top: 30, intraday_r: 0.5, peak_gap: 8, start_gap: '', require_burst: true, groupings: ['custom', 'news'], pool_sources: ['gain'] };
@@ -157,4 +157,13 @@ test('finderMarkIndex / finderMarkTitle: B marks the groups N found, by source g
   assert.match(title, /甲、乙（日R 0\.86、分時R 0\.61、高點差 3 分）/);
   assert.match(title, /丙、丁（日R 0\.90、分時R —/);
   assert.equal(finderMarkIndex(null).size, 0);
+});
+
+test('digestText: counts per method from stored results, 🔁 for repeats, nothing when none is stored', () => {
+  const known = { groups: [{ seen_days: ['2026-10-19'] }, { seen_days: [] }, {}] };
+  const fresh = { groups: [{ seen_days: [] }] };
+  assert.equal(digestText(known, fresh), '💡 資金連動：找法1 3 群（🔁 1）／找法2 1 群');
+  assert.equal(digestText(known, { stored: false, groups: [] }), '💡 資金連動：找法1 3 群（🔁 1）');
+  assert.equal(digestText({ groups: [] }, null), '💡 資金連動：找法1 0 群');
+  assert.equal(digestText({ stored: false, groups: [] }, null), '');
 });

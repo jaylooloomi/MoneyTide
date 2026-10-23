@@ -387,3 +387,4 @@ table.link-heat td.self { background: #3a3e48; }
 .fd-seen.new { background: #2c4a6b; }
 .fd-themes { font-size: 12px; margin-top: 4px; color: #ffcf7a; }
 .fd-detail .panel-h .fd-themes { margin-top: 0; }
+.fd-digest { color: #ffd400; border-color: #6b5a1e; margin-right: 8px; white-space: nowrap; }

@@ -22,7 +22,7 @@ import { mountCountyMap } from './countymap.js';
 import { mountWordCloud } from './wordcloud.js';
 import { mountHistoryAiPanel } from './ainews.js';
 import { mountNewsPanel } from './newsthemes.js';
-import { finderMarkIndex, finderMarkTitle, mountFinderPanel } from './finder.js';
+import { digestText, finderMarkIndex, finderMarkTitle, mountFinderPanel } from './finder.js';
 import { mountLinkagePanel } from './linkage.js';
 
 const PREFS_KEY = 'openmarket.history.v1';
@@ -240,6 +240,7 @@ async function loadGroups_() {
     loadPeriods({ cachedOnly: true }); // bonus-10: fetch is deferred until A/B/D have loaded
     loadFlows(); // money flow columns
     loadFinderMarks(); // 🔗 from N's stored result (never starts a search)
+    loadFinderDigest(); // 💡 toolbar line from the same stored results
   } catch {
     if (t !== tickets.groups) return;
     st.groups = [];
@@ -300,6 +301,42 @@ async function loadFinderMarks() {
     renderGroups();
   } catch {
     /* no marks */
+  }
+}
+
+// ---- 💡 toolbar digest: what N found today (stored results only), click to jump to N ----------
+let digestTicket = 0;
+async function loadFinderDigest() {
+  let btn = $('#hFinderDigest');
+  if (!btn) {
+    btn = document.createElement('button');
+    btn.type = 'button';
+    btn.id = 'hFinderDigest';
+    btn.className = 'icon wide fd-digest';
+    btn.hidden = true;
+    btn.title = 'N · 資金連動搜尋今天的結果（🔁＝前幾天也出現過的組合）；點一下捲到 N';
+    btn.addEventListener('click', () => {
+      // the history view is the scroller; A/B may be sticky on top of it (wide screens), so land below them
+      const view = $('#historyView');
+      const target = $('#hFinderPanel');
+      if (!view || !target) return;
+      const sticky = [...view.querySelectorAll('.hA, .hB')].filter((el) => getComputedStyle(el).position === 'sticky');
+      const covered = Math.max(0, ...sticky.map((el) => el.getBoundingClientRect().bottom - view.getBoundingClientRect().top));
+      const top = view.scrollTop + target.getBoundingClientRect().top - view.getBoundingClientRect().top - covered - 8;
+      view.scrollTo({ top, behavior: 'smooth' });
+    });
+    $('#hStatus').before(btn);
+  }
+  const t = ++digestTicket;
+  try {
+    const q = (m) => getJson(`/api/history/finder?date=${st.date}&method=${m}&stored_only=1`).catch(() => null);
+    const [known, fresh] = await Promise.all([q('known'), q('new')]);
+    if (t !== digestTicket) return;
+    const text = digestText(known, fresh);
+    btn.textContent = text;
+    btn.hidden = !text;
+  } catch {
+    btn.hidden = true;
   }
 }
 

@@ -113,7 +113,7 @@
 
 # 加分候選（第 9 輪）
 
-## K1 · 歷史頁頂端一行「今天 N 找到 X 群（🔁 Y 群持續）」，點了跳到 N
+## K1 · 歷史頁頂端一行「今天 N 找到 X 群（🔁 Y 群持續）」，點了跳到 N（✅ 已完成 bonus-12）
 因為原始需求是**每天先看資金往哪裡、是不是同一筆錢**，所以頂尖做法會順便做**一條常駐的摘要列（float bar／bottom bar）顯示今天偵測到幾個訊號、點了直接進明細**；目前的成果**沒有**——N 在頁面中段，要捲下去才知道今天有沒有找到東西。
 - 參考：moomoo Market Monitor float bar「displays unusual activity … the latest unusual activity data」、bottom bar「total number of bullish and bearish signals detected」（https://www.moomoo.com/us/support/topic3_70、https://moomoo.com/us/manual/topic-14-84）
 - 預估：history.js（讀 bonus-08 已有的 stored_only 找法1 結果＋找法2 結果，標題列加一行，點了捲到 N）；1～2 檔、約 50 行。
