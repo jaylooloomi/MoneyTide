@@ -185,6 +185,10 @@ def test_co_mentions():
 def test_params_key_changes_with_any_threshold():
     assert FinderParams().key() != FinderParams(daily_r=0.75).key()
     assert FinderParams().key() == FinderParams().key()
+    # the same groupings / pool sources in another order are the same search
+    assert FinderParams(groupings=("custom", "industry")).key() == FinderParams(groupings=("industry", "custom")).key()
+    assert FinderParams(pool_sources=("share_z", "gain")).key() == FinderParams(pool_sources=("gain", "share_z")).key()
+    assert FinderParams(groupings=("custom",)).key() != FinderParams(groupings=("industry",)).key()
 
 
 def test_finder_api_stored_only_never_starts_a_search(tmp_path):

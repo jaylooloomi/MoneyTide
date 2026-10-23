@@ -61,7 +61,9 @@ class FinderParams:
     max_fetch: int = 400  # at most this many stocks get intraday bars (largest candidate sets first)
 
     def key(self) -> str:
-        return json.dumps({**asdict(self), "v": FINDER_VERSION}, sort_keys=True, ensure_ascii=False)
+        # list-type settings are sets: the same groupings in another order are the same search
+        fields = {k: sorted(v) if isinstance(v, (list, tuple)) else v for k, v in asdict(self).items()}
+        return json.dumps({**fields, "v": FINDER_VERSION}, sort_keys=True, ensure_ascii=False)
 
 
 GROUPING_LABELS = {"industry": "官方產業", "custom": "自訂族群", "concept": "概念股", "chain": "細產業", "news": "新聞族群"}
