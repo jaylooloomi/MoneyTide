@@ -54,6 +54,12 @@ test('cardHtml: kind, closest grouping, members (outside one marked), facts and 
   assert.match(per, /title="[^"]*法人 \+1,000 張/);
   assert.match(per, /title="[^"]*法人 −2,346 張/);
   assert.doesNotMatch(cardHtml(G, 2), /title="[^"]*法人/); // no per-member 法人: nothing in the tooltip
+  const share = cardHtml({ ...G, turnover_100m: 40, inst: { lots: 3219, amount_100m: -1.64, buyers: 2, sellers: 0 } }, 2);
+  assert.match(share, /法人占成交 <b>4\.1%<\/b>/);
+  assert.match(share, /法人淨賣超金額/);
+  assert.match(cardHtml({ ...G, turnover_100m: 4000, inst: { lots: 1, amount_100m: 0.5, buyers: 1, sellers: 0 } }, 2), /法人占成交 <b>&lt;0\.1%|法人占成交 <b><0\.1%/);
+  assert.doesNotMatch(cardHtml({ ...G, turnover_100m: 0, inst: { lots: 1, amount_100m: 0.5, buyers: 1, sellers: 0 } }, 2), /法人占成交/);
+  assert.doesNotMatch(cardHtml({ ...G, turnover_100m: 40, inst: { lots: 1, amount_100m: null, buyers: 1, sellers: 0 } }, 2), /法人占成交/);
   const noAmount = cardHtml({ ...G, inst: { lots: 500, amount_100m: null, buyers: 1, sellers: 0 } }, 2);
   assert.match(noAmount, /法人 <b class="up">\+500 張<\/b><span/);
   assert.doesNotMatch(noAmount, /億）|NaN/);

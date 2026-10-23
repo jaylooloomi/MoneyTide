@@ -72,6 +72,14 @@ export function instText(g) {
   return g.inst_net ? `法人 ${sign(g.inst_net)}${lots(Math.round(g.inst_net / 1000))}` : '';
 }
 
+/** 法人占成交: the 法人 net amount against the group's turnover — is it 法人 money that moves the group? */
+export function instShareText(g) {
+  const amt = g.inst?.amount_100m;
+  if (amt == null || !(g.turnover_100m > 0)) return '';
+  const pct = (Math.abs(amt) / g.turnover_100m) * 100;
+  return `<span title="法人淨${amt >= 0 ? '買' : '賣'}超金額 ÷ 組合成交值：越高越像法人在推，越低代表主要是法人以外的資金">法人占成交 <b>${pct < 0.1 ? '<0.1' : pct.toFixed(1)}%</b></span>`;
+}
+
 export function cardHtml(g, i) {
   const title =
     g.sources?.length
@@ -98,6 +106,7 @@ export function cardHtml(g, i) {
     g.start_spread != null ? `起漲差 ${g.start_spread} 分` : '',
     g.together_bursts?.length ? `同時爆量 ${g.together_bursts.slice(0, 3).join('、')}` : '',
     instText(g),
+    instShareText(g),
     g.inst_streak ? `<b class="${g.inst_streak.side === 'buy' ? 'up' : 'down'}" title="組合合計三大法人買賣超，連續同方向的天數">法人連${g.inst_streak.side === 'buy' ? '買' : '賣'} ${g.inst_streak.days} 天</b>` : '',
     g.resolution === 5 ? '<span class="muted">5 分 K</span>' : '',
   ]
