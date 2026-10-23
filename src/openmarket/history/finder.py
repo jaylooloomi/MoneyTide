@@ -37,6 +37,7 @@ BUCKETS = 54  # 5-minute buckets 09:00–13:25
 
 @dataclass(frozen=True)
 class FinderParams:
+    min_amplitude: float = 3.0  # 找法1: only stocks whose 振幅 that day is above this %
     daily_window: int = 20  # 找法1: days of daily % changes
     daily_r: float = 0.8
     new_daily_window: int = 10  # 找法2: a new combination has little history yet
@@ -171,14 +172,14 @@ def dense_cores(edges: Iterable[frozenset], dense: float, min_size: int) -> list
 
 
 def known_candidates(rows: list[dict], groupings: Mapping[str, Callable[[dict], list[str]]], series: Mapping[str, list], p: FinderParams) -> list[dict]:
-    """找法1 stage A: dense daily cores inside each known group; the same member set from several
-    groupings is one candidate listing all its sources."""
+    """找法1 stage A: dense daily cores inside each known group (members with 振幅 > min_amplitude
+    that day); the same member set from several groupings is one candidate listing all its sources."""
     by_members: dict[tuple, dict] = {}
     pr = PairR(series)
     for gname, grouping in groupings.items():
         groups: dict[str, list[str]] = {}
         for r in rows:
-            if r.get("kind") == "stock" and r["code"] in series:
+            if r.get("kind") == "stock" and r["code"] in series and (amplitude_pct(r) or 0) > p.min_amplitude:
                 for g in grouping(r):
                     groups.setdefault(g, []).append(r["code"])
         for g, codes in groups.items():
@@ -447,7 +448,8 @@ def describe(g: dict, rows_by_code: Mapping[str, dict], feats: Mapping[str, Intr
 
 _POOL = ThreadPoolExecutor(max_workers=2, thread_name_prefix="finder")
 
-FetchBars = Callable[[list[dict], list[date]], Awaitable[dict[str, tuple[dict[date, list], int]]]]
+FetchBars = Callable[[list[dict], list[date], Callable[[], None]], Awaitable[dict[str, tuple[dict[date, list], int]]]]
+Progress = Callable[[str, int, int], None]  # (stage, done, total)
 
 
 async def run_search(
@@ -458,6 +460,7 @@ async def run_search(
     groupings: Mapping[str, Callable[[dict], list[str]]],
     fetch: FetchBars,
     titles: list[str] | None = None,
+    progress: Progress | None = None,
 ) -> dict:
     """找法1 ('known') or 找法2 ('new') for `day`. `fetch(rows, sessions)` returns
     {code: ({session: bars}, resolution minutes)} — the only network step, run for stage-A survivors only."""
@@ -469,7 +472,9 @@ async def run_search(
     async def off(fn, *args):  # a pool of N's own: the shared one is busy with start-up backfills
         return await loop.run_in_executor(_POOL, fn, *args)
 
+    report = progress or (lambda stage, done, total: None)
     timing: dict[str, float] = {}
+    report("daily", 0, 1)
     t = time.perf_counter()
     rows = [r for r in store.day_rows(day) if r.get("kind") == "stock"]
     by_code = {r["code"]: r for r in rows}
@@ -497,7 +502,16 @@ async def run_search(
                 need.append(code)
     need = need[: p.max_fetch]
     sessions = sorted(store.trading_dates(up_to=day, limit=p.intraday_sessions))
-    got = await fetch([by_code[c] for c in need if c in by_code], sessions) if need else {}
+    todo = [by_code[c] for c in need if c in by_code]
+    fetched = [0]
+
+    def one_done() -> None:  # fetch calls this after each stock
+        fetched[0] += 1
+        report("fetch", fetched[0], len(todo))
+
+    report("fetch", 0, len(todo))
+    got = await fetch(todo, sessions, one_done) if todo else {}
+    report("intraday", 0, 1)
     timing["fetch"] = round(time.perf_counter() - t, 2)
 
     t = time.perf_counter()

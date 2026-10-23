@@ -367,3 +367,8 @@ table.link-heat td.self { background: #3a3e48; }
 .fd-news { font-size: 12px; margin-top: 4px; color: #cfd3dc; line-height: 1.5; }
 .fd-detail { margin: 0 10px 10px; border: 1px solid #ffd40066; border-radius: 6px; }
 .fd-detail-body { padding: 8px 10px; }
+#historyView .panel.hN.loading::after { display: none; } /* N shows its own progress bar instead */
+.fd-progress { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 4; width: min(380px, 80%); padding: 10px 14px; border-radius: 8px; background: #2b3a55f2; box-shadow: 0 4px 16px #0008; opacity: 1 !important; }
+.fd-bar { height: 8px; border-radius: 4px; background: #1a2233; overflow: hidden; }
+.fd-bar span { display: block; height: 100%; width: 0; background: linear-gradient(90deg, #4f8cff, #7fd3ff); transition: width .4s ease; }
+.fd-ptext { margin-top: 6px; color: #cfe0ff; font-size: 13px; text-align: center; font-variant-numeric: tabular-nums; }

@@ -13,6 +13,7 @@ const SOURCES = { gain: '漲幅', turnover: '週轉率', share_z: '比重暴增'
 
 /** Tunable fields: [key, label, kind, method ('' = both), help]. Defaults come from the server. */
 export const FIELDS = [
+  ['min_amplitude', '振幅 >（%）', 'num', 'known', '只看當天振幅（最高 − 最低）÷ 昨收 超過這個 % 的股票'],
   ['daily_r', '日相關 ≥', 'num', 'known', '20 日（或下面的天數）日漲跌幅的相關係數'],
   ['daily_window', '日相關天數', 'int', 'known', ''],
   ['new_daily_r', '日相關 ≥', 'num', 'new', '新組合的歷史短，用較短的窗口'],
@@ -91,10 +92,23 @@ export function statsText(d) {
   return parts.join('　·　');
 }
 
+/** Progress of a running search → {pct, text}: 日相關 0–15%, 抓分 K 15–90% (by stock), 比對 90–100%. */
+export function progressView(p) {
+  if (!p?.running) return { pct: 3, text: '準備中…' };
+  const sec = p.seconds != null ? `　${p.seconds.toFixed(0)} 秒` : '';
+  if (p.stage === 'daily') return { pct: 8, text: `① 計算日相關${sec}` };
+  if (p.stage === 'fetch') {
+    const frac = p.total ? p.done / p.total : 1;
+    return { pct: 15 + Math.round(frac * 75), text: `② 抓分 K ${p.done}／${p.total} 檔${sec}` };
+  }
+  return { pct: 95, text: `③ 分時相關與高點比對${sec}` };
+}
+
 // ---- panel --------------------------------------------------------------------------------------
 
 const PREF_KEY = 'openmarket.history.finder';
 const DEFAULTS = {
+  min_amplitude: 3,
   daily_r: 0.8, daily_window: 20, new_daily_r: 0.8, new_daily_window: 10, pool_top: 50,
   intraday_r: 0.5, intraday_sessions: 3, peak_gap: 8, start_gap: '', require_burst: false, dense: 0.7, min_size: 2,
   groupings: Object.keys(GROUPINGS), pool_sources: Object.keys(SOURCES),
@@ -125,13 +139,39 @@ export function mountFinderPanel(container, { onStock }) {
       <button type="button" class="icon wide" id="hFinderRun" title="用目前的條件重新計算這一天">重新計算</button>
       <span class="muted" id="hFinderStats" style="margin-left:auto"></span></div>
     <div class="fd-form" id="hFinderForm" hidden></div>
+    <div class="fd-progress" id="hFinderProgress" hidden><div class="fd-bar"><span></span></div><div class="fd-ptext"></div></div>
     <div id="hFinderBody" style="padding:8px 10px"><p class="hint">捲到這裡就會載入這一天的結果。</p></div>
     <div id="hFinderDetail" class="fd-detail" hidden></div>`;
   container.appendChild(sec);
   const body = sec.querySelector('#hFinderBody');
   const form = sec.querySelector('#hFinderForm');
   const detail = sec.querySelector('#hFinderDetail');
-  const state = { ticket: 0, date: null, data: null, loadedKey: null, timer: null, visible: false, stopRace: () => {}, detailTicket: 0 };
+  const state = { ticket: 0, date: null, data: null, loadedKey: null, timer: null, visible: false, stopRace: () => {}, detailTicket: 0, poll: null };
+  const bar = sec.querySelector('#hFinderProgress');
+  function showProgress(p) {
+    const v = progressView(p);
+    bar.querySelector('.fd-bar span').style.width = `${v.pct}%`;
+    bar.querySelector('.fd-ptext').textContent = v.text;
+  }
+  function startProgress(query) {
+    clearInterval(state.poll);
+    showProgress(null);
+    // a stored result comes back at once: only show the bar when the search takes a moment
+    const shown = setTimeout(() => (bar.hidden = false), 400);
+    state.poll = setInterval(async () => {
+      try {
+        const r = await fetch(`/api/history/finder/progress?date=${encodeURIComponent(state.date)}&${query}`, { cache: 'no-store' });
+        if (r.ok) showProgress(await r.json());
+      } catch {
+        /* keep the last state */
+      }
+    }, 500);
+    return () => {
+      clearTimeout(shown);
+      clearInterval(state.poll);
+      bar.hidden = true;
+    };
+  }
 
   function drawMethod() {
     for (const b of sec.querySelectorAll('#hFinderMethod button')) b.classList.toggle('on', b.dataset.value === pref.method);
@@ -196,8 +236,10 @@ export function mountFinderPanel(container, { onStock }) {
     state.loadedKey = key();
     const t = ++state.ticket;
     sec.classList.add('loading');
+    const query = queryOf(pref.method, pref.params);
+    const stopProgress = startProgress(query);
     try {
-      const resp = await fetch(`/api/history/finder?date=${encodeURIComponent(state.date)}&${queryOf(pref.method, pref.params)}${refresh ? '&refresh=1' : ''}`, { cache: 'no-store' });
+      const resp = await fetch(`/api/history/finder?date=${encodeURIComponent(state.date)}&${query}${refresh ? '&refresh=1' : ''}`, { cache: 'no-store' });
       const data = await resp.json();
       if (t !== state.ticket) return;
       if (!resp.ok) throw new Error(data.detail || `HTTP ${resp.status}`);
@@ -211,7 +253,10 @@ export function mountFinderPanel(container, { onStock }) {
       if (t !== state.ticket) return;
       body.innerHTML = `<p class="hint">${escapeHtml(err.message)}</p>`;
     } finally {
-      if (t === state.ticket) sec.classList.remove('loading');
+      if (t === state.ticket) {
+        sec.classList.remove('loading');
+        stopProgress();
+      }
     }
   }
 

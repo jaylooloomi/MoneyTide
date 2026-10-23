@@ -44,13 +44,18 @@ def test_daily_edges_threshold_and_missing_days():
 
 
 def test_known_candidates_merges_sources():
-    rows = [{"code": c, "kind": "stock", "industry": "X"} for c in "ABC"]
+    rows = [{"code": c, "kind": "stock", "industry": "X", "high": 105, "low": 100, "prev_close": 100} for c in "ABC"]
     s = {"A": [1, 2, 3, 4, 5], "B": [1, 2, 3, 4, 5.5], "C": [1.2, 2, 3.1, 4, 5]}
     groupings = {"industry": lambda r: [r["industry"]], "custom": lambda r: ["題材"]}
     (c,) = known_candidates(rows, groupings, s, P)
     assert c["members"] == ["A", "B", "C"]
     assert [x["grouping"] for x in c["sources"]] == ["industry", "custom"]
     assert len(c["daily"]) == 3
+    # 振幅 filter: C moved only 2% that day, so it is not a member
+    rows[2].update(high=101, low=99)
+    (c,) = known_candidates(rows, groupings, s, P)
+    assert c["members"] == ["A", "B"]
+    assert known_candidates(rows, groupings, s, FinderParams(min_amplitude=1.5))[0]["members"] == ["A", "B", "C"]
 
 
 def test_bucket_returns_skip_locked_stretch():
@@ -178,7 +183,7 @@ def test_run_search_end_to_end(tmp_path):
     sessions = days[-3:]
     peaks = {"A": 60, "B": 65, "C": 60, "D": 150}  # 5-minute bars; D peaks 90 minutes later
 
-    async def fetch(rows, sess):
+    async def fetch(rows, sess, done):
         out = {}
         for r in rows:
             by = {}
@@ -190,9 +195,12 @@ def test_run_search_end_to_end(tmp_path):
                     bars.append((f"{9 + m // 60:02d}:{m % 60:02d}", hi, p * 0.999, p, p, 1000.0))
                 by[ss] = bars
             out[r["code"]] = (by, 5)
+            done()
         return out
 
-    res = asyncio.run(run_search(s, day, "known", FinderParams(daily_r=0.8), {"industry": lambda r: [r["industry"]]}, fetch))
+    seen = []
+    res = asyncio.run(run_search(s, day, "known", FinderParams(daily_r=0.8, min_amplitude=0), {"industry": lambda r: [r["industry"]]}, fetch, progress=lambda *a: seen.append(a)))
+    assert seen[0] == ("daily", 0, 1) and ("fetch", 4, 4) in seen and seen[-1] == ("intraday", 0, 1)
     assert res["stats"]["candidates"] == 1
     (g,) = res["groups"]
     assert [m["code"] for m in g["members"]] == ["A", "B", "C"]  # D dropped on the intraday-high gap

@@ -574,8 +574,9 @@ def create_app(
 
     FINDER_CONCURRENCY = 12  # Yahoo served 92 stocks in ~2 s at 6–24 at once (2026-10-24 test)
     finder_running: dict[tuple, asyncio.Task] = {}
+    finder_progress: dict[tuple, dict] = {}  # (date, method, key) → {stage, done, total} while running
 
-    async def finder_fetch(rows: list[dict], sessions: list[date]) -> dict[str, tuple[dict, int]]:
+    async def finder_fetch(rows: list[dict], sessions: list[date], done=lambda: None) -> dict[str, tuple[dict, int]]:
         """Bars for the finder: cached 1m first, else one 1m request per stock for all sessions (last ~30
         days), else the 5m bars; new 1m bars are saved in one transaction."""
         store = app.state.history
@@ -590,6 +591,12 @@ def create_app(
         async with httpx.AsyncClient(timeout=20, headers={"User-Agent": USER_AGENT}, follow_redirects=True) as http:
 
             async def one(r: dict) -> None:
+                try:
+                    await one_stock(r)
+                finally:
+                    done()
+
+            async def one_stock(r: dict) -> None:
                 c = r["code"]
                 have = {s: cached[(c, s)] for s in sessions if (c, s) in cached and (not cached[(c, s)] or len(cached[(c, s)][0]) >= 6)}
                 if minute_ok and len(have) < len(sessions):
@@ -671,12 +678,16 @@ def create_app(
         if task is None:
             async def go() -> dict:
                 t0 = datetime.now()
-                res = await run_search(store, d, method, p, groupings, finder_fetch, finder_titles(d))
+
+                def report(stage: str, done: int, total: int) -> None:
+                    finder_progress[k] = {"stage": stage, "done": done, "total": total, "seconds": round((datetime.now() - t0).total_seconds(), 1)}
+
+                res = await run_search(store, d, method, p, groupings, finder_fetch, finder_titles(d), report)
                 res["stats"]["seconds"]["total"] = round((datetime.now() - t0).total_seconds(), 2)
                 await asyncio.to_thread(store.save_finder, d, method, key, res)
                 return res
             task = finder_running[k] = asyncio.create_task(go())
-            task.add_done_callback(lambda _: finder_running.pop(k, None))
+            task.add_done_callback(lambda _: (finder_running.pop(k, None), finder_progress.pop(k, None)))
         res = await task
         return {**res, "cached": False, "missing_groupings": missing}
 
@@ -702,6 +713,16 @@ def create_app(
         if not app.state.history.day_rows(d):
             raise HTTPException(404, f"no data for {day}")
         return await finder_result(d, method, finder_params(request.query_params), refresh)
+
+    @app.get("/api/history/finder/progress")
+    def finder_progress_api(request: Request, day: str = Query(..., alias="date"), method: str = Query("known", pattern="^(known|new)$")) -> dict:
+        """Where a running N search is: {running, stage, done, total, seconds}."""
+        d = _day(day)
+        p = finder_params(request.query_params)
+        groupings, _ = finder_groupings(p.groupings, d)
+        k = (d, method, p.key() + "|" + ",".join(sorted(groupings)))
+        now = finder_progress.get(k)
+        return {"running": now is not None, **(now or {})}
 
     @app.get("/api/history/linkage-codes")
     async def linkage_codes(codes: str, day: str = Query(..., alias="date")) -> dict:
