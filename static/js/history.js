@@ -242,6 +242,7 @@ function renderGroups() {
         ${periodCells(g)}
         <td class="c" style="background:${colorFor(g.strong_ratio, 30)}">${g.strong_ratio === null ? '—' : g.strong_ratio.toFixed(0) + '%'}<small class="muted"> ${g.strong_count}</small></td>
         <td>${g.limit_up || ''}</td>
+        <td class="c" style="background:${colorFor(g.limit_ratio, 20)}">${g.limit_ratio === null || g.limit_ratio === undefined ? '—' : g.limit_ratio.toFixed(0) + '%'}</td>
         <td class="c" style="background:${breadthColor(g.up, g.down)}">${g.up}/${g.down}</td>
         <td class="l">${g.leader ? `<a href="#" class="leader" data-code="${escapeHtml(g.leader.code)}">${escapeHtml(g.leader.name)} <span class="${g.leader.change_pct > 0 ? 'up' : g.leader.change_pct < 0 ? 'down' : ''}">${fmtPct(g.leader.change_pct)}</span></a>` : '—'}</td>
         <td class="muted">${g.count}</td>
@@ -832,9 +833,9 @@ function downloadCsv(name, header, rows) {
 const CSV_EXPORTS = {
   hB: () => [
     `強勢族群_${st.date}_${GROUPING_LABEL[st.grouping]}.csv`,
-    ['日期', '族群', '平均漲幅%', '市值加權%', `漲幅≥${st.threshold}%家數`, `≥${st.threshold}%佔比%`, '漲停', '跌停', '上漲', '下跌', '家數', '成交值(元)'],
+    ['日期', '族群', '平均漲幅%', '市值加權%', `漲幅≥${st.threshold}%家數`, `≥${st.threshold}%佔比%`, '漲停', '漲停佔比%', '跌停', '上漲', '下跌', '家數', '成交值(元)'],
     sortRows(st.groups, st.groupSort.key, st.groupSort.dir).map((g) => [
-      st.date, g.name, g.avg_pct, g.cap_pct, g.strong_count, g.strong_ratio, g.limit_up, g.limit_down, g.up, g.down, g.count, g.turnover,
+      st.date, g.name, g.avg_pct, g.cap_pct, g.strong_count, g.strong_ratio, g.limit_up, g.limit_ratio, g.limit_down, g.up, g.down, g.count, g.turnover,
     ]),
   ],
   hC: () => {

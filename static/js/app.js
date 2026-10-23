@@ -20,7 +20,7 @@ import {
   watchRows,
 } from './transform.js';
 import { showHistory } from './history.js';
-import { MIN_FILTERS, TODAY_SCALES, breadthBarHtml, findStock, marketBreadth, regroupStocks, withRelVolume } from './transform.js';
+import { GROUP_LABELS, MIN_FILTERS, TODAY_SCALES, breadthBarHtml, findStock, marketBreadth, regroupStocks, withRelVolume } from './transform.js';
 import { addToGroup, getGroups, loadGroups, onGroupsChange, openGroupPanel, setStockNames } from './groups.js';
 
 const SNAPSHOT_POLL_MS = 10_000;
@@ -202,7 +202,8 @@ function highlightIndustry(name) {
 }
 
 function renderChart(stocks) {
-  state.tree = buildTreemapData(stocks, state.view);
+  renderGroupLabelSelect(); // ①
+  state.tree = buildTreemapData(stocks, { ...state.view, stocksOnly: liveGrouping.by === 'industry' });
   // setOption always resets the treemap view root: zoom state is owned here and re-applied.
   chart.setOption(buildTreemapOption(state.tree), { notMerge: true });
   if (state.zoomIndustry && hasIndustry(state.zoomIndustry)) {
@@ -232,7 +233,7 @@ function render() {
   renderCrumb();
   renderNote();
   renderLegend();
-  renderMatrix(withPeriods(aggregateIndustries(stocks))); // bonus-11: 20-day column
+  renderMatrix(withPeriods(aggregateIndustries(stocks, { stocksOnly: liveGrouping.by === 'industry' }))); // bonus-11: 20-day column; ①
   renderLiveBreadth(filtered); // bonus-05 (each stock once, whatever the grouping)
   renderLiveSearch(snap, stocks); // bonus-23
   renderWatch(snap ? snap.stocks : []);
@@ -358,6 +359,8 @@ function renderMatrix(rows) {
         <td>${r.amplitude_pct === null ? '—' : r.amplitude_pct.toFixed(2) + '%'}</td>
         <td>${r.turnover_share === null ? '—' : r.turnover_share.toFixed(1) + '%'}</td>
         ${volRatioCell(r.vol_ratio)}
+        ${ratioCell(r.strong_ratio, r.strong_count, 30)}
+        ${ratioCell(r.limit_ratio, r.limit_up, 20)}
         ${breadthCell(r.up_count, r.down_count)}
       </tr>`,
     )
@@ -987,4 +990,28 @@ function renderScaleSelect() {
   }
   sel.value = String(colorLimit('today', state.view.scale));
   sel.disabled = state.view.colorBy !== 'today';
+}
+
+// ---- ①: ≥5% / limit-up shares (matrix columns + heatmap title mode) ----------------------
+function ratioCell(v, count, full) {
+  if (v === null || v === undefined) return '<td class="muted">—</td>';
+  return `<td class="c" style="background:${colorFor(v, full)}">${v.toFixed(0)}%<small class="muted"> ${count}</small></td>`;
+}
+
+function renderGroupLabelSelect() {
+  let sel = $('#liveGroupLabel');
+  if (!sel) {
+    sel = document.createElement('select');
+    sel.id = 'liveGroupLabel';
+    sel.className = 'field';
+    sel.title = '熱力圖產業標題旁顯示的數字（量比模式時顯示量比）';
+    sel.innerHTML = Object.entries(GROUP_LABELS).map(([k, label]) => `<option value="${k}">${label}</option>`).join('');
+    $('#liveControls .seg[data-group="colorBy"]').after(sel);
+    sel.addEventListener('change', () => {
+      state.view.groupLabel = sel.value;
+      savePrefs();
+      render();
+    });
+  }
+  sel.value = state.view.groupLabel in GROUP_LABELS ? state.view.groupLabel : 'cap';
 }

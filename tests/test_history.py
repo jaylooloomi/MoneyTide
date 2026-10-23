@@ -70,8 +70,10 @@ def test_group_stats(store):
     ship = stats["航運業"]
     assert ship["count"] == 2 and ship["strong_count"] == 2 and ship["strong_ratio"] == 100
     assert ship["limit_up"] == 1 and ship["up"] == 2 and ship["breadth"] == 100
+    assert ship["limit_ratio"] == 50  # 1 of the 2 shipping stocks hit the limit
     semi = stats["半導體業"]
     assert semi["strong_ratio"] == 0 and semi["up"] == 0 and semi["down"] == 1 and semi["breadth"] == 0
+    assert semi["limit_ratio"] == 0
     assert "ETF" not in stats and "" not in stats
     assert list(stats)[0] == "航運業"  # sorted by strong_ratio
 

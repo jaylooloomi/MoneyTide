@@ -357,3 +357,23 @@ test('relative volume baseline scales with the traded share of the session', asy
   assert.equal(s.rvol, 1);
   assert.equal(s.rvol_base, 1e8);
 });
+
+test('strength ratios: official industries count common stocks only, codes once', async () => {
+  const { strengthRatios, aggregateIndustries, buildTreemapData, groupLabelText, upperLabelFormatter } = await import('../../static/js/transform.js');
+  const s = (code, change_pct, kind = 'stock', industry = '金融保險業') => ({ code, name: code, industry, kind, change_pct, change: change_pct, market_cap: 10, prev_close: 1 });
+  const members = [s('a', 10), s('b', 6), s('c', 1), s('d', null), s('p', 10, 'other')];
+  assert.deepEqual(strengthRatios(members, true), { strong_count: 2, strong_ratio: (2 / 3) * 100, limit_up: 1, limit_ratio: (1 / 3) * 100 });
+  assert.equal(strengthRatios(members, false).limit_up, 2); // custom / concept: every member counts
+  assert.equal(strengthRatios([s('a', 10), s('a', 10), s('b', 0)]).limit_ratio, 50); // same code twice → once
+  assert.deepEqual(strengthRatios([s('d', null)]), { strong_count: 0, strong_ratio: null, limit_up: 0, limit_ratio: null });
+  const [row] = aggregateIndustries(members, { stocksOnly: true });
+  assert.equal(row.limit_up, 1);
+  assert.equal(groupLabelText(row, 'strong'), '≥5% 67%');
+  assert.equal(groupLabelText(row, 'limit'), '漲停 33%');
+  assert.equal(groupLabelText(row, 'cap'), undefined);
+  assert.equal(groupLabelText({ strong_ratio: null, limit_ratio: null }, 'limit'), '漲停 —');
+  const tree = buildTreemapData(members, { sizeBy: 'cap', colorBy: 'today', stocksOnly: true, groupLabel: 'limit' });
+  assert.equal(upperLabelFormatter({ data: tree.data[0] }), '金融保險業 漲停 33%');
+  const plain = buildTreemapData(members, { sizeBy: 'cap', colorBy: 'today' });
+  assert.match(upperLabelFormatter({ data: plain.data[0] }), /%$/);
+});

@@ -115,7 +115,7 @@ export function industryAverage(members, field) {
   return valued.reduce((a, s) => a + s[field], 0) / valued.length;
 }
 
-export function aggregateIndustries(stocks) {
+export function aggregateIndustries(stocks, { stocksOnly = false } = {}) {
   const groups = new Map();
   for (const s of stocks) {
     if (!groups.has(s.industry)) groups.set(s.industry, []);
@@ -140,6 +140,7 @@ export function aggregateIndustries(stocks) {
       down_count: down,
       flat_count: members.length - up - down,
       stock_count: members.length,
+      ...strengthRatios(members, stocksOnly), // ①: ≥5% / limit-up shares
     });
   }
   return rows;
@@ -195,7 +196,7 @@ const sizeOf = (s, sizeBy) => (sizeBy === 'equal' ? 1 : sizeBy === 'turnover' ? 
 export function buildTreemapData(stocks, view) {
   const field = pctField(view.colorBy);
   const limit = colorLimit(view.colorBy, view.scale);
-  const industries = new Map(aggregateIndustries(stocks).map((r) => [r.name, r]));
+  const industries = new Map(aggregateIndustries(stocks, { stocksOnly: view.stocksOnly }).map((r) => [r.name, r]));
   const groups = new Map();
   let hiddenNoSize = 0;
   let hiddenEtf = 0;
@@ -229,6 +230,7 @@ export function buildTreemapData(stocks, view) {
       industry: { ...industries.get(name) },
       pct: industries.get(name)?.[field] ?? null,
       rvolText: field === 'rvol_pct' ? fmtRvol(groupRvol(children)) : undefined, // bonus-24
+      groupText: field === 'rvol_pct' ? undefined : groupLabelText(industries.get(name), view.groupLabel), // ①
       children,
       itemStyle: { color: INDUSTRY_BG },
     });
@@ -255,7 +257,10 @@ function industryTooltip(r) {
   return (
     `<b>${escapeHtml(r.name)}</b>（${r.stock_count} 檔）<br>` +
     `今日　${fmtPct(r.change_pct)}<br>本週　${fmtPct(r.week_pct)}<br>` +
-    `漲 ${r.up_count} / 跌 ${r.down_count} / 平 ${r.flat_count}`
+    `漲 ${r.up_count} / 跌 ${r.down_count} / 平 ${r.flat_count}` +
+    (r.strong_ratio === null || r.strong_ratio === undefined
+      ? ''
+      : `<br>≥5% 佔比　${r.strong_ratio.toFixed(1)}%（${r.strong_count} 家）<br>漲停佔比　${r.limit_ratio.toFixed(1)}%（${r.limit_up} 家）`)
   );
 }
 
@@ -278,7 +283,7 @@ export function leafLabelFormatter(params) {
 
 export function upperLabelFormatter(params) {
   const d = params.data || {};
-  return d.industry ? `${d.name} ${d.rvolText ?? fmtPct(d.pct)}` : params.name;
+  return d.industry ? `${d.name} ${d.rvolText ?? d.groupText ?? fmtPct(d.pct)}` : params.name;
 }
 
 export function labelLayout(params) {
@@ -483,3 +488,32 @@ function groupRvol(children) {
 
 // ---- bonus-25: selectable colour range for the daily change ----------------------------
 export const TODAY_SCALES = [3, 5, 7, 10];
+
+// ---- ①: ≥5% share and limit-up share per group ------------------------------------------
+export const STRONG_PCT = 5;
+export const GROUP_LABELS = { cap: '標題：市值加權漲幅', strong: '標題：≥5% 佔比', limit: '標題：漲停佔比' };
+
+/** Shares over members with a known change (each code once). stocksOnly: official industries
+ *  count common stocks only, like the history ranking (preferreds / TDRs sit in them live). */
+export function strengthRatios(members, stocksOnly = false) {
+  const seen = new Set();
+  const pcts = [];
+  for (const s of members) {
+    if (stocksOnly && s.kind !== 'stock') continue;
+    if (seen.has(s.code)) continue;
+    seen.add(s.code);
+    if (s.change_pct !== null && s.change_pct !== undefined && Number.isFinite(s.change_pct)) pcts.push(s.change_pct);
+  }
+  if (!pcts.length) return { strong_count: 0, strong_ratio: null, limit_up: 0, limit_ratio: null };
+  const strong = pcts.filter((p) => p >= STRONG_PCT).length;
+  const limit = pcts.filter((p) => p >= LIMIT_PCT).length;
+  return { strong_count: strong, strong_ratio: (strong / pcts.length) * 100, limit_up: limit, limit_ratio: (limit / pcts.length) * 100 };
+}
+
+/** Industry title text for the chosen label mode; undefined = the default change %. */
+export function groupLabelText(r, mode) {
+  const has = (v) => v !== null && v !== undefined;
+  if (mode === 'strong') return r && has(r.strong_ratio) ? `≥5% ${r.strong_ratio.toFixed(0)}%` : '≥5% —';
+  if (mode === 'limit') return r && has(r.limit_ratio) ? `漲停 ${r.limit_ratio.toFixed(0)}%` : '漲停 —';
+  return undefined;
+}

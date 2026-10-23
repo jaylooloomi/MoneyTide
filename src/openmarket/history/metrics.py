@@ -99,6 +99,7 @@ def group_stats(rows: list[dict], threshold: float, grouping: Grouping = industr
             "strong_count": sum(1 for p in pcts if p >= threshold),
             "strong_ratio": sum(1 for p in pcts if p >= threshold) / len(pcts) * 100 if pcts else None,
             "limit_up": sum(1 for p in pcts if p >= LIMIT_PCT),
+            "limit_ratio": sum(1 for p in pcts if p >= LIMIT_PCT) / len(pcts) * 100 if pcts else None,
             "limit_down": sum(1 for p in pcts if p <= -LIMIT_PCT),
             "up": up,
             "down": down,
