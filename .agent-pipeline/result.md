@@ -12,6 +12,7 @@
 | 01 | N 卡片「存成自訂族群」 | 6.0（scores-01.md） | TradingView Import watchlist；Chartink／Screener.in 的 screener→watchlist 擴充 | N 每張卡片右上「＋族群」：跳出名稱（預設「N1022 華經+驊宏資」，可改），用既有 /api/groups 建立並加入成員，按鈕變「✓ 已存」；不會同時展開卡片。改 finder.js、app.css、finder.test.js（49 行） | `npm test`（78 ✅）；瀏覽器實測存成「ZZ夜班測試」→ API 查到 2 檔 → 已刪除還原；續做：按鈕不再折行 | ✅ | ① 後端新增批次端點（不必要，既有 API 足夠）② 自動存不問名稱（會塞滿族群清單） |
 | 02 | N 卡片「資金規模」 | 5.0（scores-02.md） | TradingView screener volume／market cap 欄；Twelve Data 熱力圖文章 | 卡片多一行「💰 成交值 18.72 億（占全市場 0.18%）　平均漲幅 +9.98%」。改 finder.py（money_size、FINDER_VERSION→3）、finder.js、app.css、兩邊測試。順便看出找法2 有的組合只有 0.1 億（小錢） | `uv run pytest`（240 ✅）、`npm test`（78 ✅）；10/22 瀏覽器實測 | ✅ | ① 前端自己加總（拿不到全市場總成交值，占比算不出）② 只顯示成交值不顯示占比（不同日子無法比較） |
 | 03 | 找法2 成交量門檻（≥300 張） | 6.2（scores-03.md） | TradingView screener volume 篩選；你為找法1 指定的「至少>300張」 | 找法2 的「條件」多「成交量 ≥（張）」，預設 300；候選池先濾掉小量股。10/22：3 組 0.1～0.75 億的小量配對消失，只留華新科+金山電（260 億）。改 finder.py、finder.js、兩邊測試 | `uv run pytest`（240 ✅）、`npm test`（78 ✅）；10/22 實跑 | ✅ | ① 改用成交值門檻（張數跟找法1 一致，比較好懂）② 跟找法1 共用同一個欄位（兩種找法要能分開調） |
+| 04 | N 結果匯出 CSV | 3.8（scores-04.md） | TradingView screener 下載 .csv | N 標題列「CSV」：匯出目前顯示的卡片（依篩選按鈕），一列一檔成分股＋群組指標＋當天條件；檔名含找法、日期、篩選。改 finder.js、finder.test.js | `npm test`（79 ✅）；瀏覽器擷取檔案：10/22 細產業 → 表頭＋6 列 | ✅ | ① 加進 history.js 的 CSV_EXPORTS（N 在那之後才掛上，按鈕掛不到）② 一列一群組（成員擠在一格，Excel 不好篩） |
 
 ## 判斷不值得做
 - （待填）

@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { cardHtml, defaultGroupName, filterHtml, filterOptions, matchesFilter, progressView, queryOf, statsText } from '../../static/js/finder.js';
+import { cardHtml, csvExport, defaultGroupName, filterHtml, filterOptions, matchesFilter, progressView, queryOf, statsText } from '../../static/js/finder.js';
 
 test('queryOf sends only the fields of the chosen method; blank 起漲差 means not required', () => {
   const p = { daily_r: 0.75, daily_window: 20, new_daily_r: 0.85, pool_top: 30, intraday_r: 0.5, peak_gap: 8, start_gap: '', require_burst: true, groupings: ['custom', 'news'], pool_sources: ['gain'] };
@@ -96,4 +96,26 @@ test('defaultGroupName: date + members, legal characters, 30 characters at most'
   assert.ok(long.endsWith('…'));
   assert.ok(!/['"\\/,<>]/.test(long));
   assert.match(cardHtml({ ...G }, 3), /data-save="3"/);
+});
+
+test('csvExport: one row per member of the cards on screen, with the group figures and thresholds', () => {
+  const d = {
+    method: 'known', date: '2026-10-22',
+    params: { min_amplitude: 3, min_volume_lots: 300, daily_r: 0.8, daily_window: 20, intraday_r: 0.5, peak_gap: 8 },
+    groups: [
+      { ...G, kind: '已知族群', sources: [{ label: '細產業', group: '被動元件／電容器' }], turnover_100m: 40, turnover_share: 1.2, avg_pct: 7 },
+      { ...G, kind: '已知族群', sources: [{ label: '官方產業', group: '半導體業' }] },
+    ],
+  };
+  const [name, header, rows] = csvExport(d);
+  assert.equal(name, '資金連動搜尋_找法1_2026-10-22.csv');
+  assert.equal(rows.length, 4); // 2 groups × 2 members
+  assert.equal(header.length, rows[0].length);
+  assert.deepEqual(rows[0].slice(0, 7), ['2026-10-22', '找法1 · 已知分類', 1, '已知族群', '細產業:被動元件／電容器', '1', '甲']);
+  assert.match(rows[0][rows[0].length - 1], /振幅>3% 成交量≥300張 日R≥0\.8\(20日\) 分時R≥0\.5 高點差≤8分/);
+  const only = csvExport(d, '官方產業');
+  assert.equal(only[2].length, 2);
+  assert.equal(only[2][0][2], 2); // keeps the card number it has on screen
+  assert.match(only[0], /_官方產業\.csv$/);
+  assert.equal(csvExport({ ...d, groups: [] }), null);
 });

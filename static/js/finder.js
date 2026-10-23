@@ -5,7 +5,7 @@
 
 import { addToGroup, createGroup } from './groups.js';
 import { renderBody } from './linkage.js';
-import { colorFor, escapeHtml, fmtPct, fmtTurnover } from './transform.js';
+import { colorFor, escapeHtml, fmtPct, fmtTurnover, toCsv } from './transform.js';
 
 export const METHODS = { known: '找法1 · 已知分類', new: '找法2 · 排行候選' };
 const KIND_COLOR = { 已知族群: '#2c4a6b', 已知族群的延伸: '#6b5a1e', 跨族群新組合: '#b8301a' };
@@ -125,6 +125,36 @@ export function filterHtml(d, current) {
     .join('')}</div>`;
 }
 
+/**
+ * CSV of the cards on screen (the chip filter applies): one row per member, with its group's figures
+ * and the thresholds used, so runs with different settings can be compared in Excel.
+ * → [file name, header, rows] or null when nothing is shown.
+ */
+export function csvExport(d, filter = 'all') {
+  if (!d?.groups?.length) return null;
+  const groups = d.groups.map((g, i) => [g, i + 1]).filter(([g]) => matchesFilter(g, filter, d.method));
+  if (!groups.length) return null;
+  const p = d.params || {};
+  const cond =
+    d.method === 'new'
+      ? `排行前${p.pool_top} 成交量≥${p.new_min_volume_lots}張 日R≥${p.new_daily_r}(${p.new_daily_window}日)`
+      : `振幅>${p.min_amplitude}% 成交量≥${p.min_volume_lots}張 日R≥${p.daily_r}(${p.daily_window}日)`;
+  const header = [
+    '日期', '找法', '群組#', '類型', '來源／最接近分類', '代號', '名稱', '漲幅%', '週轉率%', '振幅%', '高點時間', '起漲時間', '鎖漲停',
+    '群組日R', '群組分時R', '高點差(分)', '起漲差(分)', '群組成交值(億)', '占全市場%', '群組平均漲幅%', '條件',
+  ];
+  const rows = groups.flatMap(([g, n]) => {
+    const src = g.sources?.length ? g.sources.map((s) => `${s.label}:${s.group}`).join('／') : g.matches?.[0] ? `${g.matches[0].label}:${g.matches[0].group}(${Math.round(g.matches[0].overlap * 100)}%)` : '';
+    const cut = (v) => (v == null ? '' : Math.round(v * 100) / 100);
+    return g.members.map((m) => [
+      d.date, METHODS[d.method] || d.method, n, g.kind, src, m.code, m.name, cut(m.change_pct), cut(m.turnover_rate), cut(m.amplitude_pct), m.peak || '', m.start || '', m.locked_at || '',
+      g.daily_r ?? '', g.intraday_r ?? '', g.peak_spread ?? '', g.start_spread ?? '', g.turnover_100m ?? '', g.turnover_share ?? '', g.avg_pct ?? '', `${cond} 分時R≥${p.intraday_r} 高點差≤${p.peak_gap}分`,
+    ]);
+  });
+  const tag = filter && filter !== 'all' ? `_${filter}` : '';
+  return [`資金連動搜尋_${d.method === 'new' ? '找法2' : '找法1'}_${d.date}${tag}.csv`, header, rows];
+}
+
 export function statsText(d) {
   const s = d.stats || {};
   const sec = s.seconds?.total ?? Object.values(s.seconds || {}).reduce((a, x) => a + x, 0);
@@ -187,6 +217,7 @@ export function mountFinderPanel(container, { onStock }) {
       <div class="seg" id="hFinderMethod">${Object.entries(METHODS).map(([k, l]) => `<button data-value="${k}">${l}</button>`).join('')}</div>
       <button type="button" class="icon wide" id="hFinderToggle">條件 ▾</button>
       <button type="button" class="icon wide" id="hFinderRun" title="用目前的條件重新計算這一天">重新計算</button>
+      <button type="button" class="icon wide" id="hFinderCsv" title="匯出目前顯示的卡片（依上面的篩選；Excel 可開）">CSV</button>
       <span class="muted" id="hFinderStats" style="margin-left:auto"></span></div>
     <div class="fd-form" id="hFinderForm" hidden></div>
     <div class="fd-progress" id="hFinderProgress" hidden><div class="fd-bar"><span></span></div><div class="fd-ptext"></div></div>
@@ -279,6 +310,17 @@ export function mountFinderPanel(container, { onStock }) {
     schedule(true);
   });
   sec.querySelector('#hFinderRun').addEventListener('click', () => load(true));
+  sec.querySelector('#hFinderCsv').addEventListener('click', () => {
+    const out = csvExport(state.data, state.data ? pref.filter[state.data.method] : 'all');
+    if (!out) return;
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([toCsv(out[1], out[2])], { type: 'text/csv;charset=utf-8' }));
+    a.download = out[0];
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  });
 
   const key = () => `${state.date}|${queryOf(pref.method, pref.params)}`;
   async function load(refresh = false) {

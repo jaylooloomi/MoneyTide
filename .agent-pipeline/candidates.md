@@ -7,7 +7,7 @@
 - 參考：TradingView Import watchlist（https://cn.tradingview.com/chart/NIFTY/qNGKMbgU-How-to-import-watchlist-in-TradingView）；Chartink / Screener.in 的「screener → watchlist」擴充（https://chromeboard.com/extension/screener-to-tradingview-mcfligcbhdnbfhkbcpoclgcanimnoiha）
 - 預估：finder.js（卡片按鈕）＋既有 /api/groups 端點；≤3 檔、<120 行。
 
-## C2 · N 結果匯出 CSV
+## C2 · N 結果匯出 CSV（✅ 已完成 bonus-04）
 因為原始需求是**多維度分析且條件要能反覆調整比較**，所以頂尖做法會順便做**篩選結果下載 CSV**；目前的成果**只有部分**——B/C/D 有 CSV，N 沒有。
 - 參考：TradingView screener 下載 .csv（https://barbucket.readthedocs.io/en/latest/tv_screener/）
 - 預估：finder.js＋history.js 的 CSV 匯出表；≤2 檔、<60 行。
