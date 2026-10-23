@@ -362,25 +362,35 @@ function renderGrouping() {
   }
 }
 
-let conceptTimer = null;
+// third-party groupings that load in the background: concept (Yahoo) and chain (TPEx 細產業)
+const LOADED_GROUPINGS = {
+  concept: { url: '/api/concepts/status', label: '概念股分類', source: 'Yahoo 股市概念股分類', timer: null },
+  chain: { url: '/api/chains/status', label: '細產業分類', source: '櫃買中心產業價值鏈平台', timer: null },
+};
+
 async function refreshConceptStatus() {
+  await Promise.all(Object.keys(LOADED_GROUPINGS).map(refreshLoadedGrouping));
+}
+
+async function refreshLoadedGrouping(name) {
+  const g = LOADED_GROUPINGS[name];
   let status;
   try {
-    status = await getJson('/api/concepts/status');
+    status = await getJson(g.url);
   } catch {
     return;
   }
-  const btn = $('#hGrouping [data-value=concept]');
+  const btn = $(`#hGrouping [data-value=${name}]`);
   btn.disabled = !status.ready;
   btn.title = status.ready
-    ? `Yahoo 股市概念股分類：${status.count} 個族群（更新於 ${status.saved_at?.slice(0, 10)}）`
+    ? `${g.source}：${status.count} 個族群（更新於 ${status.saved_at?.slice(0, 10)}）`
     : status.running
-      ? `概念股分類下載中 ${status.done}/${status.total}…`
-      : `概念股分類尚未載入${status.error ? '：' + status.error : ''}`;
-  clearTimeout(conceptTimer);
+      ? `${g.label}下載中 ${status.done}/${status.total}…`
+      : `${g.label}尚未載入${status.error ? '：' + status.error : ''}`;
+  clearTimeout(g.timer);
   if (!status.ready) {
-    conceptTimer = setTimeout(refreshConceptStatus, 10000);
-    if (st.grouping === 'concept') {
+    g.timer = setTimeout(() => refreshLoadedGrouping(name), 10000);
+    if (st.grouping === name) {
       st.grouping = 'industry';
       if (st.date) reloadGrouped();
       else renderGrouping();
@@ -652,7 +662,7 @@ async function fillMembership(card) {
     const more = names.length > MAX ? ` <span class="muted">等 ${names.length} 個</span>` : '';
     return `<div title="${escapeHtml(names.join('、'))}"><span class="muted">${label}</span> ${shown}${more}</div>`;
   };
-  slot.innerHTML = line('概念：', m.concepts) + line('自訂：', m.custom);
+  slot.innerHTML = line('概念：', m.concepts) + line('細產業：', m.chains || []) + line('自訂：', m.custom);
 }
 
 // ---- bonus-04: E · cumulative group return comparison -------------------------
@@ -817,7 +827,7 @@ if (document.readyState !== 'loading') replayControls();
 
 // ---- bonus-07: CSV export of B / C / D ----------------------------------------------
 
-const GROUPING_LABEL = { industry: '官方產業', custom: '自訂族群', concept: '概念股' };
+const GROUPING_LABEL = { industry: '官方產業', custom: '自訂族群', concept: '概念股', chain: '細產業' };
 
 function downloadCsv(name, header, rows) {
   const blob = new Blob([toCsv(header, rows)], { type: 'text/csv;charset=utf-8' });
@@ -908,10 +918,10 @@ async function loadPeriods({ cachedOnly = false } = {}) {
 
 // ---- bonus-12: bookmarkable view state in the URL hash (#history/<date>/<grouping>) ----
 
-const GROUPINGS_OK = new Set(['industry', 'custom', 'concept']);
+const GROUPINGS_OK = new Set(['industry', 'custom', 'concept', 'chain']);
 
 function parseHash() {
-  const m = /^#history(?:\/(\d{4}-\d{2}-\d{2}))?(?:\/(industry|custom|concept))?$/.exec(location.hash);
+  const m = /^#history(?:\/(\d{4}-\d{2}-\d{2}))?(?:\/(industry|custom|concept|chain))?$/.exec(location.hash);
   return m ? { date: m[1] || null, grouping: m[2] || null } : null;
 }
 

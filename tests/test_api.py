@@ -208,8 +208,8 @@ def test_membership(tmp_path):
     with TestClient(app, base_url="http://127.0.0.1") as client:
         client.put("/api/groups/我的")
         client.put("/api/groups/我的/2330")
-        assert client.get("/api/membership/2330").json() == {"code": "2330", "concepts": ["CoWoS", "AI"], "custom": ["我的"]}
-        assert client.get("/api/membership/9999").json() == {"code": "9999", "concepts": [], "custom": []}
+        assert client.get("/api/membership/2330").json() == {"code": "2330", "concepts": ["CoWoS", "AI"], "chains": [], "custom": ["我的"]}
+        assert client.get("/api/membership/9999").json() == {"code": "9999", "concepts": [], "chains": [], "custom": []}
 
 
 def test_grouping_maps(tmp_path):

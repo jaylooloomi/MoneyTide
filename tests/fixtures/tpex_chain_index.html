@@ -1,0 +1,578 @@
+<!DOCTYPE HTML>
+
+<html>
+
+<head>
+
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+
+<meta http-equiv="X-UA-Compatible" content="IE=Edge">
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+<meta property="og:type" content="website">
+
+<meta property="og:site_name" content="產業價值鏈資訊平台">
+
+<meta property="og:url" content="https://ic.tpex.org.tw">
+
+<meta property="og:title" content="產業價值鏈資訊平台Industry Chain Information Platform">
+
+<meta property="og:description" content="企業籌資更便捷，大眾投資更穩當">
+
+<meta property="og:image" content="https://ic.tpex.org.tw/images/fb_share.png">
+
+<title>產業價值鏈資訊平台</title>
+
+<link rel="icon" type="image/ico" href="/images/favicon.ico">
+
+<link rel="SHORTCUT ICON" href="/images/favicon.ico">
+
+<link rel="stylesheet" type="text/css" href="/css/jquery-ui.min.css"/>
+
+<link rel="stylesheet" type="text/css" href="/css/bootstrap/bootstrap.min.css?t=20260407"/>
+
+<link rel="stylesheet" type="text/css" href="/css/idx_style.css?t=20260407"/>
+
+<link rel="stylesheet" type="text/css" href="/css/ic.css?t=20260407"/>
+
+</head>
+
+<body>
+
+<div class="Wrap">
+
+    <!-- Header & LOGO -->
+
+    <div class="Header_2"><a href="index.php"><div class="ic-sprite ic-sprite-logo"><div class="header-title">產業價值鏈資訊平台</div><div class="header-slogan">企業籌資更便捷&nbsp;&nbsp;大眾投資更穩當</div></div></a></div>
+
+    <!-- 搜尋框 -->
+
+    <div class="item item2 card">
+
+        <label for="stk_code" class="txt inputLabel">請點選產業鏈圖示查詢產業鏈詳細資訊或於右欄查詢公司所屬產業鏈</label>
+
+        <div class="inputWrap">
+
+          <div class="input-group">
+
+            <input class="form-control ui-autocomplete-input" id="stk_code" name="stk_code" maxlength="6" placeholder="輸入股票代碼或公司名稱" autocomplete="off" type="text">
+
+            <button class="btn btn-primary" type="button" onclick="selectCompanyChain()" onkeypress="selectCompanyChain()">查詢</button>
+
+          </div>
+
+        </div>
+
+    </div>
+
+
+
+    <!-- 產業鏈項目 -->
+
+    <div class="Content_2" id="example2">
+
+        <div class="item"> <a href="introduce.php?ic=D000" class="link"> <span class="avatar"><span class="ic-sprite ic-sprite-index-menu01"></span></span> <span class="txt">半導體</span> </a> </div>
+
+        <!-- // 生技醫療  -->
+
+        <div class="item"> <a href="javascript:void(0);" class="link"> <span class="avatar"><span class="ic-sprite ic-sprite-index-menu04"></span></span> <span class="txt">生技醫療</span> </a>
+
+            <ul class="subMenu">
+
+                <li class="listItem"><a href="introduce.php?ic=C100"><span class="ic-sprite ic-sprite-index-menu-s08"></span><span>製藥</span></a></li>
+
+                <li class="listItem"><a href="introduce.php?ic=C200"><span class="ic-sprite ic-sprite-index-menu-s05"></span><span>醫療器材</span></a></li>
+
+                <li class="listItem"><a href="introduce.php?ic=C300"><span class="ic-sprite ic-sprite-index-menu-s06"></span><span>食品生技</span></a></li>
+
+                <li class="listItem"><a href="introduce.php?ic=C400"><span class="ic-sprite ic-sprite-index-menu-s07"></span><span>再生醫療</span></a></li>
+
+            </ul>
+
+        </div>
+
+        <!--  生技醫療 // -->
+
+        <!-- // 綠色能源  -->
+
+        <div class="item" style="display: block; top: 0px; left: 196px; opacity: 1;"> 
+
+            <a href="javascript:;" class="link jQblend" style="position: relative;">
+
+                <span class="avatar"><span class="ic-sprite ic-sprite-index-menu02"></span></span> 
+
+                <span class="txt">綠色能源</span>
+
+            </a>
+
+            <ul class="subMenu">
+
+                <li class="listItem">
+
+                    <a href="#">
+
+                        <span class="ic-sprite ic-sprite-index-menu-s02"></span><span>節能</span>
+
+                        <div class="thirdWrap">
+
+                            <div class="thirdMenu">
+
+                                <span onclick="location.href='introduce.php?ic=A300'" class="itemLink">◈ 電動車</span>
+
+                                <span onclick="location.href='introduce.php?ic=A200'" class="itemLink">◈ LED 照明</span>
+
+                            </div>
+
+                        </div>
+
+                    </a>
+
+                </li>
+
+                <li class="listItem">
+
+                    <a href="#">
+
+                        <span class="ic-sprite ic-sprite-index-menu-s01"></span><span>創能</span>
+
+                        <div class="thirdWrap">
+
+                            <div class="thirdMenu">
+
+                                <span onclick="location.href='introduce.php?ic=A100'" class="itemLink">◈ 太陽能</span>
+
+                                <span onclick="location.href='introduce.php?ic=AB10'" class="itemLink">◈ 汽電共生</span>
+
+                                <span onclick="location.href='introduce.php?ic=AB20'" class="itemLink">◈ 風力發電</span>
+
+                            </div>
+
+                        </div>
+
+                    </a>
+
+                </li>
+
+                <li class="listItem">
+
+                    <a href="#">
+
+                        <span class="ic-sprite ic-sprite-index-menu-s03"></span><span>儲能</span>
+
+                        <div class="thirdWrap">
+
+                            <div class="thirdMenu">
+
+                                <span onclick="location.href='introduce.php?ic=E000'" class="itemLink">◈ 能源元件</span>
+
+                            </div>
+
+                        </div>
+
+                    </a>
+
+                </li>
+
+                <li class="listItem">
+
+                    <a href="#">
+
+                        <span class="ic-sprite ic-sprite-index-menu-s04"></span><span>智慧系統整合</span>
+
+                        <div class="thirdWrap">
+
+                            <div class="thirdMenu">
+
+                                <span onclick="location.href='introduce.php?ic=AD10'" class="itemLink">◈ 智慧電網</span>
+
+                            </div>
+
+                        </div>
+
+                    </a>
+
+                </li>
+
+            </ul>
+
+        </div>
+
+        <!--  綠色能源 // -->
+
+
+
+        <div class="item"> <a href="javascript:void(0);" class="link"> <span class="avatar"><span class="ic-sprite ic-sprite-index-menu29"></span></span> <span class="txt">數位科技</span> </a>
+
+            <ul class="subMenu">
+
+                <li class="listItem"><a href="introduce.php?ic=5100"><span class="ic-sprite ic-sprite-index-menu-s10"></span><span>區塊鏈</span></a></li>
+
+                <li class="listItem"><a href="introduce.php?ic=5200"><span class="ic-sprite ic-sprite-index-menu-s11"></span><span>金融科技</span></a></li>
+
+                <li class="listItem"><a href="introduce.php?ic=5300"><span class="ic-sprite ic-sprite-index-menu-s12"></span><span>人工智慧</span></a></li>
+
+                <li class="listItem"><a href="introduce.php?ic=5400"><span class="ic-sprite ic-sprite-index-menu-s13"></span><span>雲端運算</span></a></li>
+
+                <li class="listItem"><a href="introduce.php?ic=5500"><span class="ic-sprite ic-sprite-index-menu-s14"></span><span>資通訊安全</span></a></li>
+
+                <li class="listItem"><a href="introduce.php?ic=5600"><span class="ic-sprite ic-sprite-index-menu-s15"></span><span>大數據</span></a></li>
+
+                <li class="listItem"><a href="introduce.php?ic=5700"><span class="ic-sprite ic-sprite-index-menu-s16"></span><span>體驗科技</span></a></li>
+
+                <li class="listItem"><a href="introduce.php?ic=5800"><span class="ic-sprite ic-sprite-index-menu-s17"></span><span>運動科技</span></a></li>
+
+            </ul>
+
+        </div>
+
+        <div class="item"> <a href="javascript:void(0);" class="link"> <span class="avatar"><span class="ic-sprite ic-sprite-index-menu30"></span></span> <span class="txt">前瞻科技</span> </a>
+
+            <ul class="subMenu">
+
+                <li class="listItem"><a href="introduce.php?ic=4100"><span class="ic-sprite ic-sprite-index-menu-s09"></span><span>太空衛星科技</span></a></li>
+
+            </ul>
+
+        </div>
+
+        <div class="item"> <a href="introduce.php?ic=6000" class="link"> <span class="avatar"><span class="ic-sprite ic-sprite-index-menu31"></span></span> <span class="txt">自動化</span> </a></div>
+
+        <div class="item"> <a href="introduce.php?ic=R300" class="link"> <span class="avatar"><span class="ic-sprite ic-sprite-index-menu06"></span></span> <span class="txt">電子商務</span> </a></div>
+
+        <div class="item"> <a href="introduce.php?ic=J000" class="link"> <span class="avatar"><span class="ic-sprite ic-sprite-index-menu07"></span></span> <span class="txt">被動元件</span> </a></div>
+
+        <div class="item"> <a href="introduce.php?ic=I000" class="link"> <span class="avatar"><span class="ic-sprite ic-sprite-index-menu08"></span></span> <span class="txt">通信網路</span> </a></div>
+
+        <div class="item"> <a href="introduce.php?ic=K000" class="link"> <span class="avatar"><span class="ic-sprite ic-sprite-index-menu09"></span></span> <span class="txt">連接器</span> </a></div>
+
+        <div class="item"> <a href="introduce.php?ic=F000" class="link"> <span class="avatar"><span class="ic-sprite ic-sprite-index-menu10"></span></span> <span class="txt">電腦週邊</span> </a></div>
+
+        <div class="item"> <a href="introduce.php?ic=G000" class="link"> <span class="avatar"><span class="ic-sprite ic-sprite-index-menu11"></span></span> <span class="txt">平面顯示器</span> </a></div>
+
+        <div class="item"> <a href="introduce.php?ic=H000" class="link"> <span class="avatar"><span class="ic-sprite ic-sprite-index-menu12"></span></span> <span class="txt">觸控面板</span> </a></div>
+
+        <div class="item"> <a href="introduce.php?ic=L000" class="link"> <span class="avatar"><span class="ic-sprite ic-sprite-index-menu05"></span></span> <span class="txt">印刷電路板</span> </a></div>
+
+        <div class="item"> <a href="introduce.php?ic=B000" class="link"> <span class="avatar"><span class="ic-sprite ic-sprite-index-menu03"></span></span> <span class="txt">休閒娛樂</span> </a></div>
+
+        <div class="item"> <a href="introduce.php?ic=1000" class="link"> <span class="avatar"><span class="ic-sprite ic-sprite-index-menu26"></span></span> <span class="txt">水泥</span> </a></div>	    
+
+        <div class="item"> <a href="introduce.php?ic=M000" class="link"> <span class="avatar"><span class="ic-sprite ic-sprite-index-menu13"></span></span> <span class="txt">食品</span> </a></div>
+
+        <div class="item"> <a href="introduce.php?ic=N000" class="link"> <span class="avatar"><span class="ic-sprite ic-sprite-index-menu14"></span></span> <span class="txt">石化及塑橡膠</span> </a></div>
+
+        <div class="item"> <a href="introduce.php?ic=O000" class="link"> <span class="avatar"><span class="ic-sprite ic-sprite-index-menu15"></span></span> <span class="txt">紡織</span> </a></div>
+
+        <div class="item"> <a href="introduce.php?ic=P000" class="link"> <span class="avatar"><span class="ic-sprite ic-sprite-index-menu16"></span></span> <span class="txt">電機機械</span> </a></div>
+
+        <div class="item"> <a href="introduce.php?ic=2000" class="link"> <span class="avatar"><span class="ic-sprite ic-sprite-index-menu27"></span></span> <span class="txt">造紙</span> </a></div>
+
+        <div class="item"> <a href="introduce.php?ic=Q000" class="link"> <span class="avatar"><span class="ic-sprite ic-sprite-index-menu17"></span></span> <span class="txt">鋼鐵</span> </a></div>	
+
+        <div class="item"> <a href="introduce.php?ic=3000" class="link"> <span class="avatar"><span class="ic-sprite ic-sprite-index-menu28"></span></span> <span class="txt">汽車</span> </a></div>	
+
+        <div class="item"> <a href="introduce.php?ic=R000" class="link"> <span class="avatar"><span class="ic-sprite ic-sprite-index-menu18"></span></span> <span class="txt">軟體服務</span> </a></div>
+
+        <div class="item"> <a href="introduce.php?ic=S000" class="link"> <span class="avatar"><span class="ic-sprite ic-sprite-index-menu19"></span></span> <span class="txt">建材營造</span> </a></div>
+
+        <div class="item"> <a href="introduce.php?ic=T000" class="link"> <span class="avatar"><span class="ic-sprite ic-sprite-index-menu20"></span></span> <span class="txt">交通運輸及航運</span> </a></div>
+
+        <div class="item"> <a href="introduce.php?ic=U000" class="link"> <span class="avatar"><span class="ic-sprite ic-sprite-index-menu21"></span></span> <span class="txt">金融</span> </a></div>
+
+        <div class="item"> <a href="introduce.php?ic=V000" class="link"> <span class="avatar"><span class="ic-sprite ic-sprite-index-menu22"></span></span> <span class="txt">貿易百貨</span> </a></div>
+
+        <div class="item"> <a href="introduce.php?ic=W000" class="link"> <span class="avatar"><span class="ic-sprite ic-sprite-index-menu23"></span></span> <span class="txt">油電燃氣</span> </a></div>
+
+        <div class="item"> <a href="introduce.php?ic=Y000" class="link"> <span class="avatar"><span class="ic-sprite ic-sprite-index-menu24"></span></span> <span class="txt">文化創意</span> </a></div>
+
+        <div class="item"> <a href="introduce.php?ic=X000" class="link"> <span class="avatar"><span class="ic-sprite ic-sprite-index-menu25"></span></span> <span class="txt">其他</span> </a></div>
+
+    </div>
+
+
+
+    <div class="footer-panel">
+
+    <div class="index-header-line"></div>
+
+    <div class="float-start footer-bg">
+
+        <div class="float-start">
+
+            <div class="footer-text">
+
+                <div class="lcol"> 
+
+                    <span class="icon-white">&#9658;</span>&nbsp;<a class="footer-text-over" href="disclaimer.php?stk_code=">使用條款</a>&#12288;|
+
+                    <span class="icon-white">&#9658;</span>&nbsp;<a class="footer-text-over" href="privacy_rights.php?stk_code=">隱私權保護說明</a>&#12288;|
+
+                    <span class="icon-white">&#9658;</span>&nbsp;<a class="footer-text-over" href="sitemap.php">網站地圖</a>
+
+                </div>
+
+                <div class="rcol">本網站之個體公司面資料係由各公司輸入後由本系統對外公佈，資料如有錯誤、遺漏或虛偽不實，均由該公司負責。</div>
+
+            </div>
+
+            <div class="copyright">
+
+                版權所有&copy;2010-2026&nbsp;
+
+                <span class="ic-sprite ic-sprite-logo-gtsm"></span>&nbsp;證券櫃檯買賣中心&nbsp;10084台北市羅斯福路二段100號15樓
+
+                <span class="icon-white">&#9742;</span>&nbsp;服務專線(上櫃/興櫃) :(02)2796-3788
+
+
+
+            </div>    	
+
+            <div class="copyright">
+
+                &nbsp;
+
+                <span class="ic-sprite ic-sprite-logo-twse"></span>&nbsp;臺灣證券交易所　&nbsp;11049台北市信義路五段7號12樓&nbsp;　　
+
+                <span class="icon-white">&#9742;</span>&nbsp;服務專線(上市) :(02)8101-3101
+
+            </div>
+
+        </div> 	
+
+    </div>
+
+</div>
+
+<!--
+
+<script>
+
+  (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+
+  (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+
+  m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+
+  })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+
+
+  ga('create', 'UA-36006355-6', 'auto');
+
+  ga('require', 'displayfeatures');
+
+  ga('send', 'pageview');
+
+
+
+</script>
+
+-->
+
+
+
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-CFN5JJS235"></script>
+
+<script>
+
+  window.dataLayer = window.dataLayer || [];
+
+  function gtag(){dataLayer.push(arguments);}
+
+  gtag('js', new Date());
+
+
+
+  gtag('config', 'G-CFN5JJS235');
+
+</script></div>
+
+
+
+</body>
+
+</html>
+
+<script type="text/javascript" src="/js/jquery.min.js"></script>
+
+<script type="text/javascript" src="/js/jquery.blend.js"></script>
+
+<script	type="text/javascript" src="/js/jquery-ui.min.js"></script>
+
+<script type="text/javascript" src="/js/jquery-ui.catcomplete.js"></script>
+
+<script type="text/javascript" src="/js/bootstrap.min.js"></script>
+
+<script>
+
+$(document).ready(function(){
+
+	$(".Content_2 .item a.link").blend();
+
+
+
+  var animObj = {
+
+    _root : $(".Content_2"),
+
+    _target : $(".Content_2 .item"),
+
+    _totalNum : 0,
+
+    _currNum : 0,
+
+    _interval : 120,
+
+    _speed   : 650,
+
+    _initPos : [390,310]
+
+  }
+
+
+
+  // INIT
+
+  animObj._totalNum = $(".Content_2 .item").length;
+
+  // RESET
+
+  $(".Content_2 .item").css({"top": animObj._initPos[0], "left": animObj._initPos[1] , "opacity": 0}).hide();
+
+
+
+  // ANIMATE
+
+  var go = setInterval(function(){ animFunc(); }, animObj._interval);
+
+  var animFunc = function()
+
+  {
+
+      var px = (animObj._currNum % 5)*196;
+
+      //var py = Math.floor(animObj._currNum / 5)*155;
+
+      var py = Math.floor(animObj._currNum / 5)*135;
+
+      animObj._target.eq(animObj._currNum).show().animate({"top": py, "left": px, "opacity": 1}, animObj._speed, "easeOutQuint");
+
+      if(animObj._currNum < animObj._totalNum)
+
+      {
+
+        animObj._currNum++;
+
+      }
+
+      else
+
+      {
+
+        clearInterval(go);
+
+      }
+
+  }
+
+
+
+});
+
+</script>
+
+<!--[if lt IE 9]>
+
+    <script type="text/javascript" src="js/IE8.js"></script>
+
+<![endif]-->
+
+<script type="text/javascript">
+
+	/*
+
+	$('#disclaimerContent').load("disclaimer_popup.php",function(){
+
+		$('#disclaimerModal').modal("show");
+
+	});	
+
+	*/
+
+	function selectCompanyChain(){	
+
+		location.href = "company_chain.php?stk_code="+$("#stk_code").val();
+
+	}
+
+	
+
+	var cache = {};
+
+    $("#stk_code").catcomplete({
+
+        delay: 0,
+
+        source: function( request, response ) {        	
+
+                var term = request.term;
+
+                if ( term in cache ) {
+
+                    response( cache[ term ] );
+
+                    return;
+
+                }
+
+				$.ajax({
+
+					url: "https://dsp.tpex.org.tw/storage/company_basic/company_list.php?l=zh-tw",
+
+					crossDomain:true,
+
+					data:request,
+
+					dataType:"jsonp",
+
+					jsonpCallback:"getCompanyList",
+
+					success: function(data,textStatus,jqXHR){		
+
+						cache[ term ] = data;
+
+						response( data );			
+
+					}
+
+				});				               
+
+        },
+
+        select: function( event, ui ) {			
+
+        	if (ui!=null && ui.item!=null && typeof ui.item !== 'undefined'){
+
+				$("#stk_code").val(ui.item.value);			
+
+				//query();
+
+			}
+
+        },
+
+        change: function( event, ui ) {
+
+			if(typeof ui !== 'undefined' && typeof ui.item !== 'undefined' && typeof ui.item.value !== 'undefined'){
+
+        		$("#stk_code").val(ui.item.value);
+
+        	}
+
+        }
+
+    });
+
+</script>
+

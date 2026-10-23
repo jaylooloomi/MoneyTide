@@ -26,6 +26,7 @@ from .sources.histock import fetch_quotes
 from .sources.http import make_client
 from .sources.official import fetch_tpex_day, fetch_twse_day
 from .sources.official_index import fetch_index_month
+from .sources.tpex_chains import fetch_chains
 from .sources.yahoo_concepts import fetch_concepts
 from .sources.shares import fetch_shares
 from .sources.twse_isin import fetch_isin
@@ -59,7 +60,8 @@ def create_app(
     history_store: HistoryStore | None = None,
     start_history: bool = True,
     concepts: ConceptLoader | None = None,
-    start_concepts: bool = True,
+    start_concepts: bool = True,  # also starts the 細產業 (TPEx chain) loader
+    chains: ConceptLoader | None = None,
     static_dir: Path = STATIC_DIR,
     allowed_hosts: tuple[str, ...] = ("127.0.0.1", "localhost"),
 ) -> FastAPI:
@@ -82,6 +84,13 @@ def create_app(
                 return None
             g = mapping_grouping(loader.mapping)
             g.cache_key = f"concept:{loader.saved_at.isoformat() if loader.saved_at else ''}"
+            return g
+        if name == "chain":  # 細產業 (TPEx 產業價值鏈)
+            loader = app.state.chains
+            if loader is None or not loader.mapping:
+                return None
+            g = mapping_grouping(loader.mapping)
+            g.cache_key = f"chain:{loader.saved_at.isoformat() if loader.saved_at else ''}"
             return g
         return None
 
@@ -115,6 +124,15 @@ def create_app(
             )
         if start_concepts and app.state.concepts is not None:
             tasks.append(asyncio.create_task(app.state.concepts.run()))
+        if start_concepts and app.state.chains is None:
+            if client is None:
+                client = make_client()
+            app.state.chains = ConceptLoader(
+                cache=JsonCache(config.data_dir / "chains_cache.json"),
+                fetch=lambda progress: fetch_chains(client, progress=progress),
+            )
+        if start_concepts and app.state.chains is not None:
+            tasks.append(asyncio.create_task(app.state.chains.run()))
         try:
             yield
         finally:
@@ -130,6 +148,7 @@ def create_app(
     app.state.history = history_store or HistoryStore(config.data_dir / "history.sqlite")
     app.state.collector = None
     app.state.concepts = concepts
+    app.state.chains = chains
     app.include_router(create_history_router(lambda: app.state.history, lambda: app.state.collector, get_grouping))
     # Local-only app: reject other Host headers (DNS rebinding could otherwise reach the PUT routes).
     app.add_middleware(TrustedHostMiddleware, allowed_hosts=list(allowed_hosts))
@@ -205,12 +224,19 @@ def create_app(
         loader = app.state.concepts
         return loader.status() if loader is not None else {"ready": False, "count": 0, "running": False, "done": 0, "total": 0, "error": "", "saved_at": None}
 
-    # bonus-03: which concept / custom groups a stock belongs to (for the info cards)
+    @app.get("/api/chains/status")
+    def chains_status() -> dict:
+        loader = app.state.chains
+        return loader.status() if loader is not None else {"ready": False, "count": 0, "running": False, "done": 0, "total": 0, "error": "", "saved_at": None}
+
+    # bonus-03: which concept / custom / 細產業 groups a stock belongs to (for the info cards)
     @app.get("/api/membership/{code}")
     def membership(code: str) -> dict:
         loader = app.state.concepts
         concepts = loader.mapping.get(code, []) if loader is not None else []
-        return {"code": code, "concepts": concepts, "custom": groups.mapping().get(code, [])}
+        chain_loader = app.state.chains
+        chains = chain_loader.mapping.get(code, []) if chain_loader is not None else []
+        return {"code": code, "concepts": concepts, "chains": chains, "custom": groups.mapping().get(code, [])}
 
     # bonus-17: code → group names, for regrouping the live heatmap in the browser
     @app.get("/api/groupings/{name}")
@@ -222,7 +248,12 @@ def create_app(
             if loader is None or not loader.mapping:
                 raise HTTPException(404, "concept groups not loaded yet")
             return {"name": name, "mapping": loader.mapping}
-        raise HTTPException(422, "grouping must be custom or concept")
+        if name == "chain":
+            loader = app.state.chains
+            if loader is None or not loader.mapping:
+                raise HTTPException(404, "細產業分類尚未載入完成")
+            return {"name": name, "mapping": loader.mapping}
+        raise HTTPException(422, "grouping must be custom, concept or chain")
 
     @app.get("/api/groups")
     def list_groups() -> dict:

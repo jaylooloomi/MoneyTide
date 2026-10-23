@@ -35,7 +35,7 @@ const RVOL_RETRY_MS = 5 * 60_000;
 const liveSearch = { shown: [], listFor: null };
 try {
   const saved = JSON.parse(localStorage.getItem('openmarket.live.grouping') || '""');
-  if (['industry', 'custom', 'concept'].includes(saved)) liveGrouping.by = saved;
+  if (['industry', 'custom', 'concept', 'chain'].includes(saved)) liveGrouping.by = saved;
 } catch {
   /* default */
 }
@@ -699,7 +699,7 @@ async function fillMembership(card) {
     const more = names.length > MAX ? ` <span class="muted">等 ${names.length} 個</span>` : '';
     return `<div title="${escapeHtml(names.join('、'))}"><span class="muted">${label}</span> ${shown}${more}</div>`;
   };
-  slot.innerHTML = line('概念：', m.concepts) + line('自訂：', m.custom);
+  slot.innerHTML = line('概念：', m.concepts) + line('細產業：', m.chains || []) + line('自訂：', m.custom);
 }
 
 // ---- bonus-05: market breadth bar in the live top bar ----
@@ -794,7 +794,7 @@ async function loadLiveMapping(name, force = false) {
   liveGrouping.loading[name] = true;
   try {
     const resp = await fetch(`/api/groupings/${name}`, { cache: 'no-store' });
-    if (!resp.ok) throw new Error(resp.status === 404 ? '概念股分類尚未載入完成' : `HTTP ${resp.status}`);
+    if (!resp.ok) throw new Error(resp.status === 404 ? `${name === 'chain' ? '細產業' : '概念股'}分類尚未載入完成` : `HTTP ${resp.status}`);
     liveGrouping.maps[name] = (await resp.json()).mapping;
     render();
   } catch (err) {
@@ -832,7 +832,7 @@ function renderLiveGroupingSeg() {
     seg.id = 'liveGrouping';
     seg.setAttribute('role', 'group');
     seg.setAttribute('aria-label', '族群分類');
-    seg.innerHTML = '<button data-value="industry">官方產業</button><button data-value="custom">自訂族群</button><button data-value="concept">概念股</button>';
+    seg.innerHTML = '<button data-value="industry">官方產業</button><button data-value="custom">自訂族群</button><button data-value="concept">概念股</button><button data-value="chain" title="櫃買中心產業價值鏈平台的細分類">細產業</button>';
     $('#liveControls .seg[data-group="market"]').before(seg);
     seg.addEventListener('click', (e) => {
       const b = e.target.closest('button[data-value]');
