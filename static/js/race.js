@@ -156,7 +156,7 @@ export function mountRace(box, d, { onStock } = {}) {
   const inner = ROW_H - 2 * PAD;
   const y = (v) => PAD + ((hi - v) / (hi - lo)) * inner;
   const leader = codes[0]; // 👑 龍頭: the largest market cap
-  const lead = leadOf(codes, frames); // 領漲
+  const lead = leadOf(codes, frames); // the day's 領漲 (legend); the icon itself follows first place
   const step = d.race?.step_min === 5 ? '5 分 K：超過 30 天沒有 1 分資料' : '1 分 K';
   let speed = 'mid';
   try {
@@ -173,7 +173,7 @@ export function mountRace(box, d, { onStock } = {}) {
       <div class="seg race-speed">${Object.entries(RACE_SPEEDS)
         .map(([k, [label]]) => `<button type="button" data-speed="${k}"${k === speed ? ' class="on"' : ''}>${label}</button>`)
         .join('')}</div>
-      <small class="muted">${step}；● ＝到目前為止的最高點；👑 龍頭＝市值最大；${LEAD_ICON} 領漲${lead ? `＝${escapeHtml(byCode.get(lead.code)?.name || lead.code)}（${fmtClock(lead.from)} 起一路領先）` : ''}；先鎖漲停的排前面；點一列看右邊的走勢圖</small>
+      <small class="muted">${step}；● ＝到目前為止的最高點；👑 龍頭＝市值最大；${LEAD_ICON} 領漲＝當下排第一${lead ? `（收盤領漲：${escapeHtml(byCode.get(lead.code)?.name || lead.code)}，${fmtClock(lead.from)} 起一路領先）` : ''}；先鎖漲停的排前面；點一列看右邊的走勢圖</small>
     </div>
     <div class="rt">
       <div class="rt-axis">${TICKS.map(([label, m]) => `<span style="left:${pctX(m)}%">${label}</span>`).join('')}</div>
@@ -183,7 +183,7 @@ export function mountRace(box, d, { onStock } = {}) {
           .map((c) => {
             const m = byCode.get(c);
             return `<div class="rt-row" data-code="${escapeHtml(c)}" title="${escapeHtml(c)} ${escapeHtml(m.name)}：點一下看右邊的走勢圖">
-              <span class="rt-rank"></span><span class="rt-name">${c === leader ? '<span title="龍頭：族群市值最大">👑</span>' : ''}${escapeHtml(m.name)}${lead?.code === c ? `<span class="rt-lead" title="領漲：收盤排第一，${fmtClock(lead.from)} 起一路領先到收盤" hidden>${LEAD_ICON}</span>` : ''}</span>
+              <span class="rt-rank"></span><span class="rt-name">${c === leader ? '<span title="龍頭：族群市值最大">👑</span>' : ''}${escapeHtml(m.name)}<span class="rt-lead" title="領漲：這一分鐘排第一（有漲停時是最早鎖住的）" hidden>${LEAD_ICON}</span></span>
               <span class="rt-track">
                 <svg viewBox="0 0 ${RACE_END} ${ROW_H}" preserveAspectRatio="none"><line class="rt-zero" x1="0" x2="${RACE_END}" y1="${y(0)}" y2="${y(0)}"/><polyline class="rt-path"/></svg>
                 <span class="rt-dot"></span>
@@ -218,8 +218,7 @@ export function mountRace(box, d, { onStock } = {}) {
       const v = f.values[m];
       el.style.transform = `translateY(${i * ROW_H}px)`;
       el.querySelector('.rt-rank').textContent = v === null ? '' : String(i + 1);
-      const leadMark = el.querySelector('.rt-lead');
-      if (leadMark) leadMark.hidden = m < lead.from; // appears when it takes the lead for good
+      el.querySelector('.rt-lead').hidden = !(i === 0 && v > 0); // 領漲: first place right now, while up
       const path = el.querySelector('.rt-path');
       path.setAttribute('points', pathPoints(f, m, y));
       path.style.stroke = v === null ? 'transparent' : colorFor(v > 0 ? 10 : v < 0 ? -10 : 0, 10);
