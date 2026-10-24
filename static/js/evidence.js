@@ -83,6 +83,16 @@ export function evidenceItems(f, ext, ev) {
   return items;
 }
 
+/**
+ * How often each check also says ✓ for a random pair of the same day (the base rate): a ✓ that random
+ * pairs get half the time says little, one they get 5% of the time says a lot. Measured on the cached
+ * data, 2026-10-25 (branch night-shift/methods-2026-10-25, research/m5_weights.py: 10,557 random pairs of
+ * the 300 most traded, 15 days); 隨機 is 10% by its own definition (above the 90th percentile).
+ * Shown only — the ✓ count is unchanged.
+ */
+export const BASE_RATES = { excess: 0.007, baseline: 0.1, burst: 0.398, sync: 0.048, samedir: 0.058, chips: 0.513 };
+export const baseText = (key) => (BASE_RATES[key] == null ? '' : `隨機配對約 ${BASE_RATES[key] < 0.01 ? '<1' : Math.round(BASE_RATES[key] * 100)}% 也會出現`);
+
 /** The ✓／✗ list with its count: 「9 項裡 6 項支持（2 項資料不足）」. */
 export function evidenceHtml(items) {
   const yes = items.filter((x) => x.ok === true).length;
@@ -90,7 +100,7 @@ export function evidenceHtml(items) {
   const none = items.length - yes - no;
   const mark = (ok) => (ok === true ? '<b class="up">✓</b>' : ok === false ? '<b class="down">✗</b>' : '<span class="muted">—</span>');
   const rows = items
-    .map((x) => `<li class="${x.ok === null ? 'muted' : ''}">${mark(x.ok)} ${escapeHtml(x.label)} <small class="muted">${escapeHtml(x.detail)}</small></li>`)
+    .map((x) => `<li class="${x.ok === null ? 'muted' : ''}">${mark(x.ok)} ${escapeHtml(x.label)} <small class="muted">${escapeHtml(x.detail)}</small>${baseText(x.key) ? ` <small class="muted ev-base" title="這一項在同一天隨機挑兩檔時，本來就有這個比例會成立；越低越有參考價值（不影響 ✓ 計數）">（${escapeHtml(baseText(x.key))}）</small>` : ''}</li>`)
     .join('');
   return `<div class="ev-box"><div class="ev-h">🧾 資金一致性證據 <b>${yes}</b>／${yes + no} 項支持${none ? ` <small class="muted">（${none} 項資料不足，不算）</small>` : ''}</div><ul class="ev-list">${rows}</ul></div>`;
 }
@@ -132,7 +142,7 @@ export function groupEvidenceHtml(g) {
   const items = groupEvidenceItems(g);
   const { yes, known } = evidenceCount(items);
   if (!known) return '';
-  const tip = items.map((x) => `${x.ok === true ? '✓' : x.ok === false ? '✗' : '—'} ${x.short}：${x.detail}`).join('\n');
+  const tip = items.map((x) => `${x.ok === true ? '✓' : x.ok === false ? '✗' : '—'} ${x.short}：${x.detail}${baseText(x.key) ? `（${baseText(x.key)}）` : ''}`).join('\n');
   const tags = items
     .filter((x) => x.ok !== null)
     .map((x) => `<span class="${x.ok ? 'up' : 'down'}">${x.ok ? '✓' : '✗'}${escapeHtml(x.short)}</span>`)

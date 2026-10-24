@@ -86,3 +86,14 @@ test('groupEvidenceItems: 同分點 from the stored 分點, — until the snapsh
   assert.equal(item(null).ok, null);
   assert.match(item(null).detail, /收盤後快照/);
 });
+
+test('the base rate of each check rides along (shown only, the count is unchanged)', async () => {
+  const { BASE_RATES, baseText, evidenceHtml } = await import('../../static/js/evidence.js');
+  assert.equal(baseText('burst'), '隨機配對約 40% 也會出現');
+  assert.equal(baseText('excess'), '隨機配對約 <1% 也會出現');
+  assert.equal(baseText('theme'), ''); // not measured
+  const html = evidenceHtml([{ key: 'burst', ok: true, label: '同爆量', detail: 'x' }, { key: 'theme', ok: true, label: '題材', detail: 'y' }]);
+  assert.match(html, /同爆量 <small class="muted">x<\/small> <small class="muted ev-base"[^>]*>（隨機配對約 40% 也會出現）<\/small>/);
+  assert.match(html, /<b>2<\/b>／2 項支持/); // still 2 of 2
+  assert.ok(Object.values(BASE_RATES).every((v) => v > 0 && v < 1));
+});
