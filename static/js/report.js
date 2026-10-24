@@ -230,7 +230,7 @@ export function laggardsHtml(g) {
   const l = g.laggards;
   if (!l?.stocks?.length) return '';
   const cells = l.stocks.map((s) => `<button type="button" class="rp-stock" data-code="${escapeHtml(s.code)}" title="${escapeHtml(s.code)}：開資訊卡">${escapeHtml(s.name)} <small class="${s.change_pct > 0 ? 'up' : s.change_pct < 0 ? 'down' : ''}">${fmtPct(s.change_pct)}</small></button>`);
-  return `<div class="rp-line" title="同一個已知分類裡、今天漲不到這組平均一半的股票（成交值大的先列）：資金可能擴散的下一站，不是買進建議"><span class="muted">同族群未跟上（${escapeHtml(l.label)}：${escapeHtml(l.group)}）</span> ${cells.join(' ')}</div>`;
+  return `<div class="rp-line" title="同一個已知分類裡、今天漲不到這組平均一半的股票（成交值大的先列）。回測（study 分支 exp6，60 天）：這些股票之後 5 天平均只跑贏大盤 0.74%，遠不如組合本身的 +2.22%——資金多半留在原本那幾檔，沒有明顯擴散。只是參考，不是買進建議"><span class="muted">同族群未跟上（${escapeHtml(l.label)}：${escapeHtml(l.group)}）</span> ${cells.join(' ')}</div>`;
 }
 
 /** 籌碼集中度 of the members with 分點 stored (the after-close snapshot), one line; '' without any. */
