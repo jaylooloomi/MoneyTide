@@ -144,13 +144,19 @@ test('filter chips: 找法1 by source grouping (a group can count twice), 找法
   const tipCard = cardHtml({ ...G, sources: [], matches: [{ label: '官方產業', group: '電子零組件業', overlap: 0.5, outside: [] }, { label: '概念股', group: '被動元件', overlap: 0.4, outside: [] }] }, 1);
   assert.match(tipCard, /<span class="fd-title" title="最接近 官方產業：電子零組件業（重疊 50%）\n最接近 概念股：被動元件（重疊 40%）">/);
   const rel = { ...known, groups: known.groups.map((g, k) => ({ ...g, relations: k === 0 ? [{ src_name: '甲', dst_name: '乙', pct: 30, method: '權益法', seats: [] }] : [] })) };
-  assert.deepEqual(filterOptions(rel).at(-1), { key: '@rel', label: '🏢 有持股關係', n: 1 });
+  const { tip: relTip, ...relChip } = filterOptions(rel).at(-1);
+  assert.deepEqual(relChip, { key: '@rel', label: '🏢 有持股關係', n: 1 });
+  assert.match(relTip, /轉投資/);
   assert.ok(!filterOptions(known).some((o) => o.key === '@rel')); // none: no chip
   assert.match(cardHtml({ ...G, relations: rel.groups[0].relations }, 1), /<div class="fd-rel"[^>]*>🏢 <b>甲<\/b> 持有 <b>乙<\/b> 30%（權益法）/);
   assert.doesNotMatch(cardHtml(G, 1), /fd-rel/);
   const strong = { evidence: { excess: { ok: true }, baseline: { ok: true }, burst: { ok: true }, sync: { ok: true }, samedir: { ok: true } } };
   const evd = { ...known, groups: [{ ...known.groups[0], ...strong }, { ...known.groups[1], evidence: { excess: { ok: false } } }, known.groups[2]] };
-  assert.deepEqual(filterOptions(evd).at(-1), { key: '@ev', label: '🧾 證據強', n: 1 });
+  const { tip: evTip, ...evChip } = filterOptions(evd).at(-1);
+  assert.deepEqual(evChip, { key: '@ev', label: '🧾 證據強', n: 1 });
+  assert.match(evTip, /至少 5 項 ✓.*70%/); // the tooltip says what 證據強 means
+  assert.match(filterHtml(evd, 'all'), /title="資金一致性證據夠多[^"]*（1 組）"/);
+  assert.ok(filterOptions(known).every((o) => o.tip)); // every chip has one
   assert.ok(evidenceRank(evd.groups[0]) > evidenceRank(evd.groups[1]));
   const hot = cardHtml({ ...G, daytrade: { by_code: { 1: 52.4, 2: 47 }, hot: true } }, 1);
   assert.match(hot, /<div class="fd-dt"[^>]*>🔥 當沖比高：甲 52%、乙 47%/);

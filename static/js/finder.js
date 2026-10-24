@@ -218,34 +218,57 @@ export function cardHtml(g, i) {
 
 const KINDS = ['已知族群', '已知族群的延伸', '跨族群新組合'];
 
+// the chips' tooltips: what each one keeps
+const GROUPING_TIPS = {
+  官方產業: '證交所／櫃買中心公布的產業別',
+  自訂族群: '你自己建立的族群',
+  概念股: '概念股清單（例如 AI 伺服器、CoWoS）',
+  細產業: '櫃買中心產業鏈的細分類',
+  新聞族群: '最近幾天新聞裡一起被提到的股票',
+};
+const KIND_TIPS = {
+  已知族群: '成員全都在同一個已知分類裡（產業、概念股、自訂族群…）',
+  已知族群的延伸: '大部分成員在同一個已知分類裡，另外多了分類外的股票',
+  跨族群新組合: '成員不屬於同一個已知分類：資金把不相干的股票一起拉',
+};
+const EVIDENCE_TIP =
+  '資金一致性證據夠多：卡片上的 🧾 清單（扣大盤、比隨機配對像、同分鐘爆量、同分鐘同步、不只一天、籌碼、持股關係、同漲跌、同分點、題材）' +
+  '裡，至少 5 項 ✓，而且在有資料的項目中 ✓ 占 70% 以上。— 表示沒有資料，不算贊成也不算反對。證據越多，越不像巧合、越像有人有計畫地一起買';
+
 /**
  * Filter chips over the found groups (no recompute): 找法1 by the grouping a group came from (a group
  * found in several groupings counts under each), 找法2 by kind. → [{key, label, n}], 全部 first.
  */
 export function filterOptions(d) {
   const groups = d?.groups || [];
-  const opts = [{ key: 'all', label: '全部', n: groups.length }];
+  const opts = [{ key: 'all', label: '全部', n: groups.length, tip: '這一天找到的所有組合' }];
   if (d?.method === 'new') {
-    for (const k of KINDS) opts.push({ key: k, label: k === '已知族群的延伸' ? '延伸' : k, n: groups.filter((g) => g.kind === k).length });
+    for (const k of KINDS) opts.push({ key: k, label: k === '已知族群的延伸' ? '延伸' : k, n: groups.filter((g) => g.kind === k).length, tip: KIND_TIPS[k] });
     // by the ranking the members came in from (a group counts when any member did)
     const used = d.params?.pool_sources?.length ? d.params.pool_sources : Object.keys(SOURCES);
     for (const k of Object.keys(SOURCES).filter((x) => used.includes(x))) {
-      opts.push({ key: `@src:${k}`, label: `📈 ${SOURCES[k]}`, n: groups.filter((g) => matchesFilter(g, `@src:${k}`, 'new')).length });
+      opts.push({ key: `@src:${k}`, label: `📈 ${SOURCES[k]}`, n: groups.filter((g) => matchesFilter(g, `@src:${k}`, 'new')).length, tip: `至少一檔成員是從「${SOURCES[k]}」排行前幾名進入候選池的` });
     }
   } else {
-    for (const label of d?.groupings || []) opts.push({ key: label, label, n: groups.filter((g) => g.sources?.some((s) => s.label === label)).length });
+    for (const label of d?.groupings || []) {
+      opts.push({ key: label, label, n: groups.filter((g) => g.sources?.some((s) => s.label === label)).length,
+        tip: `從「${label}」裡找到的組合${GROUPING_TIPS[label] ? `（${GROUPING_TIPS[label]}）` : ''}；同一組可能同時出現在好幾種分類` });
+    }
   }
   // by who is buying (both methods), once the day's 法人 is out
   if (groups.some((g) => g.inst)) {
-    for (const [key, label] of INST_FILTERS) opts.push({ key, label, n: groups.filter((g) => matchesFilter(g, key, d.method)).length });
+    for (const [key, label, tip] of INST_FILTERS) opts.push({ key, label, n: groups.filter((g) => matchesFilter(g, key, d.method)).length, tip });
   }
   const related = groups.filter((g) => matchesFilter(g, '@rel', d.method)).length;
-  if (related) opts.push({ key: '@rel', label: '🏢 有持股關係', n: related });
-  if (groups.some((g) => g.evidence)) opts.push({ key: '@ev', label: '🧾 證據強', n: groups.filter((g) => matchesFilter(g, '@ev', d.method)).length });
+  if (related) opts.push({ key: '@rel', label: '🏢 有持股關係', n: related, tip: '成員之間有轉投資（權益法持股 ≥ 20%）、董監席位，或屬於同一個集團（MoneyDJ）' });
+  if (groups.some((g) => g.evidence)) opts.push({ key: '@ev', label: '🧾 證據強', n: groups.filter((g) => matchesFilter(g, '@ev', d.method)).length, tip: EVIDENCE_TIP });
   return opts;
 }
 
-const INST_FILTERS = [['@inst+', '🏦 法人買超'], ['@inst-', '🏦 法人賣超']]; // '@': never a grouping label
+const INST_FILTERS = [ // '@': never a grouping label
+  ['@inst+', '🏦 法人買超', '這一群合計的三大法人（外資＋投信＋自營商）當天是買超'],
+  ['@inst-', '🏦 法人賣超', '這一群合計的三大法人（外資＋投信＋自營商）當天是賣超'],
+];
 
 /** The chip actually in effect: the saved one if that day has cards for it, else 全部 (cards and CSV agree). */
 export function shownFilter(d, saved) {
@@ -264,7 +287,7 @@ export function matchesFilter(g, key, method) {
 
 export function filterHtml(d, current) {
   return `<div class="fd-filter seg">${filterOptions(d)
-    .map((o) => `<button type="button" data-filter="${escapeHtml(o.key)}"${o.key === current ? ' class="on"' : ''}${o.n ? '' : ' disabled'}>${escapeHtml(o.label)} <small>${o.n}</small></button>`)
+    .map((o) => `<button type="button" data-filter="${escapeHtml(o.key)}"${o.key === current ? ' class="on"' : ''}${o.n ? '' : ' disabled'}${o.tip ? ` title="${escapeHtml(`${o.tip}（${o.n} 組）`)}"` : ''}>${escapeHtml(o.label)} <small>${o.n}</small></button>`)
     .join('')}</div>`;
 }
 
