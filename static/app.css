@@ -428,3 +428,10 @@ table.link-heat td.self { background: #3a3e48; }
 .rt-pairs-t tr.on td { background: #ffffff0d; }
 .rt-pair-open > td { padding: 4px 0 8px !important; }
 .ic-align { margin-left: 6px; }
+.info-i { width: 20px; height: 20px; padding: 0; border-radius: 50%; font: italic 600 12px Georgia, serif; line-height: 18px; }
+.info-i.on { background: #2f5fd0; color: #fff; }
+.rot-info { margin: 4px 0 8px; padding: 8px 10px; border: 1px solid #2f5fd0aa; border-radius: 6px; background: #1b2233; font-size: 12px; }
+.rot-info-h { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; }
+.rot-info-t { border-collapse: collapse; width: 100%; }
+.rot-info-t td { padding: 3px 6px; vertical-align: top; border-bottom: 1px solid #ffffff10; }
+.rot-info-t td:first-child { white-space: nowrap; width: 6em; }

@@ -24,6 +24,7 @@ import { mountHistoryAiPanel } from './ainews.js';
 import { mountNewsPanel } from './newsthemes.js';
 import { digestText, finderMarkIndex, finderMarkTitle, mountFinderPanel } from './finder.js';
 import { mountLinkagePanel } from './linkage.js';
+import { rotationInfoHtml } from './rotinfo.js';
 
 const PREFS_KEY = 'openmarket.history.v1';
 const $ = (sel) => document.querySelector(sel);
@@ -414,7 +415,28 @@ function loadRotation() {
   return Promise.resolve();
 }
 
+// C's ⓘ: what a cell means under the chosen metric (follows the metric and the 強勢門檻 while open)
+function drawRotInfo() {
+  const box = $('#hRotInfo');
+  if (!box || box.hidden) return;
+  box.innerHTML = rotationInfoHtml(st.rotMetric, st.threshold);
+}
+$('#hRotInfoBtn')?.addEventListener('click', () => {
+  const box = $('#hRotInfo');
+  box.hidden = !box.hidden;
+  $('#hRotInfoBtn').setAttribute('aria-expanded', String(!box.hidden));
+  $('#hRotInfoBtn').classList.toggle('on', !box.hidden);
+  drawRotInfo();
+});
+$('#hRotInfo')?.addEventListener('click', (e) => {
+  if (!e.target.closest('[data-act="close-info"]')) return;
+  $('#hRotInfo').hidden = true;
+  $('#hRotInfoBtn').classList.remove('on');
+  $('#hRotInfoBtn').setAttribute('aria-expanded', 'false');
+});
+
 async function loadRotationNow() {
+  drawRotInfo();
   const table = $('#hRotation');
   let data;
   const t = ++tickets.rotation;
