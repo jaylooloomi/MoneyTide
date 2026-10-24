@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { concHtml, goneReading, hotHtml, hotNextDay, laggardsHtml, mergeGroups, motiveOf, reportText, trackHtml, trackRows, watchOf } from '../../static/js/report.js';
+import { concHtml, goneReading, hotHtml, hotNextDay, laggardsHtml, todayMove, mergeGroups, motiveOf, reportText, trackHtml, trackRows, watchOf } from '../../static/js/report.js';
 import { groupEvidenceItems } from '../../static/js/evidence.js';
 
 const m = (code, name = code) => ({ code, name, change_pct: 5 });
@@ -127,4 +127,15 @@ test('hotHtml: the stored days’ next day, 🔥 against the rest', () => {
   assert.match(html, /所有已存的日子（12 天，2026-07-29～2026-10-22）/);
   assert.match(html, /🔥 30 組／70 檔次：開盤 <span class="up">\+2\.10%<\/span>、收盤 <span class="down">-0\.50%<\/span>（扣大盤 <span class="down">-0\.80%<\/span>）、開高走低 <b>64%<\/b>、收黑 55%/);
   assert.match(html, /其他 80 組／170 檔次/);
+});
+
+test('todayMove: yesterday’s groups today, less 大盤; nothing for a group new today', () => {
+  const row = { members: [{ code: '1' }, { code: '2' }], cells: [3, 4] };
+  const q = { 1: { change_pct: 2 }, 2: { change_pct: -1 } };
+  assert.deepEqual(todayMove(row, 2, q, 1), { avg: 0.5, excess: -0.5 });
+  assert.equal(todayMove({ ...row, cells: [null, 4] }, 2, q, 1), null); // new today
+  assert.deepEqual(todayMove(row, 2, q, null), { avg: 0.5, excess: null });
+  const html = trackHtml(['2026-10-21', '2026-10-22'], [{ ...row, names: '甲、乙', status: '連 2 天', today: { avg: 0.5, excess: -0.5 } }]);
+  assert.match(html, /<th title="[^"]*">今天漲跌<\/th>/);
+  assert.match(html, /<td class="up" title="扣大盤 -0\.50%">\+0\.50%<small class="muted">（-0\.50%）<\/small><\/td>/);
 });

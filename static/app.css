@@ -504,6 +504,7 @@ table.link-heat td.self { background: #3a3e48; }
 .rp-track { table-layout: fixed; }
 .rp-track td, .rp-track th { text-align: center; padding-left: 2px; padding-right: 2px; }
 .rp-track th:first-child { width: 34%; }
-.rp-track th:last-child { width: 26%; }
+.rp-track th:last-child { width: 22%; }
+.rp-track th:nth-last-child(2) { width: 17%; }
 .rp-track td:first-child, .rp-track td:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 @media (max-width: 760px) { .rp-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); } }

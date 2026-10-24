@@ -227,12 +227,22 @@ function groupHtml(x, i, row) {
   </div>`;
 }
 
+/** Yesterday's group today: its members' mean 漲跌 and that less 大盤; null for a group new today. */
+export function todayMove(row, n, quotes, market) {
+  if (n < 2 || row.cells[n - 2] == null || !quotes) return null;
+  const xs = row.members.map((m) => quotes[m.code]?.change_pct).filter((v) => v != null);
+  if (!xs.length) return null;
+  const avg = xs.reduce((a, b) => a + b, 0) / xs.length;
+  return { avg, excess: market == null ? null : avg - market };
+}
+
 export function trackHtml(dates, rows) {
   if (!rows.length) return '<p class="hint">這幾天沒有找到群組。</p>';
   const cell = (c) => (c === undefined ? '<td class="muted" title="那天還沒計算">…</td>' : c === null ? '<td class="muted">—</td>' : `<td class="up">✓ ${c}</td>`);
+  const moveCell = (t) => (t ? `<td class="${t.avg > 0 ? 'up' : t.avg < 0 ? 'down' : ''}" title="${t.excess == null ? '' : `扣大盤 ${fmtPct(t.excess)}`}">${fmtPct(t.avg)}${t.excess == null ? '' : `<small class="muted">（${fmtPct(t.excess)}）</small>`}</td>` : '<td class="muted">—</td>');
   const cls = (s) => (s.includes('出貨') ? 'down rp-dump' : s.startsWith('消失') ? 'muted' : s.includes('變強') || s.startsWith('連') ? 'up' : '');
-  return `<table class="grid rp-track"><thead><tr><th class="l">群組</th>${dates.map((d) => `<th>${escapeHtml(d.slice(5))}</th>`).join('')}<th class="l">今天狀態</th></tr></thead><tbody>${rows
-    .map((r) => `<tr><td class="l" title="${escapeHtml(r.names)}">${escapeHtml(r.names)}</td>${r.cells.map(cell).join('')}<td class="l ${cls(r.status)}">${escapeHtml(r.status)}</td></tr>`)
+  return `<table class="grid rp-track"><thead><tr><th class="l">群組</th>${dates.map((d) => `<th>${escapeHtml(d.slice(5))}</th>`).join('')}<th title="昨天就有的組合：成員今天的平均漲跌（括號＝扣掉大盤）">今天漲跌</th><th class="l">今天狀態</th></tr></thead><tbody>${rows
+    .map((r) => `<tr><td class="l" title="${escapeHtml(r.names)}">${escapeHtml(r.names)}</td>${r.cells.map(cell).join('')}${moveCell(r.today)}<td class="l ${cls(r.status)}">${escapeHtml(r.status)}</td></tr>`)
     .join('')}</tbody></table>`;
 }
 
@@ -296,7 +306,10 @@ export function mountReportPanel(container, { onStock, query, condText }) {
     if (t !== state.ticket) return;
     const bench = (index?.benchmarks || []).map((b) => ({ name: b.name.replace(/（.*）/, ''), change_pct: b.change_pct }));
     // the vanished groups' members on the report day: 爆量收黑 or not
-    const goneCodes = trackRows(per).filter((r) => r.status.startsWith('消失')).flatMap((r) => r.members.map((m) => m.code));
+    // the members on the report day of every group that was there the day before: the vanished ones'
+    // 出貨 check, and how yesterday's groups did today
+    const n = dates.length;
+    const goneCodes = trackRows(per).filter((r) => n >= 2 && r.cells[n - 2] != null).flatMap((r) => r.members.map((m) => m.code));
     state.quotes = null;
     if (goneCodes.length) {
       try {
@@ -352,7 +365,9 @@ export function mountReportPanel(container, { onStock, query, condText }) {
     state.last = [date, dates, per, bench, progress];
     const list = per.at(-1) || [];
     const rows = trackRows(per);
+    const market = bench.find((b) => b.name.startsWith('大盤'))?.change_pct ?? null;
     for (const r of rows) {
+      r.today = todayMove(r, dates.length, state.quotes, market);
       if (r.status.startsWith('消失') && state.quotes) {
         const g = goneReading(r.members, state.quotes);
         if (g) r.status = g === '疑似出貨' ? '消失・疑似出貨（爆量收黑）' : '消失・不再同步';
