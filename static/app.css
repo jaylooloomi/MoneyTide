@@ -411,3 +411,7 @@ table.link-heat td.self { background: #3a3e48; }
 .ic-body.col .ic-chart { flex: none; width: 100%; }
 .ic-side.below { width: 100%; overflow-x: auto; }
 #hRotation tr.bench.sector td.name, .rot tr.bench.sector td.name { color: #9fd3ff; }
+/* 歷史 tabs: 分頁1 is the panel grid (#historyView), 分頁2 its own area; the toolbar above is shared */
+#historyView.tab-off { display: none !important; }
+.hist-tab2 { flex: 1; min-height: 0; overflow: auto; padding: 8px; }
+#hTabs { margin-right: 6px; }

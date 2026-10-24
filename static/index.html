@@ -45,6 +45,7 @@
     </div>
     </div>
     <div class="ctrls" id="histControls" hidden>
+      <div class="seg" id="hTabs" role="tablist" aria-label="分頁"><button data-tab="1" role="tab">分頁1</button><button data-tab="2" role="tab">分頁2</button></div>
       <button class="icon" id="hPrev" title="前一個交易日" aria-label="前一個交易日">◀</button>
       <input type="date" id="hDate" class="field" aria-label="日期">
       <button class="icon" id="hNext" title="下一個交易日" aria-label="下一個交易日">▶</button>
@@ -111,6 +112,10 @@
         <p id="watchEmpty" class="hint" hidden>尚無自選股。點熱力圖上的個股，在資訊卡中按「加入自選」。</p>
       </div>
     </aside>
+  </main>
+
+  <main class="hist-tab2" id="historyTab2" hidden>
+    <section class="panel"><div class="panel-h"><b>分頁2</b></div><p class="hint" style="padding:16px">這個分頁還沒有內容。上方的日期與分類兩個分頁共用。</p></section>
   </main>
 
   <main class="hist" id="historyView" hidden>

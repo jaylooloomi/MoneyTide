@@ -1167,21 +1167,57 @@ async function loadPeriods({ cachedOnly = false } = {}) {
 const GROUPINGS_OK = new Set(['industry', 'custom', 'concept', 'chain', 'news']);
 
 function parseHash() {
-  const m = /^#history(?:\/(\d{4}-\d{2}-\d{2}))?(?:\/(industry|custom|concept|chain|news))?$/.exec(location.hash);
-  return m ? { date: m[1] || null, grouping: m[2] || null } : null;
+  const m = /^#history(?:\/(\d{4}-\d{2}-\d{2}))?(?:\/(industry|custom|concept|chain|news))?(?:\/([12]))?$/.exec(location.hash);
+  return m ? { date: m[1] || null, grouping: m[2] || null, tab: m[3] ? Number(m[3]) : null } : null;
 }
 
 function writeHash() {
   if ($('#historyView').hidden || !st.date) return;
-  const hash = `#history/${st.date}/${st.grouping}`;
+  const hash = `#history/${st.date}/${st.grouping}${histTab.current === 2 ? '/2' : ''}`;
   if (location.hash !== hash) history.replaceState(null, '', hash);
 }
+
+// ---- 歷史 分頁: 分頁1 = every panel (#historyView), 分頁2 = its own area; date and grouping shared ----
+
+const TAB_KEY = 'openmarket.history.tab';
+const histTab = { current: 1 };
+try {
+  if (localStorage.getItem(TAB_KEY) === '2') histTab.current = 2;
+} catch {
+  /* default */
+}
+
+function setHistTab(tab) {
+  histTab.current = tab === 2 ? 2 : 1;
+  try {
+    localStorage.setItem(TAB_KEY, String(histTab.current));
+  } catch {
+    /* ignore */
+  }
+  const view = $('#historyView');
+  view.classList.toggle('tab-off', histTab.current !== 1);
+  $('#historyTab2').hidden = view.hidden || histTab.current !== 2;
+  for (const b of $('#hTabs').querySelectorAll('[data-tab]')) {
+    const on = Number(b.dataset.tab) === histTab.current;
+    b.classList.toggle('on', on);
+    b.setAttribute('aria-selected', String(on));
+  }
+  if (histTab.current === 1) window.dispatchEvent(new Event('resize')); // charts drawn while hidden get their size back
+  writeHash();
+}
+
+$('#hTabs').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-tab]');
+  if (b) setHistTab(Number(b.dataset.tab));
+});
 
 let hashWanted = null; // the bookmarked view, read once before the first load rewrites the hash
 
 function applyHashGrouping() {
   const h = (hashWanted = parseHash());
   if (h?.grouping && GROUPINGS_OK.has(h.grouping)) st.grouping = h.grouping;
+  // a bookmarked view says its tab (none = 分頁1); otherwise the last one used
+  setHistTab(h ? h.tab || 1 : histTab.current);
 }
 
 async function applyHashDate() {
@@ -1192,6 +1228,7 @@ async function applyHashDate() {
 async function onHashChange() {
   const h = parseHash();
   if (!h || $('#historyView').hidden) return;
+  if ((h.tab || 1) !== histTab.current) setHistTab(h.tab || 1);
   const groupingChanged = !!h.grouping && GROUPINGS_OK.has(h.grouping) && h.grouping !== st.grouping;
   const dateChanged = !!h.date && h.date !== st.date;
   if (groupingChanged) {
