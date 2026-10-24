@@ -128,6 +128,15 @@ export function hotNextDay(dates, per, quotesByDay) {
 
 /** 高點錯開但走勢一樣: the pairs N drops only for their highs being far apart, whose session shapes are
  *  as close as N's own (both methods' lists merged, closest first). Shown only — not groups, no evidence. */
+export function shapeList(results) {
+  const by = new Map();
+  for (const res of results) for (const x of res?.shape_pairs || []) {
+    const k = x.members.map((m) => m.code).sort().join(',');
+    if (!by.has(k) || by.get(k).dtw > x.dtw) by.set(k, x);
+  }
+  return [...by.values()].sort((a, b) => a.dtw - b.dtw);
+}
+
 export function shapeHtml(results) {
   const by = new Map();
   for (const res of results) for (const x of res?.shape_pairs || []) {
@@ -173,7 +182,7 @@ export function hotHtml(list, stats, wide = null) {
 }
 
 /** The report as plain text (複製成文字: for notes or a chat). */
-export function reportText(date, index, list, rows, hotStats = null) {
+export function reportText(date, index, list, rows, hotStats = null, shapes = []) {
   const lines = [`${date} 盤後報告`];
   if (index.length) lines.push(index.map((b) => `${b.name} ${fmtPct(b.change_pct)}`).join('　'));
   lines.push(`找到 ${list.length} 組，證據強 ${list.filter((x) => x.strong).length} 組，連續出現 ${rows.filter((r) => r.streak >= 1 && r.cells.at(-1) != null).length} 組`);
@@ -198,6 +207,10 @@ export function reportText(date, index, list, rows, hotStats = null) {
     if (lag?.stocks?.length) lines.push(`   同族群未跟上（${lag.label}：${lag.group}）：${lag.stocks.map((s) => `${s.name} ${fmtPct(s.change_pct)}`).join('、')}`);
     lines.push(`   明天觀察：${watchOf(x.g, row?.streak || 0).join('；')}`);
   });
+  if (shapes.length) {
+    lines.push('', `高點錯開但走勢一樣（${shapes.length} 對，可能分批推進）：`);
+    for (const x of shapes) lines.push(`   ${x.members.map((m) => m.name).join('＋')}：高點差 ${x.peak_gap} 分、扣指數 R ${x.excess_r == null ? '—' : x.excess_r.toFixed(2)}`);
+  }
   // the vanished ones, 疑似出貨 (爆量收黑) apart from the ones that only stopped moving together
   const gone = rows.filter((r) => r.status.startsWith('消失'));
   const dumped = gone.filter((r) => r.status.includes('出貨'));
@@ -400,7 +413,7 @@ export function mountReportPanel(container, { onStock, query, condText }) {
       ? `<button type="button" class="icon wide rp-gone">${state.allGone ? '收起消失的組合' : `其餘 ${gone.length - GONE_SHOWN} 組消失的組合`}</button>`
       : '';
     const hotStats = hotNextDay(dates, per, state.nextQuotes || {});
-    state.text = reportText(date, bench, list, rows, hotStats);
+    state.text = reportText(date, bench, list, rows, hotStats, shapeList(state.dayResults || []));
     const strong = list.filter((x) => x.strong).length;
     const going = rows.filter((r) => r.streak >= 1 && r.cells.at(-1) != null).length;
     const metric = (label, value) => `<div class="rp-metric"><small>${label}</small><b>${value}</b></div>`;

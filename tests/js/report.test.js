@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { concHtml, goneReading, shapeHtml, hotHtml, hotNextDay, laggardsHtml, todayMove, mergeGroups, motiveOf, reportText, trackHtml, trackRows, watchOf } from '../../static/js/report.js';
+import { concHtml, goneReading, shapeHtml, shapeList, hotHtml, hotNextDay, laggardsHtml, todayMove, mergeGroups, motiveOf, reportText, trackHtml, trackRows, watchOf } from '../../static/js/report.js';
 import { groupEvidenceItems } from '../../static/js/evidence.js';
 
 const m = (code, name = code) => ({ code, name, change_pct: 5 });
@@ -147,4 +147,10 @@ test('shapeHtml: both lists merged, one entry a pair, closest first', () => {
   assert.ok(html.indexOf('2383') < html.indexOf('1301')); // 1.2 before 1.5
   assert.match(html, /高點差 60 分、扣指數 R 0\.55、形狀距離 1\.50/); // the closer of the two entries for 1301/1326
   assert.equal(shapeHtml([null, {}]), '');
+});
+
+test('reportText lists 高點錯開但走勢一樣 too', () => {
+  const p = { members: [{ code: '1301', name: '台塑' }, { code: '1326', name: '台化' }], dtw: 1.5, peak_gap: 60, excess_r: 0.65 };
+  const shapes = shapeList([{ shape_pairs: [p] }]);
+  assert.match(reportText('2026-08-28', [], [], [], null, shapes), /高點錯開但走勢一樣（1 對，可能分批推進）：\n   台塑＋台化：高點差 60 分、扣指數 R 0\.65/);
 });
