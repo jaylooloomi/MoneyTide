@@ -216,6 +216,146 @@ export function buildIntradayOption(data, m, benches = []) {
   };
 }
 
+export const PICK_COLORS = ['#ffd400', '#3de0ff']; // 1st / 2nd picked stock (the K rows' outlines match)
+const COMPARE_BENCH_COLORS = ['#9aa0aa', '#c39bd3']; // 大盤／櫃買 in a comparison: away from the two stocks' yellow / cyan
+
+/** Two stocks on one % axis (each against its own previous close), volume below, 大盤／櫃買 dashed;
+ *  everything up to minute m, the axis range from the whole day so it does not jump while playing. */
+export function buildCompareOption(items, m, benches = []) {
+  const pctOf = (d, p) => (p / d.prev_close - 1) * 100;
+  let lo = 0;
+  let hi = 0;
+  for (const { data } of items) {
+    for (const b of data.bars) {
+      lo = Math.min(lo, pctOf(data, b[3]));
+      hi = Math.max(hi, pctOf(data, b[2]));
+    }
+  }
+  for (const b of benches) for (const p of b.points || []) (lo = Math.min(lo, p[1])), (hi = Math.max(hi, p[1]));
+  const pad = Math.max((hi - lo) * 0.06, 0.3);
+  const head = { xAxis: m, lineStyle: { color: '#ffd400', type: 'solid', width: 1.5 }, label: { show: false } };
+  const xAxis = (gridIndex, labels) => ({
+    type: 'value',
+    gridIndex,
+    min: 0,
+    max: END,
+    interval: 30,
+    axisLabel: { show: labels, color: '#8a8f9c', fontSize: 10, formatter: (v) => (v % 60 === 0 || v === END ? fmtClock(v) : '') },
+    axisLine: { lineStyle: { color: '#3a3e48' } },
+    axisTick: { show: false },
+    splitLine: { show: true, lineStyle: { color: '#23262e' } },
+  });
+  const step = Math.max(...items.map((x) => x.data.step_min || 1));
+  const lines = items.map(({ data, name }, i) => {
+    const s = statsAt(data, m);
+    return {
+      name,
+      type: 'line',
+      xAxisIndex: 0,
+      yAxisIndex: 0,
+      data: data.bars.filter((b) => b[0] <= m).map((b) => [b[0], pctOf(data, b[4])]),
+      showSymbol: false,
+      lineStyle: { color: PICK_COLORS[i], width: 1.6 },
+      itemStyle: { color: PICK_COLORS[i] },
+      markLine: i === 0 ? { symbol: 'none', silent: true, data: [{ yAxis: 0, lineStyle: { color: '#8a8f9c', type: 'dashed' }, label: { show: false } }, head] } : undefined,
+      markPoint: s?.peak
+        ? { symbol: 'circle', symbolSize: 9, itemStyle: { color: PICK_COLORS[i], borderColor: '#fff' }, label: { show: false }, data: [{ coord: [s.peak.m, pctOf(data, s.peak.price)] }] }
+        : undefined,
+    };
+  });
+  const volumes = items.map(({ data, name }, i) => ({
+    name: `${name} 量`,
+    type: 'bar',
+    xAxisIndex: 1,
+    yAxisIndex: 1,
+    barWidth: step === 5 ? 2 : 0.8,
+    // side by side: the second stock's bars sit a little to the right of the first one's
+    data: data.bars.filter((b) => b[0] <= m).map((b) => [b[0] + i * (step === 5 ? 2 : 0.45), b[5] ?? 0]),
+    itemStyle: { color: PICK_COLORS[i], opacity: 0.75 },
+    markLine: i === 0 ? { symbol: 'none', silent: true, data: [head] } : undefined,
+  }));
+  const benchLines = benches.map((b, i) => ({
+    name: b.name,
+    type: 'line',
+    xAxisIndex: 0,
+    yAxisIndex: 0,
+    data: (b.points || []).filter((p) => p[0] <= m).map((p) => [p[0], p[1]]),
+    showSymbol: false,
+    silent: true,
+    z: 1,
+    lineStyle: { color: COMPARE_BENCH_COLORS[i % COMPARE_BENCH_COLORS.length], width: 1, type: 'dashed', opacity: 0.8 },
+  }));
+  return {
+    animation: false,
+    grid: [
+      { left: 52, right: 12, top: 10, height: '62%' },
+      { left: 52, right: 12, top: '76%', bottom: 22 },
+    ],
+    tooltip: {
+      trigger: 'axis',
+      backgroundColor: '#1d212a',
+      borderColor: '#444a57',
+      textStyle: { color: '#ddd', fontSize: 12 },
+      axisPointer: { type: 'line', link: [{ xAxisIndex: 'all' }] },
+      formatter: (ps) => {
+        const t = ps[0]?.value?.[0];
+        if (t == null) return '';
+        const at = Math.floor(t);
+        const stocks = items
+          .map(({ data, name }, i) => {
+            const b = [...data.bars].reverse().find((x) => x[0] <= at);
+            return b ? `<span style="color:${PICK_COLORS[i]}">●</span> ${escapeHtml(name)} ${b[4]}（${fmtPct(pctOf(data, b[4]))}）` : '';
+          })
+          .filter(Boolean);
+        const idx = benches
+          .map((b) => [b.name, (b.points || []).filter((p) => p[0] <= at).at(-1)])
+          .filter(([, p]) => p)
+          .map(([name, p]) => `${escapeHtml(name)} ${fmtPct(p[1])}`);
+        return [fmtClock(at), ...stocks, ...idx].join('<br>');
+      },
+    },
+    xAxis: [xAxis(0, false), xAxis(1, true)],
+    yAxis: [
+      { type: 'value', gridIndex: 0, min: lo - pad, max: hi + pad, axisLabel: { color: '#aeb3bf', fontSize: 10, formatter: (v) => fmtPct(v) }, splitLine: { lineStyle: { color: '#23262e' } } },
+      { type: 'value', gridIndex: 1, axisLabel: { color: '#8a8f9c', fontSize: 9, formatter: (v) => (v >= 1e6 ? `${Math.round(v / 1e6)}k` : Math.round(v / 1000)) }, splitLine: { show: false } },
+    ],
+    series: [...lines, ...benchLines, ...volumes],
+  };
+}
+
+/** The info column for two stocks: the same figures side by side, as of the playhead minute. */
+export function compareInfoHtml(items, m) {
+  const stats = items.map(({ data }) => statsAt(data, m));
+  const cls = (v) => (v > 0 ? 'up' : v < 0 ? 'down' : '');
+  const p = (d, v) => (v == null ? '—' : v.toFixed(d.prev_close < 50 ? 2 : 1));
+  const cell = (i, f) => {
+    const s = stats[i];
+    return s ? f(items[i].data, s) : '—';
+  };
+  const row = (k, f) => `<tr><td class="muted">${k}</td>${items.map((_, i) => `<td>${cell(i, f)}</td>`).join('')}</tr>`;
+  const lockOf = (d, s) => (d.limit_up_pct == null || s.firstLock === null ? '—' : `<span class="${s.locked ? 'up' : ''}">${fmtClock(s.firstLock)}${s.locked ? '' : '（開）'}</span>`);
+  return `<table class="ic-info cmp">
+    <tr><td></td>${items.map(({ name }, i) => `<td><b style="color:${PICK_COLORS[i]}">${escapeHtml(name)}</b></td>`).join('')}</tr>
+    ${row(m >= END ? '收盤' : '現價', (d, s) => `<span class="${cls(s.change)}">${p(d, s.last)}</span>`)}
+    ${row('漲幅', (d, s) => `<span class="${cls(s.change)}">${fmtPct(s.pct)}</span>`)}
+    ${row('最高', (d, s) => p(d, s.high))}
+    ${row('最低', (d, s) => p(d, s.low))}
+    ${row('振幅', (d, s) => `${s.amplitude.toFixed(2)}%`)}
+    ${row('成交量', (d, s) => (s.volume == null ? '—' : `${Math.round(s.volume / 1000).toLocaleString()}`))}
+    ${row('成交值', (d, s) => (s.turnover == null ? '—' : fmtTurnover(s.turnover / 1e8)))}
+    ${row('最高點', (d, s) => (s.peak ? `${fmtClock(s.peak.m)}<br>${fmtPct((s.peak.price / d.prev_close - 1) * 100)}` : '—'))}
+    ${row('鎖漲停', lockOf)}
+  </table>`;
+}
+
+/** The K rows picked for the chart: a plain click shows just that stock, Ctrl/⌘/Shift adds a second
+ *  one (a third replaces the older), clicking a picked stock with the modifier drops it. */
+export function nextPicks(picked, code, additive) {
+  if (!additive) return [code];
+  if (picked.includes(code)) return picked.length > 1 ? picked.filter((c) => c !== code) : picked;
+  return [...picked, code].slice(-2);
+}
+
 /** The info column: figures as of the playhead minute. */
 export function infoHtml(data, s, m) {
   if (!s) return '<p class="hint">尚未成交</p>';
@@ -247,63 +387,143 @@ export function infoHtml(data, s, m) {
 
 // ---- DOM / ECharts ---------------------------------------------------------------------
 
-/** The chart panel inside `el`; load(code) fetches a member, sync(m) redraws up to minute m. */
+const LAYOUT_KEY = 'openmarket.intraday.compare';
+export const COMPARE_LAYOUTS = { overlay: '疊圖', stack: '上下' };
+
+/** The chart panel inside `el`: show([{code, name}]) draws one stock, or two (疊圖 on one % axis /
+ *  上下 two full charts, switchable); sync(m) redraws up to minute m. load(code, name) = one stock. */
 export function mountIntraday(el, { date, onCard, benchmarks = [] }) {
-  el.innerHTML = `<div class="ic-head"><b class="ic-title"></b><span class="muted ic-note"></span>
+  el.innerHTML = `<div class="ic-head"><span class="ic-title"></span><span class="muted ic-note"></span>
+      <div class="seg ic-layout" hidden>${Object.entries(COMPARE_LAYOUTS).map(([k, label]) => `<button type="button" data-layout="${k}">${label}</button>`).join('')}</div>
       <button type="button" class="icon wide ic-card">資訊卡</button></div>
-    <div class="ic-body"><div class="ic-chart"></div><div class="ic-side"></div></div>`;
+    <div class="ic-bodies"></div>`;
   const title = el.querySelector('.ic-title');
   const note = el.querySelector('.ic-note');
-  const chartEl = el.querySelector('.ic-chart');
-  const side = el.querySelector('.ic-side');
+  const bodies = el.querySelector('.ic-bodies');
+  const layoutSeg = el.querySelector('.ic-layout');
   const cache = new Map();
-  const state = { code: null, data: null, m: END, chart: null, ticket: 0 };
-  el.querySelector('.ic-card').addEventListener('click', () => state.code && onCard?.(state.code));
+  let layout = 'overlay';
+  try {
+    if (localStorage.getItem(LAYOUT_KEY) in COMPARE_LAYOUTS) layout = localStorage.getItem(LAYOUT_KEY);
+  } catch {
+    /* default */
+  }
+  // items: [{code, name, data}]; slots: the chart areas on screen, rebuilt when their shape changes
+  const state = { items: [], m: END, ticket: 0, slots: [], shape: '' };
+  el.querySelector('.ic-card').addEventListener('click', () => state.items[0] && onCard?.(state.items[0].code));
+  title.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-card]');
+    if (b) onCard?.(b.dataset.card);
+  });
+  layoutSeg.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-layout]');
+    if (!b) return;
+    layout = b.dataset.layout;
+    try {
+      localStorage.setItem(LAYOUT_KEY, layout);
+    } catch {
+      /* ignore */
+    }
+    show(state.items).then(() => draw()); // cached: redraws with the note for the new layout
+  });
 
-  function draw() {
-    const d = state.data;
-    if (!d) return;
-    if (!d.bars.length) {
-      side.innerHTML = '';
-      chartEl.innerHTML = '<p class="hint" style="padding:8px">這一天沒有這檔的分時資料。</p>';
-      state.chart?.dispose();
-      state.chart = null;
-      return;
-    }
-    if (!state.chart) {
-      chartEl.innerHTML = '';
-      state.chart = echarts.init(chartEl);
-      new ResizeObserver(() => state.chart?.resize()).observe(chartEl);
-    }
-    state.chart.setOption(buildIntradayOption(d, state.m, benchmarks), { notMerge: true });
-    side.innerHTML = infoHtml(d, statsAt(d, state.m), state.m);
+  function slotsFor(n) {
+    const shape = `${n}|${n === 2 ? layout : ''}`;
+    if (shape === state.shape) return state.slots;
+    for (const s of state.slots) s.chart?.dispose();
+    const count = n === 2 && layout === 'stack' ? 2 : 1;
+    const wide = n === 2 && layout === 'overlay';
+    bodies.innerHTML = Array.from(
+      { length: count },
+      (_, i) => `${count === 2 ? `<div class="ic-sub" style="color:${PICK_COLORS[i]}"></div>` : ''}<div class="ic-body"><div class="ic-chart${count === 2 ? ' half' : ''}"></div><div class="ic-side${wide ? ' wide' : ''}"></div></div>`,
+    ).join('');
+    const subs = [...bodies.querySelectorAll('.ic-sub')];
+    state.slots = [...bodies.querySelectorAll('.ic-body')].map((b, i) => ({ chartEl: b.querySelector('.ic-chart'), side: b.querySelector('.ic-side'), sub: subs[i] || null, chart: null }));
+    state.shape = shape;
+    return state.slots;
   }
 
-  async function load(code, name) {
-    state.code = code;
-    const t = ++state.ticket;
-    title.textContent = `${name || code} ${code} · ${date}`;
-    note.textContent = '載入中…';
-    let d = cache.get(code);
-    if (!d) {
-      try {
-        const r = await fetch(`/api/history/intraday?code=${encodeURIComponent(code)}&date=${encodeURIComponent(date)}`, { cache: 'no-store' });
-        d = await r.json();
-        if (!r.ok) throw new Error(d.detail || `HTTP ${r.status}`);
-        cache.set(code, d);
-      } catch (err) {
-        if (t === state.ticket) note.textContent = `載入失敗：${err.message}`;
-        return;
-      }
+  function paintSlot(slot, option, sideHtml) {
+    if (!slot.chart) {
+      slot.chartEl.innerHTML = '';
+      slot.chart = echarts.init(slot.chartEl);
+      new ResizeObserver(() => slot.chart?.resize()).observe(slot.chartEl);
     }
-    if (t !== state.ticket) return;
-    state.data = d;
-    note.innerHTML = `${d.step_min === 5 ? '5 分 K' : '1 分 K'}${d.source === 'recorded' ? '（自錄，無成交量）' : ''}；紫線＝均價；● 日內最高點${benchmarks.length ? `；虛線＝${benchmarks.map((b, i) => `<span style="color:${BENCH_COLORS[i % BENCH_COLORS.length]}">${escapeHtml(b.name)}</span>`).join('／')}（同一 % 軸）` : ''}`;
+    slot.chart.setOption(option, { notMerge: true });
+    slot.side.innerHTML = sideHtml;
+  }
+
+  function empty(slot, name) {
+    slot.chart?.dispose();
+    slot.chart = null;
+    slot.side.innerHTML = '';
+    slot.chartEl.innerHTML = `<p class="hint" style="padding:8px">這一天沒有${escapeHtml(name || '這檔')}的分時資料。</p>`;
+  }
+
+  function draw() {
+    const items = state.items.filter((x) => x.data);
+    if (!items.length || items.length < state.items.length) return;
+    layoutSeg.hidden = items.length < 2;
+    for (const b of layoutSeg.querySelectorAll('[data-layout]')) b.classList.toggle('on', b.dataset.layout === layout);
+    const slots = slotsFor(items.length);
+    if (items.length === 2 && layout === 'overlay') {
+      const withBars = items.filter((x) => x.data.bars.length);
+      if (!withBars.length) return empty(slots[0]);
+      paintSlot(slots[0], buildCompareOption(withBars, state.m, benchmarks), compareInfoHtml(withBars, state.m));
+      return;
+    }
+    items.forEach((x, i) => {
+      if (slots[i].sub) slots[i].sub.textContent = `${x.name || x.code} ${x.code}`; // 上下: which chart is which
+      if (!x.data.bars.length) return empty(slots[i], x.name);
+      paintSlot(slots[i], buildIntradayOption(x.data, state.m, benchmarks), infoHtml(x.data, statsAt(x.data, state.m), state.m));
+    });
+  }
+
+  function heading(items) {
+    const two = items.length === 2;
+    title.innerHTML = items
+      .map((x, i) => `<b class="ic-name" data-card="${escapeHtml(x.code)}" title="點名稱開資訊卡"${two ? ` style="color:${PICK_COLORS[i]}"` : ''}>${escapeHtml(x.name || x.code)} ${escapeHtml(x.code)}</b>`)
+      .join(' <span class="muted">vs</span> ') + ` <span class="muted">· ${escapeHtml(date)}</span>`;
+  }
+
+  async function fetchDay(code) {
+    if (cache.has(code)) return cache.get(code);
+    const r = await fetch(`/api/history/intraday?code=${encodeURIComponent(code)}&date=${encodeURIComponent(date)}`, { cache: 'no-store' });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.detail || `HTTP ${r.status}`);
+    cache.set(code, d);
+    return d;
+  }
+
+  async function show(list) {
+    const t = ++state.ticket;
+    state.items = list.map(({ code, name }) => ({ code, name, data: cache.get(code) || null }));
+    heading(state.items);
+    note.textContent = '載入中…';
+    try {
+      const datas = await Promise.all(state.items.map((x) => fetchDay(x.code)));
+      if (t !== state.ticket) return;
+      state.items.forEach((x, i) => (x.data = datas[i]));
+    } catch (err) {
+      if (t === state.ticket) note.textContent = `載入失敗：${err.message}`;
+      return;
+    }
+    const d = state.items[0].data;
+    const step = `${state.items.some((x) => x.data.step_min === 5) ? '5 分 K' : '1 分 K'}${state.items.some((x) => x.data.source === 'recorded') ? '（自錄，無成交量）' : ''}`;
+    const benchIn = (colors) => (benchmarks.length ? `；虛線＝${benchmarks.map((b, i) => `<span style="color:${colors[i % colors.length]}">${escapeHtml(b.name)}</span>`).join('／')}` : '');
+    const bench = benchIn(state.items.length === 2 && layout === 'overlay' ? COMPARE_BENCH_COLORS : BENCH_COLORS);
+    note.innerHTML =
+      state.items.length === 2 && layout === 'overlay'
+        ? `${step}；兩檔都換算成相對各自昨收的 %，可直接比強弱；● 各自的日內最高點${bench}；Ctrl／⌘＋點 K 的列可換檔或取消`
+        : state.items.length === 2
+          ? `${step}；上下兩張各自完整的走勢（價格軸、漲停線、紫線＝均價）${bench}；Ctrl／⌘＋點 K 的列可換檔或取消`
+        : `${d.step_min === 5 ? '5 分 K' : '1 分 K'}${d.source === 'recorded' ? '（自錄，無成交量）' : ''}；紫線＝均價；● 日內最高點${bench}${benchmarks.length ? '（同一 % 軸）' : ''}；Ctrl／⌘＋點另一列可加入比較`;
     draw();
   }
 
   return {
-    load,
+    show,
+    load: (code, name) => show([{ code, name }]),
     sync(m) {
       state.m = m;
       draw();

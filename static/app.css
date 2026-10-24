@@ -392,3 +392,11 @@ table.link-heat td.self { background: #3a3e48; }
 .cm-drill-h { display: flex; align-items: center; gap: 6px; padding: 4px 2px 6px; position: sticky; top: 0; background: var(--panel); z-index: 1; }
 .cm-drill-h button { width: auto; white-space: nowrap; }
 .fd-margin { font-size: 12px; margin-bottom: 4px; color: #cfd3dc; }
+.ic-bodies { display: flex; flex-direction: column; gap: 6px; }
+.ic-chart.half { height: 250px; }
+.ic-side.wide { width: 190px; }
+.ic-info.cmp td { text-align: right; }
+.ic-info.cmp td:first-child { text-align: left; }
+.ic-name { cursor: pointer; }
+.ic-layout { margin-left: 6px; }
+.ic-sub { font-size: 12px; font-weight: 600; margin: 2px 0 -2px; }

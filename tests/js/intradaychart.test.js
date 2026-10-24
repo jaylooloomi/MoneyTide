@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { benchPath, buildIntradayOption, infoHtml, priceRange, statsAt, vwapPath } from '../../static/js/intradaychart.js';
+import { benchPath, buildCompareOption, compareInfoHtml, nextPicks, buildIntradayOption, infoHtml, priceRange, statsAt, vwapPath } from '../../static/js/intradaychart.js';
 
 // prev close 100, limit-up +10% (110): locks at 09:02, opens at 09:03, locks again at 09:04
 const data = {
@@ -75,4 +75,32 @@ test('statsAt: the lock is caught when the rounded % rebuilds a price just above
   const s = statsAt(d, 270);
   assert.equal(s.firstLock, 1);
   assert.equal(s.locked, true);
+});
+
+test('nextPicks: a plain click shows one, Ctrl/⌘/Shift adds a second, a third replaces the older', () => {
+  assert.deepEqual(nextPicks(['A'], 'B', false), ['B']);
+  assert.deepEqual(nextPicks(['A'], 'B', true), ['A', 'B']);
+  assert.deepEqual(nextPicks(['A', 'B'], 'C', true), ['B', 'C']);
+  assert.deepEqual(nextPicks(['A', 'B'], 'A', true), ['B']); // modifier on a picked one drops it
+  assert.deepEqual(nextPicks(['A'], 'A', true), ['A']); // never empty
+  assert.deepEqual(nextPicks([], 'A', true), ['A']);
+});
+
+test('buildCompareOption / compareInfoHtml: two stocks on one % axis, figures side by side', () => {
+  const other = { prev_close: 50, limit_up_pct: 10, step_min: 1, bars: [[0, 50, 51, 49.5, 51, 500], [1, 51, 52, 51, 52, 800], [3, 52, 52, 51, 51.5, 100]] };
+  const items = [{ code: 'A', name: '甲', data }, { code: 'B', name: '乙', data: other }];
+  const opt = buildCompareOption(items, 3, [{ name: '大盤', points: [[0, -0.5], [3, -1]] }]);
+  const a = opt.series.find((x) => x.name === '甲');
+  const b = opt.series.find((x) => x.name === '乙');
+  assert.deepEqual(a.data.map((p) => p[0]), [0, 1, 2, 3]); // up to the playhead
+  assert.ok(Math.abs(a.data[2][1] - 10) < 1e-9); // 110 against prev 100
+  assert.ok(Math.abs(b.data[1][1] - 4) < 1e-9); // 52 against prev 50
+  assert.notEqual(a.lineStyle.color, b.lineStyle.color);
+  assert.ok(opt.yAxis[0].max >= 12 && opt.yAxis[0].min <= -1); // the whole day (甲 reaches 112 after 13:00) and the index
+  assert.deepEqual(opt.series.find((x) => x.name === '大盤').data, [[0, -0.5], [3, -1]]);
+  assert.equal(opt.series.filter((x) => x.type === 'bar').length, 2);
+  const html = compareInfoHtml(items, 270);
+  assert.match(html, /甲<\/b><\/td><td><b style="color:[^"]+">乙/);
+  assert.match(html, /漲幅<\/td><td><span class="up">\+10\.00%<\/span><\/td><td><span class="up">\+3\.00%/);
+  assert.match(html, /鎖漲停<\/td><td><span class="up">09:02<\/span><\/td><td>—/); // 甲 locked from 09:02 and still locked; 乙 never
 });

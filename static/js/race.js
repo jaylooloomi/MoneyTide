@@ -4,7 +4,7 @@
 // a stock locked limit-up stays ahead of every later limit-up (and of everyone not at the limit).
 // Pure frame builders on top (node --test); the animated panel below.
 
-import { mountIntraday } from './intradaychart.js';
+import { PICK_COLORS, mountIntraday, nextPicks } from './intradaychart.js';
 import { colorFor, escapeHtml, fmtPct, limitTag } from './transform.js';
 
 export const RACE_END = 270; // minutes after 09:00 → 13:30
@@ -199,7 +199,7 @@ export function mountRace(box, d, { onStock } = {}) {
       <div class="seg race-speed">${Object.entries(RACE_SPEEDS)
         .map(([k, [label]]) => `<button type="button" data-speed="${k}"${k === speed ? ' class="on"' : ''}>${label}</button>`)
         .join('')}</div>
-      <small class="muted">${step}；● ＝到目前為止的最高點；👑 龍頭＝市值最大；${LEAD_ICON} 領漲＝當下排第一${lead ? `（收盤領漲：${escapeHtml(byCode.get(lead.code)?.name || lead.code)}，${fmtClock(lead.from)} 起一路領先）` : ''}；先鎖漲停的排前面；點一列看右邊的走勢圖</small>
+      <small class="muted">${step}；● ＝到目前為止的最高點；👑 龍頭＝市值最大；${LEAD_ICON} 領漲＝當下排第一${lead ? `（收盤領漲：${escapeHtml(byCode.get(lead.code)?.name || lead.code)}，${fmtClock(lead.from)} 起一路領先）` : ''}；先鎖漲停的排前面；點一列看右邊的走勢圖，Ctrl／⌘＋點再加一檔一起比較</small>
     </div>
     <div class="rt">
       <div class="rt-axis">${TICKS.map(([label, m]) => `<span style="left:${pctX(m)}%">${label}</span>`).join('')}</div>
@@ -221,7 +221,7 @@ export function mountRace(box, d, { onStock } = {}) {
             const m = byCode.get(c);
             const extra = m.turnover_rate != null ? `　週轉率 ${m.turnover_rate.toFixed(1)}%　振幅 ${m.amplitude_pct?.toFixed(1) ?? '—'}%` : '';
             const inst = instTip(m.inst_net);
-            return `<div class="rt-row" data-code="${escapeHtml(c)}" title="${escapeHtml(c)} ${escapeHtml(m.name)}${extra}${inst}：點一下看右邊的走勢圖">
+            return `<div class="rt-row" data-code="${escapeHtml(c)}" title="${escapeHtml(c)} ${escapeHtml(m.name)}${extra}${inst}：點一下看右邊的走勢圖，Ctrl／⌘＋點加入比較">
               <span class="rt-rank"></span><span class="rt-name">${c === leader ? '<span title="龍頭：族群市值最大">👑</span>' : ''}${escapeHtml(m.name)}<span class="rt-lead" title="領漲：這一分鐘排第一（有漲停時是最早鎖住的）" hidden>${LEAD_ICON}</span></span>
               <span class="rt-track">
                 <svg viewBox="0 0 ${RACE_END} ${ROW_H}" preserveAspectRatio="none"><line class="rt-zero" x1="0" x2="${RACE_END}" y1="${y(0)}" y2="${y(0)}"/><polyline class="rt-path"/></svg>
@@ -239,11 +239,16 @@ export function mountRace(box, d, { onStock } = {}) {
   const seek = box.querySelector('.race-seek');
   const head = box.querySelector('.rt-head');
   const playBtn = box.querySelector('[data-act="play"]');
-  const state = { m: RACE_END, timer: null, picked: null };
-  function pick(code) {
-    state.picked = code;
-    for (const [c, el] of rows) el.classList.toggle('on', c === code);
-    chart.load(code, byCode.get(code)?.name).then(() => chart.sync(state.m));
+  const state = { m: RACE_END, timer: null, picked: [] };
+  // a plain click shows one stock; Ctrl / ⌘ / Shift + click adds a second one to compare (at most two)
+  function pick(code, additive = false) {
+    state.picked = nextPicks(state.picked, code, additive);
+    for (const [c, el] of rows) {
+      const i = state.picked.indexOf(c);
+      el.classList.toggle('on', i >= 0);
+      el.style.outlineColor = i >= 0 && state.picked.length === 2 ? `${PICK_COLORS[i]}aa` : '';
+    }
+    chart.show(state.picked.map((c) => ({ code: c, name: byCode.get(c)?.name }))).then(() => chart.sync(state.m));
   }
 
   function show(m) {
@@ -323,7 +328,7 @@ export function mountRace(box, d, { onStock } = {}) {
       return;
     }
     const row = e.target.closest('.rt-row[data-code]'); // the index rows are for comparison only
-    if (row) pick(row.dataset.code);
+    if (row) pick(row.dataset.code, e.ctrlKey || e.metaKey || e.shiftKey);
   });
   seek.addEventListener('input', () => {
     stop();
