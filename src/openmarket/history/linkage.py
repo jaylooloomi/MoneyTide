@@ -402,7 +402,7 @@ def index_k(store: HistoryStore, day: date, markets: list[str], days: int = K5_D
     return out
 
 
-DAYTRADE_HOT = 40.0  # 當沖比 (% of the day's traded shares) from which the move reads as 隔日沖 hot money
+DAYTRADE_HOT = 50.0  # (40 marked nearly every group on a busy day) 當沖比 (% of the day's traded shares) from which the move reads as 隔日沖 hot money
 
 
 def daytrade_ratios(store: HistoryStore, days: list[date], codes: list[str]) -> dict[str, dict[date, float]]:

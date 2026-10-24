@@ -156,31 +156,58 @@ export function mountReportPanel(container, { onStock }) {
     body.innerHTML = '<p class="hint">整理中…</p>';
     const i = days.indexOf(date);
     const dates = days.slice(i, i + TRACK_DAYS).reverse(); // oldest → the report day
+    const one = async (d, stored) => {
+      const [known, fresh] = await Promise.all([result(d, 'known', stored), result(d, 'new', stored)]);
+      return known || fresh ? mergeGroups(known, fresh) : null;
+    };
+    let index;
+    let per;
     try {
-      const [index, ...per] = await Promise.all([
+      // the report day may compute; the days before only if stored (the rest is worked out below)
+      [index, ...per] = await Promise.all([
         fetch(`/api/history/index-race?date=${encodeURIComponent(date)}`).then((r) => (r.ok ? r.json() : null)).catch(() => null),
-        ...dates.map(async (d) => {
-          const today = d === date; // the report day may compute; earlier days only if stored
-          const [known, fresh] = await Promise.all([result(d, 'known', !today), result(d, 'new', !today)]);
-          return known || fresh ? mergeGroups(known, fresh) : null;
-        }),
+        ...dates.map((d) => one(d, d !== date)),
       ]);
-      if (t !== state.ticket) return;
-      const list = per.at(-1) || [];
-      const rows = trackRows(per);
-      const bench = (index?.benchmarks || []).map((b) => ({ name: b.name.replace(/（.*）/, ''), change_pct: b.change_pct }));
-      state.text = reportText(date, bench, list, rows);
-      const strong = list.filter((x) => x.strong).length;
-      const going = rows.filter((r) => r.streak >= 1 && r.cells.at(-1) != null).length;
-      const metric = (label, value) => `<div class="rp-metric"><small>${label}</small><b>${value}</b></div>`;
-      body.innerHTML = `<div class="rp-metrics">${metric('找到群組', list.length)}${metric('證據強', strong)}${metric('連續出現', going)}${metric('大盤／櫃買', bench.map((b) => `<span class="${b.change_pct > 0 ? 'up' : 'down'}">${fmtPct(b.change_pct)}</span>`).join(' / ') || '—')}</div>
-        ${list.length ? list.slice(0, SHOW_MAX).map((x, k) => groupHtml(x, k, rows.find((r) => r.key === x.key))).join('') : '<p class="hint">這一天沒有找到群組（或 N 還沒算完，稍後再開）。</p>'}
-        ${list.length > SHOW_MAX ? `<p class="muted">其餘 ${list.length - SHOW_MAX} 組在分頁2 的 N 看得到。</p>` : ''}
-        <h3 class="rp-h">跨天追蹤 <small class="muted">格子＝那天的證據 ✓ 數；— 那天沒有這組；… 那天還沒計算</small></h3>
-        ${trackHtml(dates, rows)}`;
     } catch (err) {
       if (t === state.ticket) body.innerHTML = `<p class="hint">${escapeHtml(err.message)}</p>`;
+      return;
     }
+    if (t !== state.ticket) return;
+    const bench = (index?.benchmarks || []).map((b) => ({ name: b.name.replace(/（.*）/, ''), change_pct: b.change_pct }));
+    draw(date, dates, per, bench, '');
+    // the days before that N never computed (only the latest 5 are, after the close): one at a time, the
+    // nearest first, the table filled in as each one lands; a new date stops it
+    const missing = dates.map((d, k) => [d, k]).filter(([d, k]) => d !== date && per[k] === null).reverse();
+    for (const [n, [d, k]] of missing.entries()) {
+      draw(date, dates, per, bench, `往前計算 ${d.slice(5)}（${n + 1}/${missing.length}，舊日子一天約 1～2 分鐘）…`);
+      try {
+        per[k] = (await one(d, false)) || [];
+      } catch {
+        per[k] = [];
+      }
+      if (t !== state.ticket) return;
+    }
+    if (missing.length) draw(date, dates, per, bench, '');
+  }
+
+  function draw(date, dates, per, bench, progress) {
+    const list = per.at(-1) || [];
+    const rows = trackRows(per);
+    state.text = reportText(date, bench, list, rows);
+    const strong = list.filter((x) => x.strong).length;
+    const going = rows.filter((r) => r.streak >= 1 && r.cells.at(-1) != null).length;
+    const metric = (label, value) => `<div class="rp-metric"><small>${label}</small><b>${value}</b></div>`;
+    // 摘要 across the top; the day's groups (A1) on the left, 跨天追蹤 (A3) on the right
+    body.innerHTML = `<div class="rp-metrics">${metric('找到群組', list.length)}${metric('證據強', strong)}${metric('連續出現', going)}${metric('大盤／櫃買', bench.map((b) => `<span class="${b.change_pct > 0 ? 'up' : 'down'}">${fmtPct(b.change_pct)}</span>`).join(' / ') || '—')}</div>
+      <div class="rp-cols"><div class="rp-left">
+        <h3 class="rp-h">${escapeHtml(date)} 找到的群組</h3>
+        ${list.length ? list.slice(0, SHOW_MAX).map((x, k) => groupHtml(x, k, rows.find((r) => r.key === x.key))).join('') : '<p class="hint">這一天沒有找到群組（或 N 還沒算完，稍後再開）。</p>'}
+        ${list.length > SHOW_MAX ? `<p class="muted">其餘 ${list.length - SHOW_MAX} 組在分頁2 的 N 看得到。</p>` : ''}
+      </div><div class="rp-right">
+        <h3 class="rp-h">跨天追蹤 <small class="muted">格子＝那天的證據 ✓ 數；— 那天沒有這組；… 還沒計算</small></h3>
+        ${progress ? `<p class="hint rp-progress">${escapeHtml(progress)}</p>` : ''}
+        ${trackHtml(dates, rows)}
+      </div></div>`;
   }
 
   body.addEventListener('click', (e) => {

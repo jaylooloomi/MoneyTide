@@ -188,7 +188,7 @@ export function cardHtml(g, i) {
   const inst = instParts.length ? `<div class="fd-inst">🏦 ${instParts.join('　')}</div>` : '';
   const margin = marginText(g);
   const dt = g.daytrade?.hot
-    ? `<div class="fd-dt" title="當沖成交股數 ÷ 成交股數（上市才有逐檔資料）；當沖比高多半是隔日沖等短線熱錢，跟有計畫的佈局不同（不算在 🧾 證據裡）">🔥 當沖比高：${Object.entries(g.daytrade.by_code)
+    ? `<div class="fd-dt" title="當沖成交股數 ÷ 成交股數（上市、上櫃都有）；成員平均 ≥ 50% 才標 🔥。當沖比高多半是隔日沖等短線熱錢，跟有計畫的佈局不同（不算在 🧾 證據裡）">🔥 當沖比高：${Object.entries(g.daytrade.by_code)
         .map(([c, v]) => `${escapeHtml(g.members.find((m) => m.code === c)?.name || c)} ${v.toFixed(0)}%`)
         .join('、')}</div>`
     : '';

@@ -490,6 +490,10 @@ table.link-heat td.self { background: #3a3e48; }
 .rp-src { font-size: 11px; }
 .rp-line { margin: 2px 0 2px 24px; line-height: 1.6; }
 .rp-chips span { margin-right: 6px; }
-.rp-h { font-size: 14px; margin: 14px 0 6px; }
+.rp-h { font-size: 14px; margin: 4px 0 6px; }
+.rp-cols { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+.rp-right { position: sticky; top: 0; } /* the table stays in view while the groups scroll */
+.rp-progress { margin: 0 0 6px; color: #ffd400; }
+@media (max-width: 1100px) { .rp-cols { grid-template-columns: minmax(0, 1fr); } .rp-right { position: static; } }
 .rp-track td, .rp-track th { text-align: center; }
 @media (max-width: 760px) { .rp-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
