@@ -25,7 +25,7 @@ from .explain import explain_day
 from .history.linkage import (
     pearson,
     INTRADAY_HIGH_R, INTRADAY_LOW_R, bucket_closes, daily_linkage, fmt_minute, pair_matrix, peak_minute_from_bars, peak_minute_from_ticks,
-    align_bars, amplitude_pct, limit_down_pct, limit_up_pct, minute_bars, turnover_rate, peak_stats, tick_bars, with_close_bar, race_points, returns, locked_level, daily_k, index_k, daytrade_ratios, daytrade_group, DAYTRADE_HOT, top_members, verdict_r, verdict_timing,
+    align_bars, amplitude_pct, limit_down_pct, limit_up_pct, minute_bars, turnover_rate, peak_stats, tick_bars, with_close_bar, race_points, returns, locked_level, daily_k, index_k, daytrade_ratios, daytrade_group, DAYTRADE_BASE_DAYS, DAYTRADE_HOT, top_members, verdict_r, verdict_timing,
 )
 from .history.finder import INST_STREAK_DAYS, INTRADAY_BASES, FinderParams, laggards, inst_streak, inst_summary, margin_changes, margin_summary, pair_extras, persistence, run_search
 from .history.finder import news_themes as finder_news_themes  # api.py has its own news_themes route
@@ -944,12 +944,15 @@ def create_app(
                 return {**grp, "evidence_chips": {"ok": None if not known else sum(known) * 2 > len(known), "pairs": len(known)}}
 
             groups = [with_chips(grp) for grp in groups]
-            # 🔥 當沖比 of the members (上市 only): a high one reads as 隔日沖 hot money, shown apart from 🧾
-            dtr = daytrade_ratios(store, [d], ev_codes)
+            # 🔥 當沖比 of the members (上市 and 上櫃): a high one reads as 隔日沖 hot money, shown apart from 🧾,
+            # beside each one's usual level (the DAYTRADE_BASE_DAYS before d)
+            dt_days = store.trading_dates(up_to=d, limit=DAYTRADE_BASE_DAYS + 1)
+            dtr = daytrade_ratios(store, dt_days, ev_codes)
 
             def with_daytrade(grp: dict) -> dict:
-                vals = {m["code"]: dtr.get(m["code"], {}).get(d) for m in grp["members"]}
-                return {**grp, "daytrade": daytrade_group(vals)}
+                codes = [m["code"] for m in grp["members"]]
+                vals = {c: dtr.get(c, {}).get(d) for c in codes}
+                return {**grp, "daytrade": daytrade_group(vals, {c: [v for x, v in dtr.get(c, {}).items() if x != d] for c in codes})}
 
             groups = [with_daytrade(grp) for grp in groups]
             # 🏦 分點 from the stored days only (the after-close snapshot fills them): nothing is fetched here

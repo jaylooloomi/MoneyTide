@@ -305,6 +305,8 @@ def test_daytrade_group_average_as_shown():
     from openmarket.history.linkage import daytrade_group
 
     g = daytrade_group({"1": 50.0, "2": 49.9, "3": None})  # 49.95 → 50.0 as shown: 🔥; "3" has no data
-    assert g == {"by_code": {"1": 50.0, "2": 49.9}, "avg": 50.0, "hot": True}
+    assert g == {"by_code": {"1": 50.0, "2": 49.9}, "avg": 50.0, "hot": True, "base": {}}
     assert daytrade_group({"1": 49.9, "2": 49.9})["hot"] is False
-    assert daytrade_group({"1": None}) == {"by_code": {}, "avg": None, "hot": False}
+    assert daytrade_group({"1": None}) == {"by_code": {}, "avg": None, "hot": False, "base": {}}
+    usual = daytrade_group({"1": 62.0, "2": 40.0}, {"1": [30.0, 32.0], "2": [], "3": [10.0]})
+    assert usual["base"] == {"1": 31.0}  # "2" has no history, "3" no data today

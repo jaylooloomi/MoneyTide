@@ -198,7 +198,12 @@ export function cardHtml(g, i) {
   const margin = marginText(g);
   const dt = g.daytrade?.hot
     ? `<div class="fd-dt" title="當沖成交股數 ÷ 成交股數（上市、上櫃都有）；有當沖資料的成員平均 ≥ 50% 才標 🔥（沒資料的成員不算進平均）。當沖比高多半是隔日沖等短線熱錢，跟有計畫的佈局不同（不算在 🧾 證據裡）">🔥 當沖比高${g.daytrade.avg != null ? `（平均 ${g.daytrade.avg.toFixed(1)}%）` : ''}：${Object.entries(g.daytrade.by_code)
-        .map(([c, v]) => `${escapeHtml(g.members.find((m) => m.code === c)?.name || c)} ${v.toFixed(1)}%`)
+        .map(([c, v]) => {
+          const base = g.daytrade.base?.[c];
+          // 平常: the 20 days before; ×2 or more is a sudden rush, not a stock that is always day-traded
+          const usual = base != null ? `<small class="${base > 0 && v / base >= 2 ? 'up' : 'muted'}">（平常 ${base.toFixed(0)}%）</small>` : '';
+          return `${escapeHtml(g.members.find((m) => m.code === c)?.name || c)} ${v.toFixed(1)}%${usual}`;
+        })
         .join('、')}</div>`
     : '';
   const nameOf = (c) => g.members.find((m) => m.code === c)?.name || c;

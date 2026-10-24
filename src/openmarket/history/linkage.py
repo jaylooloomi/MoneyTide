@@ -405,12 +405,18 @@ def index_k(store: HistoryStore, day: date, markets: list[str], days: int = K5_D
 DAYTRADE_HOT = 50.0  # (40 marked nearly every group on a busy day) 當沖比 (% of the day's traded shares) from which the move reads as 隔日沖 hot money
 
 
-def daytrade_group(vals: Mapping[str, float | None]) -> dict:
-    """A group's 當沖: {by_code, avg, hot}. Members without data are left out of the average; the average
-    is rounded to 0.1% (as shown) before the DAYTRADE_HOT test, so 49.96 shows as 50.0% and is 🔥."""
+DAYTRADE_BASE_DAYS = 20  # 平常的當沖比: the average over this many trading days before
+
+
+def daytrade_group(vals: Mapping[str, float | None], before: Mapping[str, list[float]] | None = None) -> dict:
+    """A group's 當沖: {by_code, avg, hot, base}. Members without data are left out of the average; the
+    average is rounded to 0.1% (as shown) before the DAYTRADE_HOT test, so 49.96 shows as 50.0% and is 🔥.
+    base: each member's usual 當沖比 (the mean of `before`, the days before), to tell a sudden rush of
+    hot money from a stock that is always day-traded this much (shown only; 🔥 still follows the 50%)."""
     known = {c: v for c, v in vals.items() if v is not None}
     avg = round(sum(known.values()) / len(known), 1) if known else None
-    return {"by_code": known, "avg": avg, "hot": avg is not None and avg >= DAYTRADE_HOT}
+    base = {c: round(sum(xs) / len(xs), 1) for c, xs in (before or {}).items() if c in known and xs}
+    return {"by_code": known, "avg": avg, "hot": avg is not None and avg >= DAYTRADE_HOT, "base": base}
 
 
 def daytrade_ratios(store: HistoryStore, days: list[date], codes: list[str]) -> dict[str, dict[date, float]]:

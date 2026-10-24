@@ -307,3 +307,9 @@ test('集團 is offered to 找法1 but off by default (the precomputed results k
   assert.deepEqual(DEFAULT_GROUPINGS, ['industry', 'custom', 'concept', 'chain', 'news']);
   assert.match(queryOf('known', { groupings: [...DEFAULT_GROUPINGS, 'group'] }), /groupings=industry%2Ccustom%2Cconcept%2Cchain%2Cnews%2Cgroup/);
 });
+
+test('the 🔥 line shows each member’s usual 當沖比, marked when today is 2× or more', () => {
+  const G2 = { members: [{ code: '1', name: '甲' }, { code: '2', name: '乙' }], sources: [], matches: [], kind: '已知族群' };
+  const html = cardHtml({ ...G2, daytrade: { by_code: { 1: 62, 2: 45 }, avg: 53.5, hot: true, base: { 1: 30, 2: 40 } } }, 0);
+  assert.match(html, /甲 62\.0%<small class="up">（平常 30%）<\/small>、乙 45\.0%<small class="muted">（平常 40%）<\/small>/);
+});
