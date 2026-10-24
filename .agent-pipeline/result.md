@@ -29,6 +29,7 @@
 | 08 | 集團當成一種分類（2 片） | 2.5（scores-04.md） | XQ 全球贏家、CMoney 的「集團股」類股；MoneyDJ 轉投資資料 | 片1：伺服器把轉投資／董監串起來的集團做成分組（「XX集團」，203 個），B 區新增「集團」按鈕，網址 #…/group 可直接開。片2：N 找法1 的分類可勾「集團」，預設不勾（避免預先算好的結果全部失效）。動到 api.py、history/api.py、finder.py、index.html、history.js、finder.js（分兩片，各 ≤ 5 檔） | `.venv/Scripts/python -m pytest -q tests/test_relations.py`；`node --test tests/js/finder.test.js` | ✅ pytest 291、node 123；瀏覽器確認 B 區集團排行與 N 勾選 | ① 預設就勾集團（每天預先算好的 N 結果都會變成另一把快取鍵）② 用持股 ≥ 50% 的子公司關係（太嚴，大多數集團會被拆散） |
 | 09 | 當沖比與平常比較 | 2.3（scores-03.md） | 異常量分析（相對自身歷史，Campbell, Grossman & Wang 1993 的量訊息觀念） | N 卡片 🔥 行每檔加「（平常 X%）」＝前 20 個交易日平均，今天 ≥ 2 倍標紅；🔥 判定仍是 50%。動到 api.py、linkage.py、finder.js。10/22：華經 61.2%（平常 60%，本來就常被當沖）、耀登 60.2%（平常 38%） | `.venv/Scripts/python -m pytest -q tests/test_money_flow.py`；`node --test tests/js/finder.test.js` | ✅ pytest 291、node 124；瀏覽器確認 N 卡片 | ① 改成用 z 分數判定 🔥（會改使用者定的 50% 規則）② 用 60 日平均（上櫃只回補 60 天，前段沒資料） |
 | 10 | 隔天表現統計（所有已存日子，🔥 vs 其他） | 3.0（scores-05.md） | MacKinlay (1997) 事件研究；Alphalens 依分組比較 forward returns | 新 /api/history/next-day：掃描同條件下所有已存的 N 結果（兩種找法合併），🔥 與其他組合分開統計成員隔天開盤跳空、收盤（含扣大盤）、開高走低、收黑比例；盤後報告 🔥 區顯示。動到 store.py、linkage.py、api.py、report.js。實測 10 天：🔥 81 組隔天開盤 +4.26%、收盤 +3.82%（扣大盤 +0.39%）、開高走低 42%；其他 129 組 收盤 +4.75%（扣大盤 +1.78%）、開高走低 31% | `.venv/Scripts/python -m pytest -q tests/test_money_flow.py`；`node --test tests/js/report.test.js` | ✅ pytest 292、node 127；瀏覽器確認報告 | ① 在前端逐日抓 quotes（10 天要 20 次請求）② 把「證據強」也分一類（證據計算在前端，伺服器端要重寫一份，先不做） |
+| 11 | 證據項目的「隨機也會出現」比例 | 10.5（scores-06.md） | 基準率／−log p 權重觀念；本專案 research/m5_weights.py 實測（10,557 對隨機配對） | 🧾 清單（K 交集、N 卡片 tooltip）每項附「隨機配對約 X% 也會出現」：扣指數 <1%、隨機 10%、同爆量 40%、同分鐘 5%、同漲跌 6%、籌碼 51%；只顯示，✓ 計數與證據強判定不變。只動 evidence.js | `node --test tests/js/evidence.test.js` | ✅ node 128；瀏覽器確認 N 卡片 tooltip | ① 直接改成加權計分（改判定，需使用者決定）② 每天即時重算基準率（每天要多跑上萬對配對，太慢） |
 
 ## 判斷不值得做
 - C2 群組外盤估計 / 1.7 / 要動 N 結果、卡片與報告，Blast 大，單檔版已在 K 走勢資訊欄
@@ -36,9 +37,10 @@
 - D1 隔天表現回測 / 1.7 / 需要 60 天的 N 結果，目前只部分存在，成本高
 - D2 今日資金網路圖 / 0.8 / 只改呈現方式，不幫判斷有無計畫
 - G2 隔日沖個股排行 / 0.5 / 使用者說的「這種」是指 🔥 組合，不是全部個股
+- H2 DTW 形狀相似度 / 1.3 / 不計入證據，只多一列資訊，改動 race.js 與 payload 成本高
 
 ## 需要你決定的事
-- [存疑] 證據清單其他門檻要不要放進「條件」
+- [存疑] 證據清單其他門檻要不要放進「條件」——今晚實驗（methods/m5）顯示「同爆量」隨機出現率 40%、「籌碼／法人同向」51%，等權計票會高估它們；要不要調嚴或降權，請你決定
 - [存疑] 資料庫容量保留期限（1 分 K 一年約 1～2 GB）
 - 開工時工作區乾淨，沒有 stash
 
