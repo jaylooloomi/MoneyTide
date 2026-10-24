@@ -151,3 +151,21 @@ def chip_sync(a: str, b: str, trust: Mapping[date, Mapping[str, float]], inst_to
         "inst_a": sign(inst_today.get(a)), "inst_b": sign(inst_today.get(b)),
         "margin_a": sign(mchg(a)), "margin_b": sign(mchg(b)),
     }
+
+
+BRANCH_TOP = 5  # a branch in both stocks' top this many 買超 counts as the same buyer
+
+
+def shared_buyers(a: Mapping | None, b: Mapping | None) -> dict | None:
+    """Branches among the top 買超 of both stocks: {shared: [{name, a_net, b_net, a_rank, b_rank}], strong}
+    (strong: one of them is in both top BRANCH_TOP); None without both days' data."""
+    if not a or not b:
+        return None
+    ra = {r["name"]: (i + 1, r["net"]) for i, r in enumerate(a.get("buy", []))}
+    rb = {r["name"]: (i + 1, r["net"]) for i, r in enumerate(b.get("buy", []))}
+    shared = [
+        {"name": n, "a_rank": ra[n][0], "a_net": ra[n][1], "b_rank": rb[n][0], "b_net": rb[n][1]}
+        for n in ra if n in rb and ra[n][1] > 0 and rb[n][1] > 0
+    ]
+    shared.sort(key=lambda x: x["a_rank"] + x["b_rank"])
+    return {"shared": shared, "strong": any(x["a_rank"] <= BRANCH_TOP and x["b_rank"] <= BRANCH_TOP for x in shared)}

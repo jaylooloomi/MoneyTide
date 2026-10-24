@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { riDaysHtml, sharedGroupsHtml, pairCardHtml, pairFacts, pairTableHtml, verdictOf, RACE_END, amplitudeSoFar, fmtClock, instTip, isLimitUp, leadOf, pathPoints, peakSoFar, raceDomain, raceFrames, raceOrder } from '../../static/js/race.js';
+import { branchHtml, riDaysHtml, sharedGroupsHtml, pairCardHtml, pairFacts, pairTableHtml, verdictOf, RACE_END, amplitudeSoFar, fmtClock, instTip, isLimitUp, leadOf, pathPoints, peakSoFar, raceDomain, raceFrames, raceOrder } from '../../static/js/race.js';
 
 test('raceFrames forward-fills closes, remembers when a value was reached, keeps highs per minute', () => {
   const f = raceFrames({ A: [[0, 1, 2], [5, 10, 10], [6, 10, 10], [30, 9, 9.5]] }, ['A', 'B']);
@@ -145,4 +145,13 @@ test('riDaysHtml: 今日／昨日／前日 intraday R, — when a session had to
   assert.match(html, /今日 <b class="up" title="2026-10-22">0\.72<\/b>　昨日 <b class="muted"[^>]*>0\.15<\/b>　前日 <b class="muted"[^>]*>—<\/b>/);
   assert.equal(riDaysHtml([]), '');
   assert.equal(riDaysHtml(undefined), '');
+});
+
+test('branchHtml: the shared buyers, or why there are none', () => {
+  const name = (c) => ({ A: '甲', B: '乙' })[c];
+  const f = { a: 'A', b: 'B', branch: { shared: [{ name: '凱基-台北', a_rank: 1, a_net: 466, b_rank: 2, b_net: 120 }], strong: true } };
+  assert.match(branchHtml(f, name), /<b class="up">凱基-台北<\/b> <small>甲 \+466 張（第 1）／乙 \+120 張（第 2）/);
+  assert.match(branchHtml({ ...f, branch: { shared: [], strong: false } }, name), /沒有共同的分點/);
+  assert.match(branchHtml({ ...f, branch: undefined }, name), /載入中/);
+  assert.match(branchHtml({ ...f, branch: undefined, branchErr: '盤後才有分點資料' }, name), /盤後才有/);
 });

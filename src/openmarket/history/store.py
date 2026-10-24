@@ -58,6 +58,13 @@ CREATE TABLE IF NOT EXISTS margin_day (
     rows INTEGER NOT NULL DEFAULT 0,
     fetched_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS branch_day (
+    code TEXT NOT NULL,
+    date TEXT NOT NULL,
+    data TEXT NOT NULL,
+    fetched_at TEXT NOT NULL,
+    PRIMARY KEY (code, date)
+);
 CREATE TABLE IF NOT EXISTS daytrade_daily (
     date TEXT NOT NULL,
     code TEXT NOT NULL,
@@ -685,6 +692,25 @@ class HistoryStore:
                 "INSERT OR REPLACE INTO finder_result (date, method, params, result, computed_at) VALUES (?, ?, ?, ?, ?)",
                 (day.isoformat(), method, params, json.dumps(result, ensure_ascii=False), datetime.now().astimezone().isoformat()),
             )
+
+    # ---- HiStock 券商分點 (fetched on demand, one stock-day at a time) ----------------------------
+
+    def save_branches(self, code: str, day: date, data: dict, fetched_at: datetime) -> None:
+        import json
+
+        with self._lock, self._conn() as c:
+            c.execute("INSERT OR REPLACE INTO branch_day (code, date, data, fetched_at) VALUES (?, ?, ?, ?)",
+                      (code, day.isoformat(), json.dumps(data, ensure_ascii=False), fetched_at.isoformat()))
+
+    def branches(self, codes: Iterable[str], day: date) -> dict[str, dict]:
+        import json
+
+        codes = sorted(set(codes))
+        if not codes:
+            return {}
+        with self._conn() as c:
+            rows = c.execute(f"SELECT code, data FROM branch_day WHERE date = ? AND code IN ({', '.join('?' for _ in codes)})", [day.isoformat(), *codes]).fetchall()
+        return {r["code"]: json.loads(r["data"]) for r in rows}
 
     # ---- 當日沖銷 shares per listed stock (TWSE only) ----------------------------------------------
 

@@ -834,6 +834,24 @@ export function cardRelationsHtml(r) {
   return parts.join('');
 }
 
+/** The card's 🏦 block: top 5 買超 / 賣超 分點 of the day (HiStock), 張. */
+export function cardBranchesHtml(b) {
+  if (!b) return '';
+  if (b.error) return `<span class="muted">🏦 ${escapeHtml(b.error)}</span>`;
+  const list = (rows, sign) =>
+    rows.slice(0, 5).map((r) => `<li>${escapeHtml(r.name)} <span class="${sign > 0 ? 'up' : 'down'}">${sign > 0 ? '+' : ''}${Math.round(r.net).toLocaleString()}</span>${r.avg ? ` <small class="muted">@${r.avg}</small>` : ''}</li>`).join('');
+  return `<div class="muted">🏦 分點（HiStock）買超前 5／賣超前 5，張</div><div class="card-br-cols"><ol>${list(b.buy || [], 1)}</ol><ol>${list(b.sell || [], -1)}</ol></div>`;
+}
+
+async function loadCardBranches(code, date) {
+  try {
+    const r = await getJson(`/api/history/branches?date=${encodeURIComponent(date)}&codes=${encodeURIComponent(code)}`);
+    if (cardCode === code && $('#hCardBr')) $('#hCardBr').innerHTML = cardBranchesHtml(r.branches?.[code]);
+  } catch {
+    if ($('#hCardBr')) $('#hCardBr').innerHTML = '';
+  }
+}
+
 async function loadCardRelations(code) {
   try {
     const r = await getJson(`/api/history/relations/${encodeURIComponent(code)}`);
@@ -867,6 +885,7 @@ async function openHistCard(code) {
       ${cardDaytradeRow(d.daytrade)}
     </table>
     <div class="card-rel" id="hCardRel"></div>
+    <div class="card-br" id="hCardBr"><span class="muted">🏦 分點載入中…</span></div>
     <div class="memb" data-memb="${escapeHtml(d.code)}"></div>
     <div class="btns">
       <a href="https://histock.tw/stock/${encodeURIComponent(d.code)}" target="_blank" rel="noopener noreferrer">HiStock ↗</a>
@@ -875,6 +894,7 @@ async function openHistCard(code) {
   el.hidden = false;
   $('#hCardClose').addEventListener('click', closeHistCard);
   loadCardRelations(d.code);
+  loadCardBranches(d.code, d.date);
   fillMembership(el);
   if (cardChart) cardChart.dispose();
   cardChart = echarts.init($('#hCardSpark'));

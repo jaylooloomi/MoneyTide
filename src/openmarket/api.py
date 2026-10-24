@@ -48,9 +48,10 @@ from .sources.margin import fetch_margin_day
 from .sources.moneydj import fetch_relations
 from .sources.company_address import fetch_company_names
 from .relations import NameIndex, RelationCollector, merge_edges, relation_edges, relation_groups
-from .history.evidence import bucket_of, chip_sync, excess_matrix, minute_evidence, percentile_of
+from .history.evidence import bucket_of, chip_sync, excess_matrix, minute_evidence, percentile_of, shared_buyers
 from .sources.sector_index import fetch_sector_day
 from .sources.daytrade import fetch_daytrade_day
+from .sources.histock_branch import BranchQueue
 from .sources.company_address import fetch_county_groups
 from .sources.google_news import fetch_headlines
 from .sources.news_themes import fetch_day_headlines
@@ -942,6 +943,42 @@ def create_app(
             raise HTTPException(404, "至少要 2 檔有資料的股票")
         rows.sort(key=lambda r: -(r.get("market_cap") or 0))
         return await linkage_payload(d, rows)
+
+    BRANCH_MAX_CODES = 4  # stocks one request may fetch 分點 for (each page waits ≥ 5 s)
+
+    def branch_queue() -> BranchQueue:
+        q = getattr(app.state, "branch_queue", None)
+        if q is None:
+            client = httpx.AsyncClient(timeout=20, headers={"User-Agent": USER_AGENT}, follow_redirects=True)
+            q = app.state.branch_queue = BranchQueue(client)
+        return q
+
+    @app.get("/api/history/branches")
+    async def history_branches(codes: str, day: str = Query(..., alias="date")) -> dict:
+        """HiStock 券商分點 for a few stocks on one day: stored ones at once, the rest fetched slowly
+        (only days that have closed; at most BRANCH_MAX_CODES stocks a request)."""
+        d = _day(day)
+        store = app.state.history
+        wanted = list(dict.fromkeys(c for c in codes.split(",") if c))[:BRANCH_MAX_CODES]
+        out: dict[str, dict] = dict(await asyncio.to_thread(store.branches, wanted, d))
+        now = datetime.now(TAIPEI)
+        closed = d < now.date() or now.time() >= time(15, 0)
+        for c in wanted:
+            if c in out:
+                continue
+            if not closed:
+                out[c] = {"error": "盤後才有分點資料"}
+                continue
+            try:
+                data = await branch_queue().fetch(c, d)
+                plain = {k: [r.__dict__ if hasattr(r, "__dict__") else {f: getattr(r, f) for f in r.__slots__} for r in v] for k, v in data.items()}
+                await asyncio.to_thread(store.save_branches, c, d, plain, now)
+                out[c] = plain
+            except Exception as exc:  # unofficial source: say why, never fail the panel
+                out[c] = {"error": f"分點資料抓取失敗：{exc}"}
+        ok = {c: v for c, v in out.items() if "error" not in v}
+        pairs = {f"{a},{b}": shared_buyers(ok.get(a), ok.get(b)) for i, a in enumerate(wanted) for b in wanted[i + 1:]}
+        return {"date": d.isoformat(), "branches": out, "pairs": pairs, "queue": branch_queue().status()}
 
     @app.get("/api/history/relations/{code}")
     async def stock_relations(code: str) -> dict:

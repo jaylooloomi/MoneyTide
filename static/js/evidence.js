@@ -65,6 +65,14 @@ export function evidenceItems(f, ext, ev) {
   const sd = ext?.same_dir;
   add('samedir', sd?.total ? sd.same / sd.total >= 0.75 : null, '天天同漲同跌', sd?.total ? `近 ${sd.total} 天 ${sd.same} 天同方向` : '資料不足');
 
+  // 8b. the same broker branch buying both (HiStock 分點): undefined while loading
+  const br = f.branch;
+  add('branch', br ? (br.strong ? true : br.shared.length ? false : false) : null,
+    '同一個分點同時買超',
+    br === undefined ? (f.branchErr || '載入中') : !br ? (f.branchErr || '沒有分點資料') : br.shared.length
+      ? `${br.shared[0].name} 同時買超（第 ${br.shared[0].a_rank}／第 ${br.shared[0].b_rank}）${br.shared.length > 1 ? ` 等 ${br.shared.length} 個` : ''}`
+      : '買超前 15 名沒有共同分點');
+
   // 9. one story
   add('theme', ext ? (ext.themes?.length ? true : null) : null, '同一個題材', ext?.themes?.length ? `📰 ${ext.themes.slice(0, 3).join('、')}` : '沒有共同題材');
   return items;

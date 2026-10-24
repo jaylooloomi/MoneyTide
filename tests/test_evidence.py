@@ -53,3 +53,18 @@ def test_baseline_percentile_buckets_and_chips():
     trust = {date(2026, 3, 2): {"A": 5, "B": 3}, date(2026, 3, 3): {"A": -1, "B": -2}, date(2026, 3, 4): {"A": 1, "B": -1}}
     ch = chip_sync("A", "B", trust, {"A": 10, "B": -5}, {"A": (100, 120, 0, 0), "B": (50, 40, 0, 0)})
     assert ch == {"trust_days": 3, "trust_both_buy": 1, "trust_both_sell": 1, "inst_a": 1, "inst_b": -1, "margin_a": 1, "margin_b": -1}
+
+
+
+def test_shared_buyers_top_five_in_both():
+    from openmarket.history.evidence import shared_buyers
+
+    a = {"buy": [{"name": "凱基-台北", "net": 466}, {"name": "元大", "net": 200}, {"name": "富邦", "net": 50}]}
+    b = {"buy": [{"name": "國泰", "net": 300}] + [{"name": f"X{i}", "net": 10} for i in range(5)] + [{"name": "元大", "net": 5}, {"name": "凱基-台北", "net": 120}]}
+    s = shared_buyers(a, b)
+    assert [x["name"] for x in s["shared"]] == ["凱基-台北", "元大"]  # by combined rank (a tie keeps A's order)
+    assert s["shared"][0] == {"name": "凱基-台北", "a_rank": 1, "a_net": 466, "b_rank": 8, "b_net": 120}
+    assert s["strong"] is False  # in both lists, but not in B's top 5
+    b2 = {"buy": [{"name": "國泰", "net": 300}, {"name": "凱基-台北", "net": 120}]}
+    assert shared_buyers(a, b2)["strong"] is True
+    assert shared_buyers(a, None) is None

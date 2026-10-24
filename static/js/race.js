@@ -191,6 +191,17 @@ export function riDaysHtml(days) {
   return `<br><span class="rt-ri-days">${days.map(one).join('　')}</span>`;
 }
 
+/** The 交集's 分點 row: the branches buying both (rank and 張 in each), or why there are none. */
+export function branchHtml(f, name) {
+  if (f.branch === undefined) return f.branchErr ? `<span class="muted">${escapeHtml(f.branchErr)}</span>` : '<span class="muted">載入中（每頁間隔 5 秒）…</span>';
+  if (!f.branch) return `<span class="muted">${escapeHtml(f.branchErr || '沒有分點資料')}</span>`;
+  if (!f.branch.shared.length) return '<span class="muted">買超前 15 名沒有共同的分點</span>';
+  return f.branch.shared
+    .slice(0, 4)
+    .map((x) => `<b class="${x.a_rank <= 5 && x.b_rank <= 5 ? 'up' : ''}">${escapeHtml(x.name)}</b> <small>${escapeHtml(name(f.a))} +${x.a_net} 張（第 ${x.a_rank}）／${escapeHtml(name(f.b))} +${x.b_net} 張（第 ${x.b_rank}）</small>`)
+    .join('<br>');
+}
+
 /** Shared groups by kind, each label once and at most `max` names per kind (the rest counted). */
 export function sharedGroupsHtml(groups, max = 3) {
   const by = new Map();
@@ -229,6 +240,7 @@ export function pairCardHtml(f, ext, name, color) {
       row('共同族群', ext.groups.length ? sharedGroupsHtml(ext.groups) : '<span class="muted">沒有</span>', ext.groups.map((g) => `${g.label}：${g.group}`).join('\n')) +
       row('N 找過', ext.finder.length ? `近 5 天 <b>${new Set(ext.finder.map((h) => h.date)).size}</b> 天：${ext.finder.map((h) => `${h.date.slice(5)}${h.method === 'new' ? '（找法2）' : ''}`).join('、')} 🔁` : '<span class="muted">近 5 天沒有</span>', '近 5 個交易日 N 存下的結果裡，這兩檔被找成同一群') +
       row('共同題材', ext.themes.length ? ext.themes.map((t) => `📰 ${escapeHtml(t)}`).join('、') : '<span class="muted">沒有</span>', '近 3 個新聞日，兩檔都被同一個題材的新聞點名') +
+      row('🏦 分點', branchHtml(f, name), 'HiStock 券商分點買賣日報：兩檔的買超前 15 名裡都有的分點（張）；同時在兩檔前 5 名才算「同一個買家」') +
       row('🏢 持股關係', ext.relations?.length || ext.group ? relationsHtml(ext.relations, ext.group) : '<span class="muted">沒有（或還沒抓到這兩檔的轉投資／董監資料）</span>', '轉投資、法人董監（MoneyDJ／公開資訊觀測站），以及由持股 ≥ 20%（權益法）或派任董監串起來的集團');
   }
   return `${evidenceHtml(evidenceItems(f, ext, f.ev))}<table class="rt-pair">
@@ -415,7 +427,29 @@ export function mountRace(box, d, { onStock } = {}) {
     for (let i = 0; i < state.picked.length; i++) for (let j = i + 1; j < state.picked.length; j++) out.push([state.picked[i], state.picked[j]]);
     return out;
   }
+  const branchPairs = new Map(); // "a,b" → shared_buyers (either order)
+  const branchErr = new Map(); // code → why there is no 分點
+  const branchAsked = new Set();
+  function askBranches() {
+    const codes = state.picked.slice(0, 4); // each page waits ≥ 5 s at HiStock: a few stocks only
+    const key = codes.join(',');
+    if (codes.length < 2 || branchAsked.has(key)) return;
+    branchAsked.add(key);
+    fetch(`/api/history/branches?date=${encodeURIComponent(d.date)}&codes=${encodeURIComponent(key)}`, { cache: 'no-store' })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((res) => {
+        for (const [c, v] of Object.entries(res?.branches || {})) if (v.error) branchErr.set(c, v.error);
+        for (const [k, v] of Object.entries(res?.pairs || {})) {
+          const [a, b] = k.split(',');
+          branchPairs.set(`${a},${b}`, v);
+          branchPairs.set(`${b},${a}`, v);
+        }
+        drawPairs();
+      })
+      .catch(() => {});
+  }
   function askPairs() {
+    askBranches();
     const key = state.picked.join(',');
     if (state.picked.length < 2 || pairAsked.has(key)) return;
     pairAsked.add(key);
@@ -433,7 +467,13 @@ export function mountRace(box, d, { onStock } = {}) {
   function drawPairs() {
     pairBox.hidden = state.picked.length < 2;
     if (pairBox.hidden) return;
-    const list = pairKeys().map(([a, b]) => ({ key: `${a},${b}`, f: pairFacts(d, frames, a, b, state.m) }));
+    const list = pairKeys().map(([a, b]) => {
+      const f = pairFacts(d, frames, a, b, state.m);
+      // 🏦 分點: shared top buyers (null while loading / when a stock had none)
+      f.branch = branchPairs.has(`${a},${b}`) ? branchPairs.get(`${a},${b}`) : undefined;
+      f.branchErr = branchErr.get(a) || branchErr.get(b) || null;
+      return { key: `${a},${b}`, f };
+    });
     const head = `<div class="rt-pairs-h">🔗 交集 <small class="muted">${list.length === 1 ? '兩檔之間的關係（跟著播放頭）' : `${list.length} 組，日相關高的在上；點一列看完整內容`}</small></div>`;
     pairBox.innerHTML =
       head +

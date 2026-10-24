@@ -20,7 +20,7 @@ test('evidenceItems: each check as ✓／✗／— from the numbers', () => {
   const ev = { excess: 0.55, minute: { co: 4, expected: 0.8, r0: 0.45, r_off: 0.2, bursts_a: 10, bursts_b: 12 } };
   const items = evidenceItems(f, EXT, ev);
   const by = Object.fromEntries(items.map((x) => [x.key, x.ok]));
-  assert.deepEqual(by, { excess: true, baseline: true, burst: true, sync: true, repeat: true, chips: true, relation: true, samedir: true, theme: true });
+  assert.deepEqual(by, { excess: true, baseline: true, burst: true, sync: true, repeat: true, chips: true, relation: true, samedir: true, branch: null, theme: true });
   assert.match(items.find((x) => x.key === 'excess').detail, /扣大盤／櫃買後分時 R 0\.55（原 0\.62）/);
   assert.match(items.find((x) => x.key === 'baseline').detail, /高於 96% 的同日隨機配對；日 R 高於 80%/);
   // weak numbers say ✗; missing data says —
@@ -63,4 +63,13 @@ test('groupEvidenceItems / groupEvidenceHtml / isStrong: an N group\'s checks', 
   assert.match(html, /<span class="down">✗同爆量<\/span>/);
   assert.match(html, /扣大盤／櫃買後分時 R 0\.55/);
   assert.equal(groupEvidenceHtml({}), ''); // an old result without evidence: no line
+});
+
+test('evidenceItems: 同一個分點同時買超 from the 分點 pair', () => {
+  const pick = (branch, branchErr = null) => evidenceItems({ ri: 0.5, branch, branchErr }, null, {}).find((x) => x.key === 'branch');
+  assert.equal(pick({ shared: [{ name: '凱基-台北', a_rank: 1, b_rank: 2 }], strong: true }).ok, true);
+  assert.equal(pick({ shared: [{ name: '元大', a_rank: 3, b_rank: 9 }], strong: false }).ok, false);
+  assert.equal(pick({ shared: [], strong: false }).ok, false);
+  assert.equal(pick(undefined).ok, null); // loading
+  assert.equal(pick(null, '盤後才有分點資料').detail, '盤後才有分點資料');
 });
