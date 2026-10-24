@@ -21,7 +21,11 @@ test('evidenceItems: each check as ✓／✗／— from the numbers', () => {
   const items = evidenceItems(f, EXT, ev);
   const by = Object.fromEntries(items.map((x) => [x.key, x.ok]));
   assert.deepEqual(by, { excess: true, baseline: true, burst: true, sync: true, repeat: true, chips: true, relation: true, samedir: true, branch: null, theme: true });
-  assert.match(items.find((x) => x.key === 'excess').detail, /扣大盤／櫃買後分時 R 0\.55（原 0\.62）/);
+  assert.match(items.find((x) => x.key === 'excess').detail, /扣大盤／類股後分時 R 0\.55（原 0\.62）/);
+  // the index each one was measured against, from K's payload
+  const fac = (factors) => evidenceItems({ ri: 0.62 }, null, { excess: 0.55, factors }).find((x) => x.key === 'excess').detail;
+  assert.match(fac(['半導體類', '半導體類']), /^扣半導體類後分時 R 0\.55/);
+  assert.match(fac(['半導體類', '櫃買']), /^扣半導體類／櫃買後/);
   assert.match(items.find((x) => x.key === 'baseline').detail, /高於 96% 的同日隨機配對；日 R 高於 80%/);
   // weak numbers say ✗; missing data says —
   const weak = evidenceItems({ ri: 0.3 }, { ...EXT, finder: [], baseline_intraday: { pct: 40 }, chips: { trust_days: 10, trust_both_buy: 0, trust_both_sell: 1, inst_a: 1, inst_b: -1 } }, { excess: 0.1, minute: { co: 1, expected: 1.5, r0: 0.3, r_off: 0.35 } });
@@ -61,7 +65,7 @@ test('groupEvidenceItems / groupEvidenceHtml / isStrong: an N group\'s checks', 
   assert.match(html, /class="fd-ev strong"/);
   assert.match(html, /🧾 證據 <b>6<\/b>\/7/);
   assert.match(html, /<span class="down">✗同爆量<\/span>/);
-  assert.match(html, /扣大盤／櫃買後分時 R 0\.55/);
+  assert.match(html, /扣指數：扣掉各自的類股／大盤後分時 R 0\.55/);
   assert.equal(groupEvidenceHtml({}), ''); // an old result without evidence: no line
 });
 

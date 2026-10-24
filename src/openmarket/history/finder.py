@@ -30,7 +30,8 @@ from itertools import combinations
 from .linkage import align_bars, amplitude_pct, limit_up_price, minutes, pearson, turnover_rate
 from .store import HistoryStore
 
-FINDER_VERSION = 7  # part of the cache key: bump when the search logic changes, so stored results are redone (5 was used by a reverted experiment)
+FINDER_VERSION = 8  # part of the cache key: bump when the search logic changes, so stored results are redone (5 was used by a reverted experiment)
+INTRADAY_BASES = ("raw", "market", "sector")  # the 分時 R the funnel filters on: as is / 扣大盤 / 扣大盤＋類股
 PEAK_END = 240  # the intraday high is taken over 09:00–13:00
 OPEN_MINUTES = 2  # a high at 09:00–09:02 is the open, not a signal (unless locked limit-up)
 BUCKETS = 54  # 5-minute buckets 09:00–13:25
@@ -44,7 +45,9 @@ class FinderParams:
     daily_r: float = 0.8
     new_daily_window: int = 10  # 找法2: a new combination has little history yet
     new_daily_r: float = 0.8
-    intraday_r: float = 0.5  # 5-minute returns
+    intraday_r: float = 0.5  # 5-minute returns (basis "raw")
+    intraday_basis: str = "sector"  # INTRADAY_BASES: the funnel's 分時 R once each stock's index is taken out
+    excess_r: float = 0.3  # the threshold on that excess R (it runs well below the raw R)
     intraday_sessions: int = 3
     intraday_min_points: int = 20
     peak_gap: int = 8  # minutes between intraday highs
@@ -293,6 +296,8 @@ class Intraday:
     locked_at: int | None = None
     bursts: set[int] = field(default_factory=set)
     resolution: int = 1
+    excess: list[float | None] | None = None  # returns − β × its index's (factors.factor_of); None without the index
+    factor: str = ""  # that index: 半導體類 / 大盤 / 櫃買
 
 
 def bucket_returns(bars: list[tuple], limit: float | None) -> list[float | None]:
@@ -347,16 +352,23 @@ def intraday_features(by_session: Mapping[date, list[tuple]], rows_by_session: M
 
 
 def pair_check(a: Intraday, b: Intraday, p: FinderParams) -> dict:
-    """Stage B/C for one pair → {ok, intraday_r, peak_gap, start_gap, burst, reason}."""
+    """Stage B/C for one pair → {ok, intraday_r, excess_r, peak_gap, start_gap, burst, reason}. The 分時 R
+    gate is the raw R (basis "raw", ≥ intraday_r) or the R after each stock's index (≥ excess_r)."""
     r = series_r(a.returns, b.returns, p.intraday_min_points)
+    ex = series_r(a.excess, b.excess, p.intraday_min_points) if a.excess is not None and b.excess is not None else None
     both_locked = a.locked_at is not None and b.locked_at is not None
-    out = {"intraday_r": r, "peak_gap": None, "start_gap": None, "burst": sorted(a.bursts & b.bursts), "ok": False, "reason": ""}
-    if r is None:
+    out = {"intraday_r": r, "excess_r": ex, "peak_gap": None, "start_gap": None, "burst": sorted(a.bursts & b.bursts), "ok": False, "reason": ""}
+    raw = p.intraday_basis == "raw"
+    gate, need = (r, p.intraday_r) if raw else (ex, p.excess_r)
+    if not raw and (a.excess is None or b.excess is None) and not both_locked:
+        out["reason"] = "沒有指數分時"
+        return out
+    if gate is None:
         if not both_locked:  # too few points (locked all day) only passes when both are locked
             out["reason"] = "分時資料不足"
             return out
-    elif r < p.intraday_r:
-        out["reason"] = "分時相關不足"
+    elif gate < need:
+        out["reason"] = "分時相關不足" if raw else "扣指數後相關不足"
         return out
     if a.peak is None or b.peak is None:
         out["reason"] = "沒有高點時間"
@@ -508,6 +520,8 @@ def describe(g: dict, rows_by_code: Mapping[str, dict], feats: Mapping[str, Intr
         "pool": g.get("pool", {}),
         "daily_r": mean(list(g.get("daily", {}).values())),
         "intraday_r": mean(vals("intraday_r")),
+        "excess_r": mean(vals("excess_r")),
+        "factors": {c: feats[c].factor for c in members if c in feats and feats[c].factor},
         "peak_spread": (max(peaks) - min(peaks)) if len(peaks) >= 2 else None,
         "start_spread": (max(starts) - min(starts)) if len(starts) >= 2 else None,
         "together_bursts": [fmt(b * 5) for b in burst],
@@ -716,6 +730,37 @@ def theme_titles(term: str, news_days: list[dict], dates: list[str] | None, name
     return out[:THEME_TITLES]
 
 
+# ---- 扣大盤／類股: each stock's returns once its index is taken out ------------------------------
+
+def add_excess(feats: dict[str, Intraday], by_code: Mapping[str, dict], rows: list[dict], sessions: list[date],
+               sectors: Mapping[date, Mapping[str, list]], basis: str) -> None:
+    """Set .excess / .factor on the stocks' features: the 類股指數 (TWSE, stored per session) where
+    factors.factor_of picks it, else 大盤／櫃買 (the index rows fetched with the candidates)."""
+    from .evidence import residuals
+    from .factors import MARKET_FACTORS, factor_of, industry_sizes, sector_returns
+
+    sizes = industry_sizes(rows)
+    names = set.intersection(*(set(sectors.get(s, {})) for s in sessions)) if sessions and all(s in sectors for s in sessions) else set()
+    market_keys = {key for key, _ in MARKET_FACTORS.values()}
+    cache: dict[str, list | None] = {}
+    for code, f in feats.items():
+        row = by_code.get(code)
+        if row is None:
+            continue  # the index rows themselves
+        fac = factor_of(row, sizes, names, basis)
+        if fac is None:
+            continue
+        key, label = fac
+        if key not in cache:
+            cache[key] = (feats[key].returns if key in feats else None) if key in market_keys else sector_returns(sectors, sessions, key)
+        m = cache[key]
+        if m is None or len(m) != len(f.returns):
+            continue
+        res = residuals(f.returns, m)
+        if any(x is not None for x in res):
+            f.excess, f.factor = res, label
+
+
 # ---- 資金一致性證據 of a found group (the same checks as K's 🔗 交集, pair by pair) ----------------
 
 INDEX_ROWS = (("^TWII", "上市"), ("IX0043.TWO", "上櫃"))  # fetched with the candidates for the excess R
@@ -736,7 +781,9 @@ def group_evidence(members: list[str], feats: Mapping[str, Intraday], minute_bar
         pts = [(a, b) for a, b in zip(x, y) if a is not None and b is not None]
         return pearson([a for a, _ in pts], [b for _, b in pts]) if len(pts) >= k else None
 
-    res = {c: residuals(feats[c].returns, index_returns[markets[c]]) if c in feats and markets.get(c) in index_returns else None for c in members}
+    res = {c: feats[c].excess if c in feats and feats[c].excess is not None
+           else residuals(feats[c].returns, index_returns[markets[c]]) if c in feats and markets.get(c) in index_returns else None
+           for c in members}
     ex, base, burst, sync, same = [], [], [], [], []
     v_ex, v_pct, v_co, v_exp, v_r0, v_off, v_same = [], [], [], [], [], [], []
     for i, a in enumerate(members):
@@ -862,6 +909,7 @@ async def run_search(
     for code, (by_session, resolution) in got.items():
         aligned = {s: align_bars(b, session_rows.get(s, {}).get(code, {})) for s, b in by_session.items()}
         feats[code] = intraday_features(aligned, {s: session_rows.get(s, {}).get(code, {}) for s in sessions}, day, p, resolution)
+    add_excess(feats, by_code, rows, sessions, store.sector_intraday(sessions), "market" if p.intraday_basis == "market" else "sector")
     funnel: dict = {}
     found = confirm(cands, feats, p, funnel)
     inst = store.inst_net([day]).get(day, {})

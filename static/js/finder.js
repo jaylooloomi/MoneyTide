@@ -27,7 +27,9 @@ export const FIELDS = [
   ['pool_top', '各排行取前', 'int', 'new', '漲幅、週轉率、比重暴增、開盤跳空、量比各取前 N 名'],
   ['vol_ratio_window', '量比天數', 'int', 'new', '量比＝今天成交量 ÷ 前 N 個交易日的平均量'],
   ['new_min_volume_lots', '成交量 ≥（張）', 'int', 'new', '候選池只收當天成交量至少這麼多張的股票（1 張＝1,000 股）'],
-  ['intraday_r', '分時相關 ≥', 'num', '', '最近幾個交易日 5 分 K 報酬；鎖漲停的平線不計'],
+  ['intraday_basis', '分時 R 用', 'sel', '', '篩選用哪一種分時相關：原始＝直接算；扣大盤＝先扣掉大盤／櫃買；扣大盤＋類股＝上市股扣自己的類股指數（同產業上市少於 15 檔的改扣大盤），上櫃扣櫃買。扣得越多，越能排除「只是跟著大盤或類股漲」'],
+  ['intraday_r', '分時相關 ≥', 'num', '', '原始的分時相關門檻（分時 R 用「原始」時才篩這個）：最近幾個交易日 5 分 K 報酬；鎖漲停的平線不計'],
+  ['excess_r', '扣指數後相關 ≥', 'num', '', '扣掉大盤／類股之後剩下的分時相關門檻（分時 R 用「扣大盤」或「扣大盤＋類股」時篩這個）；扣過的 R 通常比原始 R 低很多'],
   ['intraday_sessions', '分時天數', 'int', '', ''],
   ['peak_gap', '高點差 ≤（分）', 'int', '', '日內最高點（09:00–13:00）的時間差'],
   ['start_gap', '起漲差 ≤（分）', 'opt', '', '空白＝只顯示、不篩選'],
@@ -35,6 +37,8 @@ export const FIELDS = [
   ['dense', '群內至少', 'num', '', '每檔要跟群內這個比例的人都符合條件（0.7＝七成）'],
   ['min_size', '最少幾檔', 'int', '', ''],
 ];
+
+export const BASES = { sector: '扣大盤＋類股', market: '扣大盤', raw: '原始' };
 
 export function queryOf(method, params) {
   const q = new URLSearchParams({ method });
@@ -165,7 +169,7 @@ export function cardHtml(g, i) {
     : '';
   const facts = [
     `日 R <b>${fmtR(g.daily_r)}</b>`,
-    `分時 R <b>${fmtR(g.intraday_r)}</b>`,
+    `分時 R <b>${fmtR(g.intraday_r)}</b>${g.excess_r != null ? `<span title="扣掉各自的指數後：${escapeHtml(factorText(g))}">（扣指數 <b>${fmtR(g.excess_r)}</b>）</span>` : ''}`,
     `高點差 <b>${g.peak_spread ?? '—'}</b> 分`,
     g.start_spread != null ? `起漲差 ${g.start_spread} 分` : '',
     g.together_bursts?.length ? `同時爆量 ${g.together_bursts.slice(0, 3).join('、')}` : '',
@@ -214,6 +218,16 @@ export function cardHtml(g, i) {
     <div class="fd-chips">${chips}</div>${groupEvidenceHtml(g)}${dt}${money}${inst}${margin}${br}${rel}
     <div class="fd-facts">${facts}</div>${themes}${news}
   </div>`;
+}
+
+/** Which index each member was measured against: "半導體類：甲、乙；櫃買：丙". */
+export function factorText(g) {
+  const by = new Map();
+  for (const m of g.members) {
+    const f = g.factors?.[m.code];
+    if (f) by.set(f, [...(by.get(f) || []), m.name]);
+  }
+  return [...by].map(([f, names]) => `${f}：${names.join('、')}`).join('；') || '—';
 }
 
 const KINDS = ['已知族群', '已知族群的延伸', '跨族群新組合'];
@@ -307,7 +321,7 @@ export function csvExport(d, filter = 'all') {
       : `振幅>${p.min_amplitude}% 成交量≥${p.min_volume_lots}張 日R≥${p.daily_r}(${p.daily_window}日)`;
   const header = [
     '日期', '找法', '群組#', '類型', '來源／最接近分類', '代號', '名稱', '漲幅%', '週轉率%', '振幅%', '高點時間', '起漲時間', '鎖漲停',
-    '群組日R', '群組分時R', '高點差(分)', '起漲差(分)', '群組成交值(億)', '占全市場%', '群組平均漲幅%',
+    '群組日R', '群組分時R', '群組扣指數分時R', '扣的指數', '高點差(分)', '起漲差(分)', '群組成交值(億)', '占全市場%', '群組平均漲幅%',
     '個股法人(張)', '群組法人(張)', '群組法人(億)', '法人占成交%', '外資(張)', '投信(張)', '自營(張)', '法人連續', '投信連續',
     '個股融資增減(張)', '群組融資增減(張)', '群組融券增減(張)', '券資比%', '融資連續', '條件',
   ];
@@ -317,12 +331,12 @@ export function csvExport(d, filter = 'all') {
     const cut = (v) => (v == null ? '' : Math.round(v * 100) / 100);
     return g.members.map((m) => [
       d.date, METHODS[d.method] || d.method, n, g.kind, src, m.code, m.name, cut(m.change_pct), cut(m.turnover_rate), cut(m.amplitude_pct), m.peak || '', m.start || '', m.locked_at || '',
-      g.daily_r ?? '', g.intraday_r ?? '', g.peak_spread ?? '', g.start_spread ?? '', g.turnover_100m ?? '', g.turnover_share ?? '', g.avg_pct ?? '',
+      g.daily_r ?? '', g.intraday_r ?? '', g.excess_r ?? '', g.factors?.[m.code] || '', g.peak_spread ?? '', g.start_spread ?? '', g.turnover_100m ?? '', g.turnover_share ?? '', g.avg_pct ?? '',
       m.inst_net == null ? '' : Math.round(m.inst_net / 1000), g.inst?.lots ?? '', g.inst?.amount_100m ?? '',
       g.inst?.amount_100m != null && g.turnover_100m > 0 ? cut((Math.abs(g.inst.amount_100m) / g.turnover_100m) * 100) : '',
       g.inst_split?.foreign ?? '', g.inst_split?.trust ?? '', g.inst_split?.dealer ?? '', streak(g.inst_streak), streak(g.trust_streak),
       m.margin_chg ?? '', g.margin?.margin_chg ?? '', g.margin?.short_chg ?? '', g.margin?.short_ratio ?? '',
-      g.margin_streak ? `連${g.margin_streak.side === 'buy' ? '增' : '減'}${g.margin_streak.days}` : '', `${cond} 分時R≥${p.intraday_r} 高點差≤${p.peak_gap}分`,
+      g.margin_streak ? `連${g.margin_streak.side === 'buy' ? '增' : '減'}${g.margin_streak.days}` : '', `${cond} ${p.intraday_basis && p.intraday_basis !== 'raw' ? `${BASES[p.intraday_basis]}後分時R≥${p.excess_r}` : `分時R≥${p.intraday_r}`} 高點差≤${p.peak_gap}分`,
     ]);
   });
   const label = Object.fromEntries(INST_FILTERS)[filter]?.replace('🏦 ', '') || (filter?.startsWith('@src:') ? SOURCES[filter.slice(5)] : filter); // no internal '@…' keys in file names
@@ -374,9 +388,9 @@ export function progressView(p) {
  * the test that removes the most pairs (10/22 funnel: 143 of 197).
  */
 export const PRESETS = {
-  strict: { label: '嚴格', values: { daily_r: 0.85, new_daily_r: 0.85, intraday_r: 0.6, peak_gap: 5 } },
-  standard: { label: '標準', values: { daily_r: 0.8, new_daily_r: 0.8, intraday_r: 0.5, peak_gap: 8 } },
-  loose: { label: '寬鬆', values: { daily_r: 0.7, new_daily_r: 0.75, intraday_r: 0.35, peak_gap: 15 } },
+  strict: { label: '嚴格', values: { daily_r: 0.85, new_daily_r: 0.85, intraday_r: 0.6, excess_r: 0.4, peak_gap: 5 } },
+  standard: { label: '標準', values: { daily_r: 0.8, new_daily_r: 0.8, intraday_r: 0.5, excess_r: 0.3, peak_gap: 8 } },
+  loose: { label: '寬鬆', values: { daily_r: 0.7, new_daily_r: 0.75, intraday_r: 0.35, excess_r: 0.2, peak_gap: 15 } },
 };
 
 /** The preset the current values match exactly, or null (自訂). */
@@ -431,7 +445,7 @@ const DEFAULTS = {
   min_volume_lots: 300,
   new_min_volume_lots: 300,
   daily_r: 0.8, daily_window: 20, new_daily_r: 0.8, new_daily_window: 10, pool_top: 50,
-  intraday_r: 0.5, intraday_sessions: 3, peak_gap: 8, start_gap: '', require_burst: false, dense: 0.7, min_size: 2,
+  intraday_basis: 'sector', intraday_r: 0.5, excess_r: 0.3, intraday_sessions: 3, peak_gap: 8, start_gap: '', require_burst: false, dense: 0.7, min_size: 2,
   vol_ratio_window: 5,
   groupings: Object.keys(GROUPINGS), pool_sources: Object.keys(SOURCES),
 };
@@ -511,7 +525,9 @@ export function mountFinderPanel(container, { onStock, onResult }) {
       .map(([key, label, kind, , help]) => {
         const v = p[key];
         const input =
-          kind === 'bool'
+          kind === 'sel'
+            ? `<select class="field" data-key="${key}">${Object.entries(BASES).map(([k, l]) => `<option value="${k}"${k === (v || 'sector') ? ' selected' : ''}>${l}</option>`).join('')}</select>`
+            : kind === 'bool'
             ? `<input type="checkbox" data-key="${key}"${v ? ' checked' : ''}>`
             : `<input class="field" data-key="${key}" data-kind="${kind}" value="${escapeHtml(v ?? '')}" size="4">`;
         return `<label title="${escapeHtml(help)}">${escapeHtml(label)} ${input}</label>`;
@@ -538,6 +554,7 @@ export function mountFinderPanel(container, { onStock, onResult }) {
     } else if (el.dataset.key) {
       const k = el.dataset.key;
       if (el.type === 'checkbox') p[k] = el.checked;
+      else if (el.tagName === 'SELECT') p[k] = el.value;
       else if (el.dataset.kind === 'opt') p[k] = el.value.trim() === '' ? '' : Number(el.value);
       else if (el.value.trim() !== '' && Number.isFinite(Number(el.value))) p[k] = Number(el.value);
     }

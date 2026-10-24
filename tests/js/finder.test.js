@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { PRESETS, evidenceRank, rowsHeight, themeNewsHtml, cardHtml, digestText, shownFilter, finderMarkIndex, finderMarkTitle, csvExport, defaultGroupName, filterHtml, funnelText, presetOf, filterOptions, matchesFilter, progressView, queryOf, statsText } from '../../static/js/finder.js';
+import { PRESETS, factorText, evidenceRank, rowsHeight, themeNewsHtml, cardHtml, digestText, shownFilter, finderMarkIndex, finderMarkTitle, csvExport, defaultGroupName, filterHtml, funnelText, presetOf, filterOptions, matchesFilter, progressView, queryOf, statsText } from '../../static/js/finder.js';
 
 test('queryOf sends only the fields of the chosen method; blank 起漲差 means not required', () => {
   const p = { daily_r: 0.75, daily_window: 20, new_daily_r: 0.85, pool_top: 30, intraday_r: 0.5, peak_gap: 8, start_gap: '', require_burst: true, groupings: ['custom', 'news'], pool_sources: ['gain'] };
@@ -218,7 +218,7 @@ test('funnelText: what removed the pairs, most first, then how many passed', () 
 });
 
 test('presets only set the linkage thresholds; the current values map back to one or to 自訂', () => {
-  const mine = { min_amplitude: 4, min_volume_lots: 500, daily_r: 0.8, new_daily_r: 0.8, intraday_r: 0.5, peak_gap: 8 };
+  const mine = { min_amplitude: 4, min_volume_lots: 500, daily_r: 0.8, new_daily_r: 0.8, intraday_r: 0.5, excess_r: 0.3, peak_gap: 8 };
   assert.equal(presetOf(mine), 'standard');
   const loose = { ...mine, ...PRESETS.loose.values };
   assert.equal(presetOf(loose), 'loose');
@@ -278,4 +278,10 @@ test('rowsHeight: two rows of cards, from their tops; null when everything fits'
   assert.equal(rowsHeight([0, 0, 280]), null); // two rows only: no limit
   assert.equal(rowsHeight([]), null);
   assert.equal(rowsHeight([0, 300, 610, 900], 3, 8), 892);
+});
+
+test('the card shows the excess R beside the raw one, and which index each member was measured against', () => {
+  const g = { members: [{ code: '1', name: '甲' }, { code: '2', name: '乙' }, { code: '3', name: '丙' }], factors: { 1: '半導體類', 2: '半導體類', 3: '櫃買' } };
+  assert.equal(factorText(g), '半導體類：甲、乙；櫃買：丙');
+  assert.equal(factorText({ members: g.members }), '—');
 });

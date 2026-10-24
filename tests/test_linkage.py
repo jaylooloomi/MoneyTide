@@ -145,6 +145,8 @@ def test_linkage_api_uses_cached_bars(store, tmp_path):
         # 1-minute bars of the shown day: peaks at 09:00, 10:07, 12:59 (to the minute); the 13:10 spike is after the 09:00–13:00 window
         peak = {"A": "09:00", "B": "10:07", "C": "12:59"}[code]
         store.save_yahoo_1m(code, d, [("09:00", base, base, base, base, 1), (peak, base * 2, base, base * 2, base, 1), ("13:10", base * 3, base, base * 3, base, 1)])
+    for s in sessions:  # the 類股指數 too: stored, so TWSE is not asked
+        store.save_sector_intraday(s, {}, now)
     app = create_app(AppConfig(data_dir=tmp_path), start_polling=False, start_history=False, start_concepts=False, history_store=store)
     with TestClient(app, base_url="http://127.0.0.1") as client:
         body = client.get("/api/history/linkage", params={"date": d.isoformat(), "group": "G"}).json()

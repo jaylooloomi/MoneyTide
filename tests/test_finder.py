@@ -18,7 +18,7 @@ from openmarket.history.finder import (
     pair_check,
 )
 
-P = FinderParams()
+P = FinderParams(intraday_basis="raw")  # the rules on the raw R; the excess-R gate has its own test
 
 
 def e(a, b):
@@ -100,7 +100,7 @@ def test_pair_check_rules():
     # both locked at the open with no usable returns: counts as moving together
     assert pair_check(mk(0, locked=0), mk(1, locked=1), P)["ok"]
     # optional requirements
-    p = FinderParams(start_gap=5, require_burst=True)
+    p = FinderParams(start_gap=5, require_burst=True, intraday_basis="raw")
     assert pair_check(mk(60, 10, rets=up), mk(62, 30, rets=same), p)["reason"] == "起漲時間差太大"
     assert pair_check(mk(60, 10, rets=up, bursts={3}), mk(62, 12, rets=same, bursts={4}), p)["reason"] == "沒有同時爆量"
     assert pair_check(mk(60, 10, rets=up, bursts={3}), mk(62, 12, rets=same, bursts={3}), p)["ok"]
@@ -273,7 +273,7 @@ def test_run_search_end_to_end(tmp_path):
         return out
 
     seen = []
-    res = asyncio.run(run_search(s, day, "known", FinderParams(daily_r=0.8, min_amplitude=0, min_volume_lots=0), {"industry": lambda r: [r["industry"]]}, fetch, progress=lambda *a: seen.append(a)))
+    res = asyncio.run(run_search(s, day, "known", FinderParams(daily_r=0.8, min_amplitude=0, min_volume_lots=0, intraday_basis="raw"), {"industry": lambda r: [r["industry"]]}, fetch, progress=lambda *a: seen.append(a)))
     assert seen[0] == ("daily", 0, 1) and ("fetch", 4, 4) in seen and seen[-1] == ("intraday", 0, 1)
     assert res["stats"]["candidates"] == 1
     (g,) = res["groups"]
@@ -635,3 +635,57 @@ def test_branch_snapshot_skips_stored_members(tmp_path):
             _t.sleep(0.05)
         assert st["date"] == "2026-03-02" and st["total"] == 0 and st["errors"] == 0
         assert client.get("/api/branches/status").json()["queue"]["today"] == 0  # not a single HiStock page
+
+
+def test_factor_choice_and_sector_returns():
+    from openmarket.history.factors import factor_of, industry_sizes, sector_index_name, sector_returns
+
+    assert sector_index_name("半導體業") == "半導體類指數"
+    assert sector_index_name("水泥工業") == "水泥類指數"
+    assert sector_index_name("電機機械") == "電機機械類指數"
+    rows = [{"market": "上市", "industry": "半導體業", "kind": "stock"}] * 15 + [{"market": "上市", "industry": "水泥工業", "kind": "stock"}] * 7
+    sizes = industry_sizes(rows)
+    names = {"半導體類指數", "水泥類指數"}
+    assert factor_of({"market": "上市", "industry": "半導體業"}, sizes, names) == ("半導體類指數", "半導體類")
+    assert factor_of({"market": "上市", "industry": "水泥工業"}, sizes, names) == ("^TWII", "大盤")  # 7 stocks: the index is the group itself
+    assert factor_of({"market": "上櫃", "industry": "半導體業"}, sizes, names) == ("IX0043.TWO", "櫃買")  # TPEx has no per-industry intraday
+    assert factor_of({"market": "上市", "industry": "半導體業"}, sizes, names, "market") == ("^TWII", "大盤")
+    d1, d2 = date(2026, 1, 2), date(2026, 1, 5)
+    closes = {d1: {"X": [100, 101, None, 103]}, d2: {"X": [100, 100, 100, 99]}}
+    r = sector_returns(closes, [d1, d2], "X")
+    assert r[0] == pytest.approx(1.0) and r[1] is None and r[3] == 0 and r[5] == pytest.approx(-1.0)
+    assert sector_returns({d1: closes[d1]}, [d1, d2], "X") is None  # a session missing: no half index
+
+
+def test_pair_check_on_the_excess_r():
+    up = [0.1, 0.3, -0.2, 0.5, 0.1] * 6
+    noise = [(-1) ** i * 0.3 for i in range(30)]
+    p = FinderParams()  # basis "sector", excess_r 0.3
+    same = mk(60, rets=up)
+    same.excess = up
+    twin = mk(62, rets=[x * 1.1 for x in up])
+    twin.excess = [x * 1.1 for x in up]
+    out = pair_check(same, twin, p)
+    assert out["ok"] and out["excess_r"] == pytest.approx(1.0)
+    # the same raw R, but once the index is out nothing is left in common
+    apart = mk(62, rets=[x * 1.1 for x in up])
+    apart.excess = noise
+    assert pair_check(same, apart, p)["reason"] == "扣指數後相關不足"
+    assert pair_check(same, apart, FinderParams(intraday_basis="raw"))["ok"]  # the raw R still passes
+    assert pair_check(same, mk(62, rets=up), p)["reason"] == "沒有指數分時"
+
+
+def test_parse_sector_intraday_buckets():
+    from openmarket.sources.sector_intraday import parse_sector_intraday
+
+    payload = {"stat": "OK", "fields": ["時間", "發行量加權股價指數", "水泥類指數"], "data": [
+        ["09:00:00", "100.00", "50.00"],  # the open: no bucket
+        ["09:04:55", "101.00", "51.00"],
+        ["09:05:00", "102.00", "52.00"],  # bucket 0 closes at 09:05:00
+        ["09:05:05", "103.00", "53.00"],
+        ["13:30:00", "110.00", "55.00"],
+    ]}
+    out = parse_sector_intraday(payload)
+    assert out["水泥類指數"][0] == 52.0 and out["水泥類指數"][1] == 53.0 and out["水泥類指數"][53] == 55.0
+    assert len(out["發行量加權股價指數"]) == 54
+    assert parse_sector_intraday({"stat": "很抱歉"}) is None

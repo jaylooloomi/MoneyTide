@@ -27,7 +27,7 @@ from .history.linkage import (
     INTRADAY_HIGH_R, INTRADAY_LOW_R, bucket_closes, daily_linkage, fmt_minute, pair_matrix, peak_minute_from_bars, peak_minute_from_ticks,
     align_bars, amplitude_pct, limit_down_pct, limit_up_pct, minute_bars, turnover_rate, peak_stats, tick_bars, with_close_bar, race_points, returns, locked_level, daily_k, index_k, daytrade_ratios, DAYTRADE_HOT, top_members, verdict_r, verdict_timing,
 )
-from .history.finder import INST_STREAK_DAYS, FinderParams, inst_streak, inst_summary, margin_changes, margin_summary, pair_extras, persistence, run_search
+from .history.finder import INST_STREAK_DAYS, INTRADAY_BASES, FinderParams, inst_streak, inst_summary, margin_changes, margin_summary, pair_extras, persistence, run_search
 from .history.finder import news_themes as finder_news_themes  # api.py has its own news_themes route
 from .intraday import IntradayRecorder
 from .sources.yahoo_intraday import INDEX_SYMBOLS, ONE_MINUTE_DAYS, fetch_bars, fetch_day_1m, fetch_span_1m
@@ -48,6 +48,7 @@ from .sources.margin import fetch_margin_day
 from .sources.moneydj import fetch_relations
 from .sources.company_address import fetch_company_names
 from .relations import NameIndex, RelationCollector, merge_edges, relation_edges, relation_groups
+from .history.factors import factor_of, industry_sizes
 from .history.evidence import bucket_of, chip_sync, excess_matrix, group_branches, minute_evidence, percentile_of, shared_buyers
 from .sources.sector_index import fetch_sector_day
 from .sources.daytrade import fetch_daytrade_day
@@ -518,6 +519,31 @@ def create_app(
             store.save_yahoo_1m(code, day, bars)
         return bars or None, ""
 
+    sector_lock = asyncio.Lock()
+
+    async def ensure_sector_intraday(days: list[date]) -> None:
+        """TWSE 每 5 秒類股指數 for the days that have none stored (one request a day, 3 s apart);
+        a day not published yet (today before the close) is simply tried again next time."""
+        from .sources.sector_intraday import fetch_sector_intraday
+
+        store = app.state.history
+        async with sector_lock:
+            have = await asyncio.to_thread(store.sector_intraday, days)
+            todo = [x for x in days if x not in have]
+            if not todo:
+                return
+            async with httpx.AsyncClient(timeout=20, headers={"User-Agent": USER_AGENT}, follow_redirects=True) as http:
+                for i, x in enumerate(todo):
+                    if i:
+                        await asyncio.sleep(REQUEST_DELAY_SECONDS)
+                    try:
+                        data = await fetch_sector_intraday(http, x)
+                    except Exception as exc:
+                        logging.getLogger(__name__).warning("sector intraday %s failed: %s", x, exc)
+                        continue
+                    if data:
+                        await asyncio.to_thread(store.save_sector_intraday, x, data, datetime.now(TAIPEI))
+
     YAHOO_CONCURRENCY = 6  # members whose bars are fetched at the same time
     EVIDENCE_MINUTE_MAX = 12  # 1-minute evidence for the largest this many members (pairs grow fast)
     SESSION_MIN_POINTS = 15  # 5-minute returns one session needs for its own R (locked stretches leave fewer)
@@ -529,6 +555,7 @@ def create_app(
         daily = await asyncio.to_thread(daily_linkage, store, d, codes)
         recorded = store.tick_dates()
         sessions = sorted(store.trading_dates(up_to=d, limit=3))
+        await ensure_sector_intraday(sessions)
         notes: list[str] = []
         per_code_sessions: dict[str, dict[date, dict]] = {c: {} for c in codes}
         peaks: dict[str, int | None] = {c: None for c in codes}
@@ -599,9 +626,25 @@ def create_app(
                 r.extend(returns(closes, axis, locked_level(closes, rows_by_session.get(s, {}).get(c))))
             series.append(r)
         matrix, r_intraday = pair_matrix(series, min_points=20)
-        # 資金一致性: R once each stock's index (大盤 for 上市, 櫃買 for 上櫃) is taken out, and 1-minute evidence
+        # 資金一致性: R once each stock's index is taken out (its 類股指數, or 大盤／櫃買 — factors.factor_of, as N),
+        # and 1-minute evidence
         index_series = {mk: [x for s in sessions for x in returns(index_closes.get(mk, {}).get(s, {}), axis)] for mk in index_closes}
-        excess = excess_matrix(series, [index_series.get(m["market"]) for m in members])
+        sector_days = await asyncio.to_thread(store.sector_intraday, sessions)
+        sizes = industry_sizes(await asyncio.to_thread(store.day_rows, d))
+        names = set.intersection(*(set(sector_days[s]) for s in sessions)) if sessions and all(s in sector_days for s in sessions) else set()
+        factor_series, factor_labels = [], []
+        for m in members:
+            fac = factor_of(m, sizes, names)
+            if fac is None:
+                factor_series.append(None)
+                factor_labels.append("")
+            elif fac[0] in names:
+                factor_series.append([x for s in sessions for x in returns({i: v for i, v in enumerate(sector_days[s][fac[0]]) if v}, axis)])
+                factor_labels.append(fac[1])
+            else:
+                factor_series.append(index_series.get(m["market"]))
+                factor_labels.append(fac[1] if index_series.get(m["market"]) else "")
+        excess = excess_matrix(series, factor_series)
         top = codes[:EVIDENCE_MINUTE_MAX]
 
         def minute_pairs() -> dict:
@@ -648,7 +691,7 @@ def create_app(
             "leader_lag_min": lag,
             "benchmarks": benchmarks,
             "daily_k": k5,
-            "evidence": {"excess": excess, "minute": minute_ev},
+            "evidence": {"excess": excess, "factors": factor_labels, "minute": minute_ev},
             "benchmark_k": {code: index_k5.get(market, []) for code, market in markets.items()},
             "verdict": {"daily": verdict_r(daily.get("r20")), "intraday": verdict_r(r_intraday, INTRADAY_HIGH_R, INTRADAY_LOW_R), "timing": verdict_timing(std)},
             "notes": notes,
@@ -785,6 +828,10 @@ def create_app(
                     values[f.name] = raw.lower() in ("1", "true", "yes", "on")
                 elif isinstance(default, tuple):
                     values[f.name] = tuple(x for x in raw.split(",") if x)
+                elif isinstance(default, str):
+                    if f.name == "intraday_basis" and raw not in INTRADAY_BASES:
+                        raise ValueError(raw)
+                    values[f.name] = raw
                 elif raw == "" and f.name == "start_gap":
                     values[f.name] = None
                 elif isinstance(default, int) or f.name == "start_gap":
@@ -890,6 +937,8 @@ def create_app(
                 def report(stage: str, done: int, total: int) -> None:
                     finder_progress[k] = {"stage": stage, "done": done, "total": total, "seconds": round((datetime.now() - t0).total_seconds(), 1)}
 
+                # the sessions' 類股指數 (the funnel's 扣類股, and the evidence's under any basis)
+                await ensure_sector_intraday(sorted(store.trading_dates(up_to=d, limit=p.intraday_sessions)))
                 res = await run_search(store, d, method, p, groupings, finder_fetch, finder_titles(d), report)
                 res["stats"]["seconds"]["total"] = round((datetime.now() - t0).total_seconds(), 2)
                 await asyncio.to_thread(store.save_finder, d, method, key, res)

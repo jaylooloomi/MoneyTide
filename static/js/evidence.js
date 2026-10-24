@@ -14,9 +14,11 @@ export function evidenceItems(f, ext, ev) {
 
   // 1. not just the index
   const ex = ev?.excess;
+  const fac = (ev?.factors || []).filter(Boolean);
+  const facText = fac.length ? (fac[0] === fac[1] ? `扣${fac[0]}` : `扣${fac.join('／')}`) : '扣大盤／類股';
   add('excess', ex === null || ex === undefined ? null : ex >= 0.4,
-    '扣掉大盤後還是很像',
-    ex === null || ex === undefined ? '資料不足' : `扣大盤／櫃買後分時 R ${r2(ex)}（原 ${r2(f.ri)}）`);
+    '扣掉大盤／類股後還是很像',
+    ex === null || ex === undefined ? '資料不足' : `${facText}後分時 R ${r2(ex)}（原 ${r2(f.ri)}）`);
 
   // 2. not chance: random pairs of the same day and 漲幅 range
   const bi = ext?.baseline_intraday;
@@ -96,7 +98,7 @@ export function groupEvidenceItems(g) {
   const pick = (k) => ev[k] || {};
   const items = [];
   const add = (key, ok, short, detail) => items.push({ key, ok: ok ?? null, short, detail });
-  add('excess', pick('excess').ok, '扣大盤', pick('excess').r === null || pick('excess').r === undefined ? '資料不足' : `扣大盤／櫃買後分時 R ${r2(pick('excess').r)}`);
+  add('excess', pick('excess').ok, '扣指數', pick('excess').r === null || pick('excess').r === undefined ? '資料不足' : `扣掉各自的類股／大盤後分時 R ${r2(pick('excess').r)}`);
   add('baseline', pick('baseline').ok, '隨機', pick('baseline').pct === null || pick('baseline').pct === undefined ? '資料不足' : `分時 R 高於 ${Math.round(pick('baseline').pct)}% 的同日隨機配對`);
   add('burst', pick('burst').ok, '同爆量', pick('burst').co === null || pick('burst').co === undefined ? '沒有 1 分 K' : `同分鐘爆量 ${pick('burst').co} 次（隨機預期 ${pick('burst').expected}）`);
   add('sync', pick('sync').ok, '同分鐘', pick('sync').r0 === null || pick('sync').r0 === undefined ? '沒有 1 分 K' : `1 分 K R ${r2(pick('sync').r0)}，錯開 1～3 分 ${r2(pick('sync').r_off)}`);

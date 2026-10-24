@@ -174,7 +174,7 @@ export function pairFacts(d, frames, a, b, m) {
     nowA: A.now, nowB: B.now, diff: A.now !== null && B.now !== null ? A.now - B.now : null,
     instA: member(a).inst_net ?? null, instB: member(b).inst_net ?? null,
     // 資金一致性 from the payload: R after the index, and the 1-minute pair stats (either key order)
-    ev: { excess: cell(d.evidence?.excess), minute: d.evidence?.minute?.[`${a},${b}`] ?? d.evidence?.minute?.[`${b},${a}`] ?? null },
+    ev: { excess: cell(d.evidence?.excess), factors: [d.evidence?.factors?.[i] || '', d.evidence?.factors?.[j] || ''], minute: d.evidence?.minute?.[`${a},${b}`] ?? d.evidence?.minute?.[`${b},${a}`] ?? null },
   };
 }
 
