@@ -13,7 +13,8 @@
 | 03 | 出貨警示（消失的組合） | 3.3（scores-01.md） | Wyckoff 派發（distribution）判讀：爆量下跌 | 跨天追蹤裡消失的組合，當天成員過半「下跌且量比 ≥ 2」→「消失・疑似出貨（爆量收黑）」，否則「消失・不再同步」；新增 /api/history/quotes（漲跌＋5 日量比）。動到 api.py、report.js、app.css。08/04：43 組消失中 1 組疑似出貨 | `node --test tests/js/report.test.js`；`.venv/Scripts/python -m pytest -q tests/test_money_flow.py` | ✅ pytest 286、node 120；瀏覽器確認追蹤表 | ① 看隔天跌幅（報告日之後的資料不一定有）② 用分點賣超判斷（消失組合多半沒抓分點） |
 
 ## 判斷不值得做
--
+- C2 群組外盤估計 / 1.7 / 要動 N 結果、卡片與報告，Blast 大，單檔版已在 K 走勢資訊欄
+- C5 誰先動（lead-lag）/ 0.4 / 1 分 K 雜訊大、計算量高、要動 N 計算路徑
 
 ## 需要你決定的事
 - [存疑] 證據清單其他門檻要不要放進「條件」
