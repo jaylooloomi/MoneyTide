@@ -9,7 +9,7 @@ from fastapi import APIRouter, HTTPException, Query
 from ..config import TAIPEI
 
 from .ingest import INDEX_MARKETS, HistoryCollector, index_window
-from .finder import INST_STREAK_DAYS, inst_streak
+from .finder import INST_STREAK_DAYS, inst_streak, margin_changes, margin_summary
 from .linkage import group_r20
 from .metrics import METRICS, Grouping, day_stocks, flow_baseline, group_flows, group_stats, industry_grouping, movers, rotation, stock_history, group_index, group_periods, group_rank_change
 from .store import HistoryStore
@@ -116,13 +116,23 @@ def create_history_router(
             "trust_streak": inst_streak(one, store.inst_trust(days, [code]), days)[0]["inst_streak"],
         }
 
+    def stock_margin(store: HistoryStore, code: str, d: date) -> dict | None:
+        """融資融券 of one stock on d (張) with its 融資連增／連減 streak; None while d has none for it."""
+        have = store.margin_dates()
+        days = list(takewhile(lambda x: x in have, store.trading_dates(up_to=d, limit=INST_STREAK_DAYS)))
+        rows = store.margin(days, [code])
+        group = margin_summary([{"members": [{"code": code}]}], rows.get(d, {}))[0]
+        if group["margin"] is None:
+            return None
+        return {**group["margin"], "streak": inst_streak([group], margin_changes(rows), days)[0]["inst_streak"]}
+
     # bonus-02: one stock's card data with a short price history
     @r.get("/stock/{code}")
     def stock(code: str, to: str, days: int = Query(20, ge=2, le=250)) -> dict:
         data = stock_history(get_store(), code, _date(to), days)
         if data is None:
             raise HTTPException(404, f"no data for {code} on {to}")
-        return {**data, "inst": stock_inst(get_store(), code, _date(to))}
+        return {**data, "inst": stock_inst(get_store(), code, _date(to)), "margin": stock_margin(get_store(), code, _date(to))}
 
     # bonus-04: cumulative group index comparison
     @r.get("/index")

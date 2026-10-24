@@ -89,6 +89,22 @@ export function instSplitText(g) {
   return `<span class="muted" title="三大法人拆開看：投信常是主題／作帳佈局，外資偏權值與大盤，自營多短線避險">（${part('外資', s.foreign)}／${part('投信', s.trust)}／${part('自營', s.dealer)} 張）</span>`;
 }
 
+/** 💳 融資融券 line (g.margin, attached when served): 融資 = leveraged, mostly retail money. */
+export function marginText(g) {
+  const m = g.margin;
+  if (!m) return '';
+  const n = (v) => `<b class="${v > 0 ? 'up' : v < 0 ? 'down' : ''}">${v > 0 ? '+' : v < 0 ? '−' : ''}${Math.abs(v).toLocaleString()}</b>`;
+  const bal = (v) => (Math.abs(v) >= 1e4 ? `${(v / 1e4).toFixed(1)} 萬` : v.toLocaleString());
+  const s = g.margin_streak;
+  const parts = [
+    `融資 ${n(m.margin_chg)} 張 <span class="muted">（餘額 ${bal(m.margin_bal)}）</span>`,
+    `融券 ${n(m.short_chg)} 張 <span class="muted">（餘額 ${bal(m.short_bal)}）</span>`,
+    m.short_ratio != null ? `券資比 ${m.short_ratio.toFixed(1)}%` : '',
+    s ? `<b class="${s.side === 'buy' ? 'up' : 'down'}">融資連${s.side === 'buy' ? '增' : '減'} ${s.days} 天</b>` : '',
+  ].filter(Boolean);
+  return `<div class="fd-margin" title="融資增加＝用借來的錢買（多半是散戶槓桿追價）；融券增加＝放空變多；券資比高代表軋空的可能">💳 ${parts.join('　')}</div>`;
+}
+
 export function cardHtml(g, i) {
   const title =
     g.sources?.length
@@ -127,6 +143,7 @@ export function cardHtml(g, i) {
     g.trust_streak ? `<b class="${g.trust_streak.side === 'buy' ? 'up' : 'down'}" title="只看投信：組合合計投信買賣超連續同方向的天數（投信連買常是主題／作帳佈局）">投信連${g.trust_streak.side === 'buy' ? '買' : '賣'} ${g.trust_streak.days} 天</b>` : '',
   ].filter(Boolean);
   const inst = instParts.length ? `<div class="fd-inst">🏦 ${instParts.join('　')}</div>` : '';
+  const margin = marginText(g);
   const news = g.news?.length ? `<div class="fd-news">📰 ${g.news.map((t) => escapeHtml(t)).join('<br>📰 ')}</div>` : '';
   const themes = g.themes?.length
     ? `<div class="fd-themes" title="近 3 個新聞日提到這幾檔的題材關鍵字（括號＝提到幾檔）">📰 題材：${g.themes.map((t) => `${escapeHtml(t.term)}${g.members.length > 1 ? `（${t.count}）` : ''}`).join('、')}</div>`
@@ -140,7 +157,7 @@ export function cardHtml(g, i) {
     <div class="fd-top"><span class="link-badge" style="background:${KIND_COLOR[g.kind] || '#3a3e48'}">${escapeHtml(g.kind)}</span>
       <span class="fd-title">${title}</span>${seen}<span class="muted">${g.members.length} 檔</span>
       <button type="button" class="icon fd-save" data-save="${i}" title="把這群股票存成自訂族群，之後在 B／C／K 追蹤">＋族群</button></div>
-    <div class="fd-chips">${chips}</div>${money}${inst}
+    <div class="fd-chips">${chips}</div>${money}${inst}${margin}
     <div class="fd-facts">${facts}</div>${themes}${news}
   </div>`;
 }
@@ -203,7 +220,8 @@ export function csvExport(d, filter = 'all') {
   const header = [
     '日期', '找法', '群組#', '類型', '來源／最接近分類', '代號', '名稱', '漲幅%', '週轉率%', '振幅%', '高點時間', '起漲時間', '鎖漲停',
     '群組日R', '群組分時R', '高點差(分)', '起漲差(分)', '群組成交值(億)', '占全市場%', '群組平均漲幅%',
-    '個股法人(張)', '群組法人(張)', '群組法人(億)', '法人占成交%', '外資(張)', '投信(張)', '自營(張)', '法人連續', '投信連續', '條件',
+    '個股法人(張)', '群組法人(張)', '群組法人(億)', '法人占成交%', '外資(張)', '投信(張)', '自營(張)', '法人連續', '投信連續',
+    '個股融資增減(張)', '群組融資增減(張)', '群組融券增減(張)', '券資比%', '融資連續', '條件',
   ];
   const streak = (s) => (s ? `連${s.side === 'buy' ? '買' : '賣'}${s.days}` : '');
   const rows = groups.flatMap(([g, n]) => {
@@ -214,7 +232,9 @@ export function csvExport(d, filter = 'all') {
       g.daily_r ?? '', g.intraday_r ?? '', g.peak_spread ?? '', g.start_spread ?? '', g.turnover_100m ?? '', g.turnover_share ?? '', g.avg_pct ?? '',
       m.inst_net == null ? '' : Math.round(m.inst_net / 1000), g.inst?.lots ?? '', g.inst?.amount_100m ?? '',
       g.inst?.amount_100m != null && g.turnover_100m > 0 ? cut((Math.abs(g.inst.amount_100m) / g.turnover_100m) * 100) : '',
-      g.inst_split?.foreign ?? '', g.inst_split?.trust ?? '', g.inst_split?.dealer ?? '', streak(g.inst_streak), streak(g.trust_streak), `${cond} 分時R≥${p.intraday_r} 高點差≤${p.peak_gap}分`,
+      g.inst_split?.foreign ?? '', g.inst_split?.trust ?? '', g.inst_split?.dealer ?? '', streak(g.inst_streak), streak(g.trust_streak),
+      m.margin_chg ?? '', g.margin?.margin_chg ?? '', g.margin?.short_chg ?? '', g.margin?.short_ratio ?? '',
+      g.margin_streak ? `連${g.margin_streak.side === 'buy' ? '增' : '減'}${g.margin_streak.days}` : '', `${cond} 分時R≥${p.intraday_r} 高點差≤${p.peak_gap}分`,
     ]);
   });
   const label = Object.fromEntries(INST_FILTERS)[filter]?.replace('🏦 ', '') || filter; // no internal '@inst+' in file names

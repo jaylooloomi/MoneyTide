@@ -516,6 +516,33 @@ def inst_summary(groups: list[dict], inst: Mapping[str, float], rows_by_code: Ma
     return out
 
 
+def margin_summary(groups: list[dict], today: Mapping[str, tuple]) -> list[dict]:
+    """融資融券 of each group on the shown day, in 張: 融資／融券 增減 and 餘額, 券資比 (融券 ÷ 融資 餘額 %).
+    Members get `margin_chg` (融資增減). `margin` is None while the day has none for any member."""
+    out = []
+    for g in groups:
+        rows = {m["code"]: today[m["code"]] for m in g["members"] if m["code"] in today}
+        if not rows:
+            out.append({**g, "margin": None})
+            continue
+        mp, mb, sp, sb = (sum(r[i] for r in rows.values()) for i in range(4))
+        out.append({
+            **g,
+            "members": [{**m, "margin_chg": (rows[m["code"]][1] - rows[m["code"]][0]) if m["code"] in rows else None} for m in g["members"]],
+            "margin": {
+                "margin_chg": round(mb - mp), "margin_bal": round(mb),
+                "short_chg": round(sb - sp), "short_bal": round(sb),
+                "short_ratio": round(sb / mb * 100, 2) if mb else None,
+            },
+        })
+    return out
+
+
+def margin_changes(by_day: Mapping[date, Mapping[str, tuple]]) -> dict[date, dict[str, float]]:
+    """{day: {code: 融資增減}} from margin rows, for inst_streak (融資連增／連減)."""
+    return {d: {c: r[1] - r[0] for c, r in rows.items()} for d, rows in by_day.items()}
+
+
 INST_STREAK_DAYS = 20  # 法人連買／連賣: how many 法人 days back a streak is counted at most
 
 

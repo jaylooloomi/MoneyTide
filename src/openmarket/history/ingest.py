@@ -24,7 +24,9 @@ RETRY_INTERVAL = timedelta(minutes=30)
 DayFetcher = Callable[[date], Awaitable[list[DailyRow] | None]]
 IndexFetcher = Callable[[str, date], Awaitable[list]]  # (market, any day of the month) -> IndexRow list
 InstFetcher = Callable[[date], Awaitable[list | None]]  # day -> InstRow list, None when not published
+MarginFetcher = Callable[[date], Awaitable[list | None]]  # day -> MarginRow list, None when not published
 INST_DAYS = 250  # 三大法人 backfill window (stored trading days)
+MARGIN_DAYS = 120  # 融資融券 backfill window (two requests a day, so a shorter first backfill)
 
 
 def build_rows(
@@ -84,6 +86,7 @@ class HistoryCollector:
         request_delay: float = REQUEST_DELAY_SECONDS,
         fetch_index: IndexFetcher | None = None,
         fetch_inst: InstFetcher | None = None,
+        fetch_margin: MarginFetcher | None = None,
     ) -> None:
         self.store = store
         self._fetch_twse = fetch_twse
@@ -97,6 +100,8 @@ class HistoryCollector:
         self.index_state = BackfillState()
         self._fetch_inst = fetch_inst
         self.inst_state = BackfillState()
+        self._fetch_margin = fetch_margin
+        self.margin_state = BackfillState()
 
     def pending_days(self, now: datetime) -> list[date]:
         """Weekdays within the backfill window that are not stored yet, newest first."""
@@ -152,6 +157,7 @@ class HistoryCollector:
         self.state.running = False
         await self.collect_index()
         await self.collect_inst()
+        await self.collect_margin()
         await asyncio.to_thread(warm_history_cache, self.store)  # bonus-19
 
     async def collect_index(self) -> None:
@@ -197,6 +203,30 @@ class HistoryCollector:
             self.inst_state.done += 1
             await self._sleep(self._delay)
         self.inst_state.running = False
+
+    async def collect_margin(self) -> None:
+        """融資融券 for stored trading days that have none yet (newest first), like collect_inst."""
+        if self._fetch_margin is None:
+            return
+        known = self.store.margin_dates()
+        todo = [d for d in self.store.trading_dates(limit=MARGIN_DAYS) if d not in known]
+        self.margin_state = BackfillState(running=bool(todo), total=len(todo))
+        for d in todo:
+            try:
+                rows = await self._fetch_margin(d)
+                local = self._clock().astimezone(TAIPEI)
+                if rows is None and d == local.date() and local.time() < DAILY_GIVE_UP:
+                    pass  # published later in the evening: try again next pass
+                else:
+                    self.store.save_margin_day(d, rows, self._clock())
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:
+                log.warning("margin data for %s failed: %s", d, exc)
+                self.margin_state.error = f"{d}: {exc}"
+            self.margin_state.done += 1
+            await self._sleep(self._delay)
+        self.margin_state.running = False
 
     async def run(self) -> None:
         while True:

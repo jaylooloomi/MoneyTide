@@ -135,3 +135,41 @@ def test_collector_backfills_inst_and_waits_for_today(tmp_path):
     assert sorted(asked) == [date(2026, 10, 21), date(2026, 10, 22)]
     assert s.inst_dates() == {date(2026, 10, 21)}  # today's empty answer is retried later
     assert s.inst_net([date(2026, 10, 21)])[date(2026, 10, 21)] == {"1": 5}
+
+
+# ---- 融資融券 sources + collector ----------------------------------------------------------------
+
+def test_parse_margin_fixtures():
+    from openmarket.sources.margin import parse_tpex_margin, parse_twse_margin
+
+    twse = {r.code: r for r in parse_twse_margin(json.loads((FIX / "twse_margin_20261022.json").read_text(encoding="utf-8")))}
+    assert (twse["2330"].margin_prev, twse["2330"].margin_bal, twse["2330"].short_prev, twse["2330"].short_bal) == (35330, 35472, 6, 15)
+    assert (twse["2492"].margin_prev, twse["2492"].margin_bal, twse["2492"].short_bal) == (17010, 18187, 1596)
+    tpex = {r.code: r for r in parse_tpex_margin(json.loads((FIX / "tpex_margin_20261022.json").read_text(encoding="utf-8")))}
+    assert (tpex["6148"].margin_prev, tpex["6148"].margin_bal, tpex["6148"].short_prev, tpex["6148"].short_bal) == (2494, 2667, 245, 395)
+    assert parse_twse_margin({"stat": "很抱歉，沒有符合條件的資料", "tables": []}) is None  # holiday
+    assert parse_tpex_margin({"stat": "ok", "tables": [{"data": []}]}) is None
+    with pytest.raises(ParseError):
+        parse_twse_margin({"stat": "OK", "tables": [{"title": "融資融券彙總 (全部)", "data": [["2330", "x"]]}]})
+
+
+def test_collector_backfills_margin_and_waits_for_today(tmp_path):
+    from openmarket.sources.margin import MarginRow
+
+    s = HistoryStore(tmp_path / "h.sqlite")
+    now = datetime(2026, 10, 22, 17, tzinfo=TAIPEI)
+    for d in (date(2026, 10, 21), date(2026, 10, 22)):
+        s.save_day(d, build_rows([DailyRow("1", "1", "上市", 100, 1, 99, 101, 99, 1000, 9e8, 10**7)], INFOS, {}), now)
+
+    async def fetch_margin(d):
+        return None if d == date(2026, 10, 22) else [MarginRow("1", 100, 120, 5, 3)]
+
+    async def no_sleep(_):
+        return None
+
+    c = HistoryCollector(store=s, fetch_twse=None, fetch_tpex=None, reference=lambda: ({}, {}), clock=lambda: now,
+                         sleep=no_sleep, fetch_margin=fetch_margin)
+    asyncio.run(c.collect_margin())
+    assert s.margin_dates() == {date(2026, 10, 21)}  # today's empty answer is retried later
+    assert s.margin([date(2026, 10, 21)])[date(2026, 10, 21)] == {"1": (100, 120, 5, 3)}
+    assert s.margin([date(2026, 10, 21)], ["2"]) == {date(2026, 10, 21): {}}

@@ -47,6 +47,17 @@ CREATE TABLE IF NOT EXISTS inst_day (
     rows INTEGER NOT NULL DEFAULT 0,
     fetched_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS margin_daily (
+    date TEXT NOT NULL,
+    code TEXT NOT NULL,
+    margin_prev REAL, margin_bal REAL, short_prev REAL, short_bal REAL,
+    PRIMARY KEY (date, code)
+);
+CREATE TABLE IF NOT EXISTS margin_day (
+    date TEXT PRIMARY KEY,
+    rows INTEGER NOT NULL DEFAULT 0,
+    fetched_at TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS intraday_tick (
     date TEXT NOT NULL,
     ts TEXT NOT NULL,
@@ -447,6 +458,41 @@ class HistoryStore:
     def inst_trust(self, days: list[date], codes: Iterable[str] | None = None) -> dict[date, dict[str, float]]:
         """{day: {code: 投信 net shares}}"""
         return self._inst_column("trust_net", days, codes)
+
+    # ---- 融資融券 balances (張) ----------------------------------------------------------------------
+
+    def save_margin_day(self, day: date, rows: list | None, fetched_at: datetime) -> None:
+        """rows: MarginRow-like objects, or None/[] for a day without data (recorded so it is not refetched)."""
+        with self._lock, self._conn() as c:
+            c.execute("DELETE FROM margin_daily WHERE date = ?", (day.isoformat(),))
+            c.executemany(
+                "INSERT INTO margin_daily (date, code, margin_prev, margin_bal, short_prev, short_bal) VALUES (?, ?, ?, ?, ?, ?)",
+                [(day.isoformat(), r.code, r.margin_prev, r.margin_bal, r.short_prev, r.short_bal) for r in rows or []],
+            )
+            c.execute(
+                "INSERT OR REPLACE INTO margin_day (date, rows, fetched_at) VALUES (?, ?, ?)",
+                (day.isoformat(), len(rows or []), fetched_at.isoformat()),
+            )
+
+    def margin_dates(self) -> set[date]:
+        with self._conn() as c:
+            return {date.fromisoformat(r["date"]) for r in c.execute("SELECT date FROM margin_day")}
+
+    def margin(self, days: list[date], codes: Iterable[str] | None = None) -> dict[date, dict[str, tuple[float, float, float, float]]]:
+        """{day: {code: (融資前日餘額, 融資餘額, 融券前日餘額, 融券餘額)}} in 張; `codes` limits the stocks."""
+        if not days:
+            return {}
+        out: dict[date, dict[str, tuple[float, float, float, float]]] = {d: {} for d in days}
+        sql = f"SELECT date, code, margin_prev, margin_bal, short_prev, short_bal FROM margin_daily WHERE date IN ({', '.join('?' for _ in days)})"
+        args = [d.isoformat() for d in days]
+        if codes is not None:
+            codes = sorted(set(codes))
+            sql += f" AND code IN ({', '.join('?' for _ in codes)})"
+            args += codes
+        with self._conn() as c:
+            for d, code, mp, mb, sp, sb in c.execute(sql, args):
+                out[date.fromisoformat(d)][code] = (mp or 0.0, mb or 0.0, sp or 0.0, sb or 0.0)
+        return out
 
     def inst_version(self, day: date | None = None) -> int:
         return self._inst_version if day is None else self._inst_day_version.get(day, 0)

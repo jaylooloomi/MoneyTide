@@ -492,3 +492,37 @@ def test_stock_card_endpoint_carries_inst(tmp_path):
         assert inst == {"foreign": 1500, "trust": 300, "dealer": -20, "total": 1780, "streak": {"days": 3, "side": "buy"}, "trust_streak": {"days": 3, "side": "buy"}}
         s.save_day(date(2026, 3, 5), [row], datetime(2026, 3, 5, 15))  # 法人 not out yet for 3/5
         assert client.get("/api/history/stock/A", params={"to": "2026-03-05", "days": 2}).json()["inst"] is None
+
+
+def test_margin_summary_and_endpoints(tmp_path):
+    from datetime import datetime
+
+    from fastapi.testclient import TestClient
+
+    from openmarket.api import create_app
+    from openmarket.config import AppConfig
+    from openmarket.history.finder import margin_summary
+    from openmarket.history.store import HistoryStore
+    from openmarket.sources.margin import MarginRow
+
+    g, none = margin_summary([{"members": [{"code": "A"}, {"code": "B"}]}, {"members": [{"code": "X"}]}], {"A": (100, 150, 10, 5), "B": (200, 180, 0, 20)})
+    assert g["margin"] == {"margin_chg": 30, "margin_bal": 330, "short_chg": 15, "short_bal": 25, "short_ratio": round(25 / 330 * 100, 2)}
+    assert [m["margin_chg"] for m in g["members"]] == [50, -20] and none["margin"] is None
+
+    s = HistoryStore(tmp_path / "h.sqlite")
+    days = [date(2026, 3, 2), date(2026, 3, 3), date(2026, 3, 4)]
+    row = {"code": "A", "name": "a", "market": "上市", "industry": "X", "kind": "stock", "close": 10.0, "prev_close": 10.0, "change": 0, "change_pct": 0, "high": 10.0, "low": 10.0, "open": 10.0}
+    for d in days:
+        s.save_day(d, [row], datetime(d.year, d.month, d.day, 15))
+    s.save_margin_day(days[0], [MarginRow("A", 100, 90, 0, 0)], datetime(2026, 3, 2, 21))  # 融資減
+    s.save_margin_day(days[1], [MarginRow("A", 90, 95, 0, 0)], datetime(2026, 3, 3, 21))  # 增
+    s.save_margin_day(days[2], [MarginRow("A", 95, 120, 2, 6)], datetime(2026, 3, 4, 21))  # 增
+    key = FinderParams(groupings=("industry",)).key() + "|industry"
+    s.save_finder(days[2], "known", key, {"date": days[2].isoformat(), "method": "known", "groups": [{"members": [{"code": "A", "name": "a"}]}], "stats": {}})
+    app = create_app(AppConfig(data_dir=tmp_path), start_polling=False, start_history=False, start_concepts=False, history_store=s)
+    with TestClient(app, base_url="http://127.0.0.1") as client:
+        fg = client.get("/api/history/finder", params={"date": days[2].isoformat(), "method": "known", "stored_only": 1, "groupings": "industry"}).json()["groups"][0]
+        card = client.get("/api/history/stock/A", params={"to": days[2].isoformat(), "days": 2}).json()["margin"]
+    assert fg["margin"] == {"margin_chg": 25, "margin_bal": 120, "short_chg": 4, "short_bal": 6, "short_ratio": 5.0}
+    assert fg["margin_streak"] == {"days": 2, "side": "buy"}  # 融資連增 2 天 (3/3, 3/4); 3/2 decreased
+    assert card == {**fg["margin"], "streak": {"days": 2, "side": "buy"}}

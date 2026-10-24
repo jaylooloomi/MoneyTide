@@ -66,6 +66,10 @@ test('cardHtml: kind, closest grouping, members (outside one marked), facts and 
   assert.doesNotMatch(cardHtml({ ...G, inst_net: null }, 2), /fd-inst/);
   assert.match(cardHtml({ ...G, trust_streak: { days: 3, side: 'buy' } }, 2), /<div class="fd-inst">🏦 .*<b class="up"[^>]*>投信連買 3 天<\/b>/);
   assert.doesNotMatch(cardHtml(G, 2), /投信連/);
+  const mg = cardHtml({ ...G, margin: { margin_chg: 1234, margin_bal: 56000, short_chg: -20, short_bal: 1200, short_ratio: 2.14 }, margin_streak: { days: 3, side: 'buy' } }, 2);
+  assert.match(mg, /<div class="fd-margin"[^>]*>💳 融資 <b class="up">\+1,234<\/b> 張 <span class="muted">（餘額 5\.6 萬）<\/span>　融券 <b class="down">−20<\/b> 張/);
+  assert.match(mg, /券資比 2\.1%　<b class="up">融資連增 3 天<\/b>/);
+  assert.doesNotMatch(cardHtml(G, 2), /fd-margin/);
   const split = cardHtml({ ...G, inst_split: { foreign: 1991, trust: 0, dealer: -19 } }, 2);
   assert.match(split, /外資 <b class="up">\+1,991<\/b>／投信 <b class="">0<\/b>／自營 <b class="down">−19<\/b> 張/);
   assert.doesNotMatch(cardHtml(G, 2), /外資/);
@@ -167,6 +171,9 @@ test('csvExport: one row per member of the cards on screen, with the group figur
   const col = (k) => rr[0][rh.indexOf(k)];
   assert.deepEqual(['個股法人(張)', '群組法人(張)', '群組法人(億)', '法人占成交%', '外資(張)', '投信(張)', '自營(張)', '法人連續', '投信連續'].map(col), [1235, 1235, 2, 5, 1000, 200, 35, '連買3', '連賣2']);
   assert.equal(rh[rh.length - 1], '條件');
+  const mrich = { ...rich, groups: [{ ...rich.groups[0], members: [{ code: '1', name: '甲', margin_chg: 50 }], margin: { margin_chg: 50, margin_bal: 100, short_chg: -3, short_bal: 9, short_ratio: 9 }, margin_streak: { days: 2, side: 'sell' } }] };
+  const [, mh, mr] = csvExport(mrich);
+  assert.deepEqual(['個股融資增減(張)', '群組融資增減(張)', '群組融券增減(張)', '券資比%', '融資連續'].map((k) => mr[0][mh.indexOf(k)]), [50, 50, -3, 9, '連減2']);
   assert.match(rname, /_法人買超\.csv$/);
   assert.equal(rows[0][header.indexOf('外資(張)')], ''); // no 法人 attached: blank, not 0
 });

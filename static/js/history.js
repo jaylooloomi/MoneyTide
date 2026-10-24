@@ -782,6 +782,15 @@ export function cardInstRows(i) {
       <tr><td colspan="4" class="muted">外資 ${n(i.foreign)}／投信 ${n(i.trust)}／自營 ${n(i.dealer)} 張</td></tr>`;
 }
 
+/** The card's 融資融券 rows (張): 增減 with 餘額, 券資比 and the 融資連增／連減 streak; '' when none. */
+export function cardMarginRows(m) {
+  if (!m) return '';
+  const n = (v) => `<span class="${v > 0 ? 'up' : v < 0 ? 'down' : ''}">${v > 0 ? '+' : v < 0 ? '−' : ''}${Math.abs(v).toLocaleString()}</span>`;
+  const s = m.streak ? `<small class="${m.streak.side === 'buy' ? 'up' : 'down'}">融資連${m.streak.side === 'buy' ? '增' : '減'} ${m.streak.days} 天</small>` : '';
+  return `<tr><td>融資</td><td>${n(m.margin_chg)} 張</td><td>餘額</td><td>${m.margin_bal.toLocaleString()} 張</td></tr>
+      <tr><td>融券</td><td>${n(m.short_chg)} 張</td><td>券資比</td><td>${m.short_ratio == null ? '—' : `${m.short_ratio.toFixed(1)}%`} ${s}</td></tr>`;
+}
+
 async function openHistCard(code) {
   cardCode = code;
   let d;
@@ -802,6 +811,7 @@ async function openHistCard(code) {
       <tr><td>最高</td><td>${fmtPrice(d.high)}</td><td>最低</td><td>${fmtPrice(d.low)}</td></tr>
       <tr><td>成交量</td><td>${fmtNum(d.volume_lots, 0)} 張</td><td>市值</td><td>${fmtCap(d.market_cap)}</td></tr>
       ${cardInstRows(d.inst)}
+      ${cardMarginRows(d.margin)}
     </table>
     <div class="memb" data-memb="${escapeHtml(d.code)}"></div>
     <div class="btns">

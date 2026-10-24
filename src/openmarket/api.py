@@ -25,7 +25,7 @@ from .history.linkage import (
     INTRADAY_HIGH_R, INTRADAY_LOW_R, bucket_closes, daily_linkage, fmt_minute, pair_matrix, peak_minute_from_bars, peak_minute_from_ticks,
     align_bars, amplitude_pct, limit_down_pct, limit_up_pct, minute_bars, turnover_rate, peak_stats, tick_bars, with_close_bar, race_points, returns, locked_level, top_members, verdict_r, verdict_timing,
 )
-from .history.finder import INST_STREAK_DAYS, FinderParams, inst_streak, inst_summary, persistence, run_search
+from .history.finder import INST_STREAK_DAYS, FinderParams, inst_streak, inst_summary, margin_changes, margin_summary, persistence, run_search
 from .history.finder import news_themes as finder_news_themes  # api.py has its own news_themes route
 from .intraday import IntradayRecorder
 from .sources.yahoo_intraday import INDEX_SYMBOLS, ONE_MINUTE_DAYS, fetch_bars, fetch_day_1m, fetch_span_1m
@@ -42,6 +42,7 @@ from .sources.http import make_client
 from .sources.official import fetch_tpex_day, fetch_twse_day
 from .sources.official_index import fetch_index_month
 from .sources.institutional import fetch_inst_day
+from .sources.margin import fetch_margin_day
 from .sources.company_address import fetch_county_groups
 from .sources.google_news import fetch_headlines
 from .sources.news_themes import fetch_day_headlines
@@ -159,6 +160,7 @@ def create_app(
                 reference=lambda: (p.infos, p.shares),
                 fetch_index=lambda market, month: fetch_index_month(client, market, month, asyncio.sleep, REQUEST_DELAY_SECONDS),
                 fetch_inst=lambda d: fetch_inst_day(client, d, asyncio.sleep, REQUEST_DELAY_SECONDS),
+                fetch_margin=lambda d: fetch_margin_day(client, d, asyncio.sleep, REQUEST_DELAY_SECONDS),
             )
             tasks.append(asyncio.create_task(app.state.collector.run()))
             ptt_client = app.state.ptt_client = make_ptt_client()
@@ -730,6 +732,13 @@ def create_app(
             # 投信連買／連賣: the same streak on 投信 alone (theme / window-dressing positioning)
             trust = inst_streak(groups, store.inst_trust(inst_days, member_codes), inst_days)
             groups = [{**g, "trust_streak": t["inst_streak"]} for g, t in zip(groups, trust)]
+            # 💳 融資融券 (leveraged / retail money) on d, and 融資連增／連減 over the latest margin days
+            margin_have = store.margin_dates()
+            margin_days = list(takewhile(lambda x: x in margin_have, store.trading_dates(up_to=d, limit=INST_STREAK_DAYS)))
+            margin_rows = store.margin(margin_days, member_codes)
+            groups = margin_summary(groups, margin_rows.get(d, {}))
+            streak = inst_streak(groups, margin_changes(margin_rows), margin_days)
+            groups = [{**g, "margin_streak": t["inst_streak"]} for g, t in zip(groups, streak)]
             return {**res, "groups": finder_news_themes(groups, news)}
 
         if not refresh:
