@@ -213,6 +213,11 @@ export function cardHtml(g, i) {
         .map((e) => `<b>${escapeHtml(e.name)}</b> ${Object.keys(e.ranks).map((c) => `${escapeHtml(nameOf(c))}（第 ${e.ranks[c]}）`).join('、')}`)
         .join('；')}</div>`
     : '';
+  // 籌碼集中度 of the members with 分點 stored ((top-15 buyers + top-15 sellers) ÷ volume)
+  const conc = Object.entries(g.concentration || {});
+  const concLine = conc.length
+    ? `<div class="fd-br" title="籌碼集中度＝（前 15 大買超分點買超 − 前 15 大賣超分點賣超）÷ 成交量；正數＝籌碼往大買家集中">🏦 籌碼集中度 ${conc.map(([c, v]) => `${escapeHtml(nameOf(c))} <span class="${v > 0 ? 'up' : v < 0 ? 'down' : ''}">${v > 0 ? '+' : ''}${v.toFixed(1)}%</span>`).join('、')}</div>`
+    : '';
   const rel = g.relations?.length || g.rel_group ? `<div class="fd-rel" title="轉投資／法人董監（MoneyDJ 整理自公開資訊觀測站）：一起動有結構性的原因">🏢 ${relationsHtml(g.relations, g.rel_group)}</div>` : '';
   const news = g.news?.length ? `<div class="fd-news">📰 ${g.news.map((t) => escapeHtml(t)).join('<br>📰 ')}</div>` : '';
   const themes = g.themes?.length
@@ -229,7 +234,7 @@ export function cardHtml(g, i) {
     <div class="fd-top"><span class="link-badge" style="background:${KIND_COLOR[g.kind] || '#3a3e48'}">${escapeHtml(g.kind)}</span>
       <span class="fd-title" title="${tip}">${title}</span>${seen}<span class="muted">${g.members.length} 檔</span>
       <button type="button" class="icon fd-save" data-save="${i}" title="把這群股票存成自訂族群，之後在 B／C／K 追蹤">＋族群</button></div>
-    <div class="fd-chips">${chips}</div>${groupEvidenceHtml(g)}${dt}${money}${inst}${margin}${br}${rel}
+    <div class="fd-chips">${chips}</div>${groupEvidenceHtml(g)}${dt}${money}${inst}${margin}${br}${concLine}${rel}
     <div class="fd-facts">${facts}</div>${themes}${news}
   </div>`;
 }

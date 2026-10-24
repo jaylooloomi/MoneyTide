@@ -329,3 +329,9 @@ test('a 5-minute card says its peak-gap rule only resolves to 5 minutes', () => 
   assert.match(cardHtml(g, 0), /title="這天只有 5 分 K：高點時間只到 5 分鐘精度[^"]*">5 分 K<\/span>/);
   assert.match(FIELDS.find((f) => f[0] === 'peak_gap')[4], /6～9 跟 5 效果一樣/);
 });
+
+test('N cards show the members’ 籌碼集中度 when 分點 is stored', () => {
+  const g = { members: [{ code: '1', name: '甲' }, { code: '2', name: '乙' }], sources: [], matches: [], kind: '已知族群', concentration: { 1: 17.5, 2: -3 } };
+  assert.match(cardHtml(g, 0), /🏦 籌碼集中度 甲 <span class="up">\+17\.5%<\/span>、乙 <span class="down">-3\.0%<\/span>/);
+  assert.doesNotMatch(cardHtml({ ...g, concentration: null }, 0), /籌碼集中度/);
+});
