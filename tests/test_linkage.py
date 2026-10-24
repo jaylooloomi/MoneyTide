@@ -283,8 +283,10 @@ def test_daily_k_last_days_with_volume_ratio_limit_and_inst(tmp_path):
                         "low": min(prev, closes[i]), "close": closes[i], "prev_close": prev, "change": closes[i] - prev,
                         "change_pct": (closes[i] / prev - 1) * 100, "volume_shares": vols[i]}], datetime(d.year, d.month, d.day, 15))
     s.save_inst_day(days[-1], [InstRow("A", 0, 0, 0, 2_500_400)], datetime(2026, 3, 5, 17))
+    later = daily_k(s, days[1], ["A"], days=2, vr_days=1, after=2)["A"]  # 3/3 shown: 3/4, 3/5 come after it
+    assert [(x["date"], x["after"]) for x in later] == [("2026-03-02", False), ("2026-03-03", False), ("2026-03-04", True), ("2026-03-05", True)]
     k = daily_k(s, days[-1], ["A", "Z"], days=3, vr_days=2)["A"]
-    assert [x["date"] for x in k] == ["2026-03-03", "2026-03-04", "2026-03-05"]  # oldest first
+    assert [x["date"] for x in k] == ["2026-03-03", "2026-03-04", "2026-03-05"]  # oldest first; nothing after the latest day
     assert k[0]["limit"] is True and k[1]["limit"] is False
     assert k[0]["vr"] == 4.0  # 4,000 張 against the 1,000 before (only one day of history)
     assert k[2]["vr"] == round(1500_000 / ((4000_000 + 2000_000) / 2), 2)

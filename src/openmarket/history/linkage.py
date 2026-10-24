@@ -334,13 +334,15 @@ def fmt_minute(m: int | None) -> str | None:
 
 K5_DAYS = 5  # K's 5 日 K: candles shown per stock
 K5_VR_DAYS = 5  # 量比 against the average volume of this many days before each candle
+K5_AFTER = 2  # trading days after the shown day, when stored (marked `after`)
 
 
-def daily_k(store: HistoryStore, day: date, codes: list[str], days: int = K5_DAYS, vr_days: int = K5_VR_DAYS) -> dict[str, list[dict]]:
-    """The last `days` trading days up to `day` for each code, oldest first: {date, open, high, low, close,
-    pct, lots (張), limit (closed at limit-up), vr (量比 vs the vr_days before; None without history),
-    inst (三大法人 張; None when not published)}."""
-    dates = sorted(store.trading_dates(up_to=day, limit=days + vr_days))
+def daily_k(store: HistoryStore, day: date, codes: list[str], days: int = K5_DAYS, vr_days: int = K5_VR_DAYS, after: int = K5_AFTER) -> dict[str, list[dict]]:
+    """The last `days` trading days up to `day` for each code, then up to `after` stored days past it, oldest
+    first: {date, open, high, low, close, pct, lots (張), limit (closed at limit-up), vr (量比 vs the vr_days
+    before; None without history), inst (三大法人 張; None when not published), after (past `day`)}."""
+    later = sorted(x for x in store.trading_dates() if x > day)[:after]
+    dates = sorted(store.trading_dates(up_to=day, limit=days + vr_days)) + later
     rows = store.rows(dates)
     wanted = set(codes)
     by_code: dict[str, dict[date, dict]] = {c: {} for c in codes}
@@ -348,7 +350,7 @@ def daily_k(store: HistoryStore, day: date, codes: list[str], days: int = K5_DAY
         for r in rows[d]:
             if r["code"] in wanted:
                 by_code[r["code"]][d] = r
-    shown = dates[-days:]
+    shown = [x for x in dates if x <= day][-days:] + later
     inst = store.inst_net(shown, codes)
     out: dict[str, list[dict]] = {}
     for c in codes:
@@ -369,6 +371,7 @@ def daily_k(store: HistoryStore, day: date, codes: list[str], days: int = K5_DAY
                 "limit": bool(limit and r["close"] >= limit - 0.001),
                 "vr": round(vol / (sum(before) / len(before)), 2) if vol is not None and before else None,
                 "inst": round(net / 1000) if net is not None else None,
+                "after": d > day,
             })
         out[c] = series
     return out

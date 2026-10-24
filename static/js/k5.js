@@ -8,9 +8,11 @@ const DOWN = '#2ecc71';
 const FLAT = '#aeb3bf';
 const VR_HOT = 2; // 量比 at or above this is marked on the candle
 
-/** 5 日累計漲幅 (first open-day's previous close → last close) and the current up / down streak. */
-export function k5Summary(series) {
-  if (!series?.length) return { cum: null, streak: 0 };
+/** 5 日累計漲幅 (first open-day's previous close → last close) and the current up / down streak, over the
+ *  days up to the shown one (the `after` days are only drawn). */
+export function k5Summary(all) {
+  const series = (all || []).filter((x) => !x.after);
+  if (!series.length) return { cum: null, streak: 0 };
   const growth = series.reduce((g, x) => (x.pct === null || x.pct === undefined ? g : g * (1 + x.pct / 100)), 1);
   let streak = 0;
   for (let i = series.length - 1; i >= 0; i--) {
@@ -23,9 +25,11 @@ export function k5Summary(series) {
   return { cum: (growth - 1) * 100, streak };
 }
 
-/** The candles as an SVG string, w × h; `full` adds volume bars and labels (漲跌 %, 🔒, 量比, 法人). */
-export function k5Svg(series, w, h, full = false) {
-  const s = (series || []).filter((x) => x.high !== null && x.low !== null);
+/** The candles as an SVG string, w × h; `full` adds volume bars and labels (漲跌 %, 🔒, 量比, 法人), the
+ *  days after the shown one faded behind a 「之後」 divider, a click target per day (data-k5date) and a
+ *  highlight on `sel` (the day the intraday chart shows). The mini one leaves the after days out. */
+export function k5Svg(series, w, h, full = false, sel = null) {
+  const s = (series || []).filter((x) => x.high !== null && x.low !== null && (full || !x.after));
   if (!s.length) return `<svg viewBox="0 0 ${w} ${h}" width="${w}" height="${h}"></svg>`;
   const labelH = full ? 46 : 0; // under the candles: %, 法人 and the date, one line each
   const volH = full ? 26 : 0;
@@ -40,6 +44,12 @@ export function k5Svg(series, w, h, full = false) {
   const parts = [];
   s.forEach((x, i) => {
     const cx = slot * i + slot / 2;
+    if (full && x.date === sel) parts.push(`<rect x="${slot * i + 1}" y="0" width="${slot - 2}" height="${h}" fill="#ffd40018" stroke="#ffd40066" rx="3"/>`);
+    if (full && x.after && !s[i - 1]?.after) {
+      parts.push(`<line x1="${slot * i}" x2="${slot * i}" y1="0" y2="${h}" stroke="#8a8f9c" stroke-dasharray="3 3" stroke-width="1"/>`);
+      parts.push(`<text x="${slot * i + 3}" y="9" font-size="9" fill="#8a8f9c">之後</text>`);
+    }
+    if (full) parts.push(`<g data-k5date="${escapeHtml(x.date)}" style="cursor:pointer"${x.after ? ' opacity="0.55"' : ''}><title>${escapeHtml(x.date)}：點一下看這天的分時走勢</title>`);
     const open = x.open ?? x.close;
     const color = x.close > open ? UP : x.close < open ? DOWN : x.pct > 0 ? UP : x.pct < 0 ? DOWN : FLAT;
     const y1 = y(Math.max(open, x.close));
@@ -70,6 +80,7 @@ export function k5Svg(series, w, h, full = false) {
       parts.push(`<text x="${cx}" y="${ly + 13}" font-size="9" fill="${ic}" text-anchor="middle">${x.inst > 0 ? '+' : ''}${n}</text>`);
     }
     parts.push(`<text x="${cx}" y="${h - 1}" font-size="9" fill="#8a8f9c" text-anchor="middle">${escapeHtml(x.date.slice(5).replace('-', '/'))}</text>`);
+    parts.push(`<rect x="${slot * i}" y="0" width="${slot}" height="${h}" fill="transparent"/></g>`); // the whole column clicks
   });
   return `<svg viewBox="0 0 ${w} ${h}" width="${w}" height="${h}" aria-hidden="true">${parts.join('')}</svg>`;
 }
@@ -83,10 +94,10 @@ export function k5Title(series) {
 }
 
 /** One picked stock's card in the middle column: name, 5 日累計 / 連漲, the full candles. */
-export function k5CardHtml(name, code, color, series) {
+export function k5CardHtml(name, code, color, series, sel = null) {
   const { cum, streak } = k5Summary(series);
   const head = `<div class="k5-h"><b style="color:${color}">${escapeHtml(name)}</b> <small class="muted">${escapeHtml(code)}</small>
     ${cum === null ? '' : `<span class="${cum > 0 ? 'up' : cum < 0 ? 'down' : ''}">5 日 ${fmtPct(cum)}</span>`}
     ${streak ? `<span class="${streak > 0 ? 'up' : 'down'}">${streak > 0 ? '連漲' : '連跌'} ${Math.abs(streak)} 天</span>` : ''}</div>`;
-  return `<div class="k5-card">${head}${series?.length ? k5Svg(series, 260, 170, true) : '<p class="hint">沒有日 K 資料</p>'}</div>`;
+  return `<div class="k5-card">${head}${series?.length ? k5Svg(series, 260, 170, true, sel) : '<p class="hint">沒有日 K 資料</p>'}</div>`;
 }

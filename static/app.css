@@ -440,3 +440,4 @@ table.link-heat td.self { background: #3a3e48; }
 .k5-title { font-weight: 600; font-size: 12px; margin-bottom: 4px; }
 .k5-card { margin-bottom: 8px; }
 .k5-h { display: flex; gap: 6px; align-items: baseline; font-size: 12px; flex-wrap: wrap; }
+.ic-other-day { color: #ffd400; }

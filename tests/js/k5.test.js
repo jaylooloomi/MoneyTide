@@ -38,3 +38,15 @@ test('k5Svg / k5CardHtml / k5Title: candles, 🔒, 量比, 法人, dates', () =>
   assert.match(k5Title(S), /連漲 2 天/);
   assert.match(k5Title(S), /08-04 114\.4（\+10\.00%）🔒/);
 });
+
+test('k5Svg: the after days faded behind 之後, a click target per day, the shown day highlighted', () => {
+  const after = [...S, { date: '2026-08-05', open: 114, high: 120, low: 113, close: 118, pct: 3.15, lots: 900, limit: false, vr: 0.5, inst: 10, after: true }];
+  const full = k5Svg(after, 300, 170, true, '2026-08-03');
+  assert.match(full, />之後</);
+  assert.equal((full.match(/data-k5date=/g) || []).length, 5);
+  assert.match(full, /data-k5date="2026-08-05" style="cursor:pointer" opacity="0\.55"/);
+  assert.match(full, /fill="#ffd40018"/); // 08/03 highlighted
+  assert.doesNotMatch(k5Svg(after, 64, 30), /data-k5date|之後/); // the mini one: up to the shown day, not clickable
+  assert.equal((k5Svg(after, 64, 30).match(/<rect/g) || []).length, 4);
+  assert.equal(k5Summary(after).streak, 2); // the after days are not counted
+});

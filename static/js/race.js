@@ -369,8 +369,17 @@ export function mountRace(box, d, { onStock } = {}) {
           })
           .join('')}
       </div>
-    </div><div class="rt-pairs" hidden></div></div><div class="race-mid" title="選中股票的最近 5 個交易日：K 線、漲跌、🔒 漲停、量（×＝量比）、法人張數"></div><div class="race-side"></div></div>`;
-  const chart = mountIntraday(box.querySelector('.race-side'), { date: d.date, onCard: onStock, benchmarks: benches });
+    </div><div class="rt-pairs" hidden></div></div><div class="race-mid"></div><div class="race-side"></div></div>`;
+  const chart = mountIntraday(box.querySelector('.race-side'), {
+    date: d.date,
+    onCard: onStock,
+    benchmarks: benches,
+    onDate: (day) => {
+      k5Day = day; // 「回到」 in the chart's title
+      drawK5();
+    },
+  });
+  let k5Day = d.date; // the day the intraday chart shows (a 5 日 K candle can pick another)
   const rows = new Map([...box.querySelectorAll('.rt-row[data-code]')].map((el) => [el.dataset.code, el]));
   const benchRows = [...box.querySelectorAll('.rt-row.bench')].map((el) => [el, benchFrames[el.dataset.bench]]);
   const clock = box.querySelector('.race-clock');
@@ -417,12 +426,21 @@ export function mountRace(box, d, { onStock } = {}) {
   }
   // 5 日 K of the picked stocks, between the timeline and the intraday chart
   const midBox = box.querySelector('.race-mid');
+  midBox.title = '選中股票的最近 5 個交易日＋之後 2 天：K 線、漲跌、🔒 漲停、量（橘＝量比 ≥ 2）、法人張數；點一根 K 看那天的分時走勢';
   function drawK5() {
     const many = state.picked.length > 1;
     midBox.innerHTML = `<div class="k5-title">5 日 K</div>${state.picked
-      .map((c) => k5CardHtml(byCode.get(c)?.name || c, c, many ? colorOf(c) : '#e6e6e6', d.daily_k?.[c] || []))
+      .map((c) => k5CardHtml(byCode.get(c)?.name || c, c, many ? colorOf(c) : '#e6e6e6', d.daily_k?.[c] || [], k5Day))
       .join('')}`;
   }
+  // a candle → that day's intraday for every picked stock (the timeline stays on its own day)
+  midBox.addEventListener('click', (e) => {
+    const g = e.target.closest('[data-k5date]');
+    if (!g) return;
+    k5Day = g.dataset.k5date;
+    drawK5();
+    chart.setDate(k5Day).then(() => chart.sync(state.m));
+  });
   pairBox.addEventListener('click', (e) => {
     const tr = e.target.closest('tr[data-pair]');
     if (!tr) return;

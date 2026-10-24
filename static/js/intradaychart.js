@@ -418,7 +418,10 @@ export const COMPARE_LAYOUTS = { overlay: '疊圖', stack: '上下' };
 
 /** The chart panel inside `el`: show([{code, name}]) draws one stock, or several (疊圖 on one % axis /
  *  上下 one full chart each, switchable); sync(m) redraws up to minute m. load(code, name) = one stock. */
-export function mountIntraday(el, { date, onCard, benchmarks = [] }) {
+export function mountIntraday(el, { date, onCard, onDate, benchmarks = [] }) {
+  // viewDate: the day drawn (a 5 日 K candle can pick another); 大盤／櫃買 exist for `date` only
+  let viewDate = date;
+  const benches = () => (viewDate === date ? benchmarks : []);
   el.innerHTML = `<div class="ic-head"><span class="ic-title"></span><span class="muted ic-note"></span>
       <div class="seg ic-align"${benchmarks.length ? '' : ' hidden'} title="大盤／櫃買虛線：開盤對齊＝從開盤一起出發（比開盤後的強弱）；昨收＝各自相對昨收的漲跌">${Object.entries(BENCH_ALIGNS).map(([k, label]) => `<button type="button" data-align="${k}">${label}</button>`).join('')}</div>
       <div class="seg ic-layout" hidden>${Object.entries(COMPARE_LAYOUTS).map(([k, label]) => `<button type="button" data-layout="${k}">${label}</button>`).join('')}</div>
@@ -462,6 +465,7 @@ export function mountIntraday(el, { date, onCard, benchmarks = [] }) {
   const state = { items: [], m: END, ticket: 0, slots: [], shape: '' };
   el.querySelector('.ic-card').addEventListener('click', () => state.items[0] && onCard?.(state.items[0].code));
   title.addEventListener('click', (e) => {
+    if (e.target.closest('[data-act="back-day"]')) return setDate(date).then(() => onDate?.(date));
     const b = e.target.closest('[data-card]');
     if (b) onCard?.(b.dataset.card);
   });
@@ -522,13 +526,13 @@ export function mountIntraday(el, { date, onCard, benchmarks = [] }) {
     if (items.length >= 2 && layout === 'overlay') {
       const withBars = items.filter((x) => x.data.bars.length);
       if (!withBars.length) return empty(slots[0]);
-      paintSlot(slots[0], buildCompareOption(withBars, state.m, benchmarks, align), compareInfoHtml(withBars, state.m));
+      paintSlot(slots[0], buildCompareOption(withBars, state.m, benches(), align), compareInfoHtml(withBars, state.m));
       return;
     }
     items.forEach((x, i) => {
       if (slots[i].sub) slots[i].sub.textContent = `${x.name || x.code} ${x.code}`; // 上下: which chart is which
       if (!x.data.bars.length) return empty(slots[i], x.name);
-      paintSlot(slots[i], buildIntradayOption(x.data, state.m, benchmarks, align), infoHtml(x.data, statsAt(x.data, state.m), state.m));
+      paintSlot(slots[i], buildIntradayOption(x.data, state.m, benches(), align), infoHtml(x.data, statsAt(x.data, state.m), state.m));
     });
   }
 
@@ -536,21 +540,32 @@ export function mountIntraday(el, { date, onCard, benchmarks = [] }) {
     const many = items.length > 1;
     title.innerHTML = items
       .map((x, i) => `<b class="ic-name" data-card="${escapeHtml(x.code)}" title="點名稱開資訊卡"${many ? ` style="color:${pickColor(i)}"` : ''}>${escapeHtml(x.name || x.code)}${many && items.length > 3 ? '' : ` ${escapeHtml(x.code)}`}</b>`)
-      .join(items.length === 2 ? ' <span class="muted">vs</span> ' : '<span class="muted">、</span>') + ` <span class="muted">· ${escapeHtml(date)}</span>`;
+      .join(items.length === 2 ? ' <span class="muted">vs</span> ' : '<span class="muted">、</span>') +
+      (viewDate === date
+        ? ` <span class="muted">· ${escapeHtml(date)}</span>`
+        : ` <b class="ic-other-day">· ${escapeHtml(viewDate)}</b> <button type="button" class="icon wide" data-act="back-day">⤺ 回到 ${escapeHtml(date.slice(5).replace('-', '/'))}</button>`);
   }
 
+  const keyOf = (code) => `${code}@${viewDate}`;
   async function fetchDay(code) {
-    if (cache.has(code)) return cache.get(code);
-    const r = await fetch(`/api/history/intraday?code=${encodeURIComponent(code)}&date=${encodeURIComponent(date)}`, { cache: 'no-store' });
+    const key = keyOf(code);
+    if (cache.has(key)) return cache.get(key);
+    const r = await fetch(`/api/history/intraday?code=${encodeURIComponent(code)}&date=${encodeURIComponent(viewDate)}`, { cache: 'no-store' });
     const d = await r.json();
     if (!r.ok) throw new Error(d.detail || `HTTP ${r.status}`);
-    cache.set(code, d);
+    cache.set(key, d);
     return d;
+  }
+
+  /** Draw the shown stocks on another day (a 5 日 K candle); `date` again goes back. */
+  function setDate(d) {
+    viewDate = d || date;
+    return show(state.items.map(({ code, name }) => ({ code, name })));
   }
 
   async function show(list) {
     const t = ++state.ticket;
-    state.items = list.map(({ code, name }) => ({ code, name, data: cache.get(code) || null }));
+    state.items = list.map(({ code, name }) => ({ code, name, data: cache.get(keyOf(code)) || null }));
     heading(state.items);
     note.textContent = '載入中…';
     try {
@@ -563,19 +578,23 @@ export function mountIntraday(el, { date, onCard, benchmarks = [] }) {
     }
     const d = state.items[0].data;
     const step = `${state.items.some((x) => x.data.step_min === 5) ? '5 分 K' : '1 分 K'}${state.items.some((x) => x.data.source === 'recorded') ? '（自錄，無成交量）' : ''}`;
-    const benchIn = (colors) => (benchmarks.length ? `；虛線＝${benchmarks.map((b, i) => `<span style="color:${colors[i % colors.length]}">${escapeHtml(b.name)}</span>`).join('／')}` : '');
+    const benchIn = (colors) =>
+      viewDate !== date
+        ? '；大盤／櫃買虛線只有 ' + escapeHtml(date.slice(5)) + ' 那天的資料'
+        : benchmarks.length ? `；虛線＝${benchmarks.map((b, i) => `<span style="color:${colors[i % colors.length]}">${escapeHtml(b.name)}</span>`).join('／')}` : '';
     const bench = benchIn(state.items.length >= 2 && layout === 'overlay' ? COMPARE_BENCH_COLORS : BENCH_COLORS);
     note.innerHTML =
       state.items.length >= 2 && layout === 'overlay'
         ? `${step}；${state.items.length} 檔都換算成相對各自昨收的 %，可直接比強弱；● 各自的日內最高點${bench}；Ctrl／⌘＋點 K 的列可再加或取消（最多 ${MAX_PICKS} 檔）`
         : state.items.length >= 2
           ? `${step}；上下各一張完整的走勢（價格軸、漲停線、紫線＝均價）${bench}；Ctrl／⌘＋點 K 的列可再加或取消（最多 ${MAX_PICKS} 檔）`
-        : `${d.step_min === 5 ? '5 分 K' : '1 分 K'}${d.source === 'recorded' ? '（自錄，無成交量）' : ''}；紫線＝均價；● 日內最高點${bench}${benchmarks.length ? '（同一 % 軸）' : ''}；Ctrl／⌘＋點另一列可加入比較`;
+        : `${d.step_min === 5 ? '5 分 K' : '1 分 K'}${d.source === 'recorded' ? '（自錄，無成交量）' : ''}；紫線＝均價；● 日內最高點${bench}${benches().length ? '（同一 % 軸）' : ''}；Ctrl／⌘＋點另一列可加入比較`;
     draw();
   }
 
   return {
     show,
+    setDate,
     load: (code, name) => show([{ code, name }]),
     sync(m) {
       state.m = m;
