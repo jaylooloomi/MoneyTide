@@ -460,6 +460,7 @@ def create_app(
         return bars or None, ""
 
     YAHOO_CONCURRENCY = 6  # members whose bars are fetched at the same time
+    SESSION_MIN_POINTS = 15  # 5-minute returns one session needs for its own R (locked stretches leave fewer)
 
     async def linkage_payload(d: date, members: list[dict]) -> dict:
         """K body for `members` (day rows, the largest market cap first) on day d."""
@@ -532,6 +533,12 @@ def create_app(
                 r.extend(returns(closes, axis, locked_level(closes, rows_by_session.get(s, {}).get(c))))
             series.append(r)
         matrix, r_intraday = pair_matrix(series, min_points=20)
+        # the same R per session (今日／昨日／前日), for the 🔗 交集: one session has 54 returns at most
+        step = len(axis) - 1
+        by_session = [
+            {"date": s.isoformat(), "matrix": pair_matrix([r[k * step:(k + 1) * step] for r in series], min_points=SESSION_MIN_POINTS)[0]}
+            for k, s in enumerate(sessions)
+        ]
         for m in members:  # 13:30 = the official close (no Yahoo bar covers the closing auction)
             if race[m["code"]] and m.get("change_pct") is not None:
                 close = round(m["change_pct"], 2)
@@ -551,7 +558,7 @@ def create_app(
                 for m in members
             ],
             "daily": daily,
-            "intraday": {"sessions": [{"date": s.isoformat(), "source": sources.get(s, "none")} for s in sessions], "r": r_intraday, "matrix": matrix},
+            "intraday": {"sessions": [{"date": s.isoformat(), "source": sources.get(s, "none")} for s in sessions], "r": r_intraday, "matrix": matrix, "by_session": by_session},
             "peaks": [{"code": c, "time": fmt_minute(p)} for c, p in zip(codes, peak_list)],
             "peak_resolution_min": 5 if any(peaks[c] is not None for c in coarse) else 1,
             "peak_std_min": std,

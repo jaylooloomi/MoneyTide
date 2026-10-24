@@ -154,6 +154,8 @@ export function pairFacts(d, frames, a, b, m) {
   return {
     a, b,
     r20: cell(d.daily?.matrix20), r60: cell(d.daily?.matrix60), ri: cell(d.intraday?.matrix),
+    // each session's R, the shown day first (今日, 昨日, 前日)
+    riDays: [...(d.intraday?.by_session || [])].reverse().map((s) => ({ date: s.date, r: cell(s.matrix) })),
     peakA: pa, peakB: pb, peakGap: pa !== null && pb !== null ? Math.abs(pa - pb) : null, firstPeak: first(pa, pb),
     lockA: A.lock, lockB: B.lock, firstLock: first(A.lock, B.lock),
     nowA: A.now, nowB: B.now, diff: A.now !== null && B.now !== null ? A.now - B.now : null,
@@ -167,6 +169,18 @@ const rTag = (r, high, low) => {
   return `<b class="${cls}">${r === null ? '—' : r.toFixed(2)}</b> <small class="${cls}">${v}</small>`;
 };
 const lots = (net) => (net === null ? '—' : `${net > 0 ? '+' : net < 0 ? '−' : ''}${Math.abs(Math.round(net / 1000)).toLocaleString()} 張`);
+
+const DAY_NAMES = ['今日', '昨日', '前日'];
+
+/** 「今日 0.72（10/22）／昨日 0.58／前日 —」: the intraday R of each of the latest sessions, newest first. */
+export function riDaysHtml(days) {
+  if (!days?.length) return '';
+  const one = (x, i) => {
+    const cls = x.r === null ? 'muted' : x.r > 0.5 ? 'up' : x.r < 0.2 ? 'muted' : '';
+    return `${DAY_NAMES[i] || x.date.slice(5)} <b class="${cls}" title="${escapeHtml(x.date)}">${x.r === null ? '—' : x.r.toFixed(2)}</b>`;
+  };
+  return `<br><span class="rt-ri-days">${days.map(one).join('　')}</span>`;
+}
 
 /** Shared groups by kind, each label once and at most `max` names per kind (the rest counted). */
 export function sharedGroupsHtml(groups, max = 3) {
@@ -209,7 +223,7 @@ export function pairCardHtml(f, ext, name, color) {
   }
   return `<table class="rt-pair">
     ${row('日相關', `R20 ${rTag(f.r20, 0.7, 0.3)}　R60 ${rTag(f.r60, 0.7, 0.3)}`, '近 20／60 個交易日日漲跌幅的相關係數')}
-    ${row('分時相關', `R ${rTag(f.ri, 0.5, 0.2)} <small class="muted">近 3 日 5 分 K</small>`)}
+    ${row('分時相關', `R ${rTag(f.ri, 0.5, 0.2)} <small class="muted">近 3 日合計</small>${riDaysHtml(f.riDays)}`, '5 分 K 報酬的相關係數；鎖漲停的平線不計，單日少於 15 個點時顯示 —')}
     ${row('最高點', peak, '到播放頭為止（13:00 之前）的日內最高點')}
     ${row('鎖漲停', lock)}
     ${row('當下強弱', strong)}

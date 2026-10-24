@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { sharedGroupsHtml, pairCardHtml, pairFacts, pairTableHtml, verdictOf, RACE_END, amplitudeSoFar, fmtClock, instTip, isLimitUp, leadOf, pathPoints, peakSoFar, raceDomain, raceFrames, raceOrder } from '../../static/js/race.js';
+import { riDaysHtml, sharedGroupsHtml, pairCardHtml, pairFacts, pairTableHtml, verdictOf, RACE_END, amplitudeSoFar, fmtClock, instTip, isLimitUp, leadOf, pathPoints, peakSoFar, raceDomain, raceFrames, raceOrder } from '../../static/js/race.js';
 
 test('raceFrames forward-fills closes, remembers when a value was reached, keeps highs per minute', () => {
   const f = raceFrames({ A: [[0, 1, 2], [5, 10, 10], [6, 10, 10], [30, 9, 9.5]] }, ['A', 'B']);
@@ -92,11 +92,19 @@ test('pairFacts / pairCardHtml / pairTableHtml: 交集 of two picked stocks at t
   const d = {
     members: [{ code: 'A', name: '甲', inst_net: 2_000_000 }, { code: 'B', name: '乙', inst_net: -500_000 }, { code: 'C', name: '丙', inst_net: null }],
     daily: { matrix20: [[1, 0.82, 0.1], [0.82, 1, 0.2], [0.1, 0.2, 1]], matrix60: [[1, 0.65, 0], [0.65, 1, 0], [0, 0, 1]] },
-    intraday: { matrix: [[1, 0.71, 0.1], [0.71, 1, 0.3], [0.1, 0.3, 1]] },
+    intraday: {
+      matrix: [[1, 0.71, 0.1], [0.71, 1, 0.3], [0.1, 0.3, 1]],
+      by_session: [
+        { date: '2026-10-20', matrix: [[1, null, 0], [null, 1, 0], [0, 0, 1]] },
+        { date: '2026-10-21', matrix: [[1, 0.58, 0], [0.58, 1, 0], [0, 0, 1]] },
+        { date: '2026-10-22', matrix: [[1, 0.72, 0], [0.72, 1, 0], [0, 0, 1]] },
+      ],
+    },
   };
   const frames = raceFrames({ A: [[0, 1, 1], [50, 9.9, 9.9], [55, 10, 10]], B: [[0, 2, 2], [45, 8, 8.6], [60, 8.6, 8.6]], C: [[0, -1, -1]] }, ['A', 'B', 'C'], { A: 10, B: 10, C: 10 });
   const f = pairFacts(d, frames, 'A', 'B', 270);
   assert.deepEqual([f.r20, f.r60, f.ri], [0.82, 0.65, 0.71]);
+  assert.deepEqual(f.riDays, [{ date: '2026-10-22', r: 0.72 }, { date: '2026-10-21', r: 0.58 }, { date: '2026-10-20', r: null }]); // newest first
   assert.deepEqual([f.peakA, f.peakB, f.peakGap, f.firstPeak], [55, 45, 10, 'B']);
   assert.deepEqual([f.lockA, f.lockB, f.firstLock], [55, null, 'A']);
   assert.ok(Math.abs(f.diff - 1.4) < 1e-9);
@@ -127,4 +135,11 @@ test('sharedGroupsHtml: each kind once, at most three names, the rest counted', 
   const gs = [{ label: '官方產業', group: '半導體業' }, ...['a', 'b', 'c', 'd', 'e'].map((x) => ({ label: '細產業', group: x }))];
   assert.equal(sharedGroupsHtml(gs), '官方產業：半導體業；細產業：a、b、c <small class="muted">等 5 個</small>');
   assert.equal(sharedGroupsHtml([{ label: '自訂族群', group: '<x>' }]), '自訂族群：&lt;x&gt;');
+});
+
+test('riDaysHtml: 今日／昨日／前日 intraday R, — when a session had too few points', () => {
+  const html = riDaysHtml([{ date: '2026-10-22', r: 0.72 }, { date: '2026-10-21', r: 0.15 }, { date: '2026-10-20', r: null }]);
+  assert.match(html, /今日 <b class="up" title="2026-10-22">0\.72<\/b>　昨日 <b class="muted"[^>]*>0\.15<\/b>　前日 <b class="muted"[^>]*>—<\/b>/);
+  assert.equal(riDaysHtml([]), '');
+  assert.equal(riDaysHtml(undefined), '');
 });
