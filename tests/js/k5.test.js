@@ -24,6 +24,8 @@ test('k5Svg / k5CardHtml / k5Title: candles, 🔒, 量比, 法人, dates', () =>
   assert.doesNotMatch(mini, /🔒/);
   const full = k5Svg(S, 260, 170, true);
   assert.match(full, /🔒/);
+  assert.doesNotMatch(full, /fill="none"/); // solid candles only
+  assert.match(full, />量</); // the volume strip is labelled
   assert.match(full, /×3\.4/);
   assert.doesNotMatch(full, /×1\.1/); // only 量比 ≥ 2 is marked
   assert.match(full, /\+2\.3萬/); // 23,456 張 of 法人

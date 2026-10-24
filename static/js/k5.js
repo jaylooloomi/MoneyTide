@@ -45,13 +45,20 @@ export function k5Svg(series, w, h, full = false) {
     const y1 = y(Math.max(open, x.close));
     const y2 = y(Math.min(open, x.close));
     parts.push(`<line x1="${cx}" x2="${cx}" y1="${y(x.high)}" y2="${y(x.low)}" stroke="${color}" stroke-width="1"/>`);
-    parts.push(`<rect x="${cx - body / 2}" y="${y1}" width="${body}" height="${Math.max(1, y2 - y1)}" fill="${x.close >= open ? 'none' : color}" stroke="${color}" stroke-width="1"/>`);
+    // solid bodies, the Taiwan way: red 收 > 開, green 收 < 開 (no hollow candles)
+    parts.push(`<rect x="${cx - body / 2}" y="${y1}" width="${body}" height="${Math.max(1, y2 - y1)}" fill="${color}" stroke="${color}" stroke-width="1"/>`);
     if (!full) return;
     const pc = x.pct > 0 ? UP : x.pct < 0 ? DOWN : FLAT;
     if (x.limit) parts.push(`<text x="${cx}" y="${y(x.high) - 2}" font-size="9" text-anchor="middle">🔒</text>`);
     const vy = top + priceH + 4;
     const vh = x.lots ? (x.lots / maxLots) * volH : 0;
-    parts.push(`<rect x="${cx - body / 2}" y="${vy + volH - vh}" width="${body}" height="${vh}" fill="${pc}" opacity="0.55"/>`);
+    // volume: narrow grey bars under a divider, so they never read as a second row of candles (量比 ≥ 2 in orange)
+    if (i === 0) {
+      parts.push(`<line x1="0" x2="${w}" y1="${vy - 1}" y2="${vy - 1}" stroke="#2a2e37" stroke-width="1"/>`);
+      parts.push(`<text x="1" y="${vy + 8}" font-size="8" fill="#6b7080">量</text>`);
+    }
+    const hot = x.vr !== null && x.vr !== undefined && x.vr >= VR_HOT;
+    parts.push(`<rect x="${cx - body / 4}" y="${vy + volH - vh}" width="${body / 2}" height="${vh}" fill="${hot ? '#ffb300' : '#6b7080'}" opacity="${hot ? 0.85 : 0.6}"/>`);
     if (x.vr !== null && x.vr !== undefined && x.vr >= VR_HOT) {
       parts.push(`<text x="${cx}" y="${vy + volH - vh - 2}" font-size="9" fill="#ffb300" text-anchor="middle">×${x.vr.toFixed(1)}</text>`);
     }
