@@ -173,3 +173,47 @@ def test_collector_backfills_margin_and_waits_for_today(tmp_path):
     assert s.margin_dates() == {date(2026, 10, 21)}  # today's empty answer is retried later
     assert s.margin([date(2026, 10, 21)])[date(2026, 10, 21)] == {"1": (100, 120, 5, 3)}
     assert s.margin([date(2026, 10, 21)], ["2"]) == {date(2026, 10, 21): {}}
+
+
+# ---- TWSE 類股指數 (C's 電子／金融／傳產 rows) -------------------------------------------------------
+
+def test_parse_sector_indices_fixture():
+    from openmarket.sources.sector_index import parse_sector_indices
+
+    got = parse_sector_indices(json.loads((FIX / "twse_sector_20261022.json").read_text(encoding="utf-8")))
+    assert got == {"電子": (2866.47, -61.72), "金融": (3742.82, 23.15), "傳產": (17328.46, -282.38)}
+    assert parse_sector_indices({"stat": "OK"}) is None  # holiday: no tables
+    assert parse_sector_indices({"stat": "查詢日期大於今日"}) is None
+
+
+def test_collector_backfills_sectors_and_c_shows_them(tmp_path):
+    from openmarket.history.metrics import rotation
+
+    s = HistoryStore(tmp_path / "h.sqlite")
+    now = datetime(2026, 10, 22, 17, tzinfo=TAIPEI)
+    infos = {"E": StockInfo("E", "e", "半導體業", "上市", "stock"), "F": StockInfo("F", "f", "金融保險業", "上市", "stock"),
+             "P": StockInfo("P", "p", "塑膠工業", "上市", "stock"), "O": StockInfo("O", "o", "半導體業", "上櫃", "stock")}
+    for d in (date(2026, 10, 21), date(2026, 10, 22)):
+        rows = [DailyRow(c, c, infos[c].market, 100, 1, 99, 101, 99, 1000, 9e8, 10**7) for c in infos]
+        s.save_day(d, build_rows(rows, infos, {}), now)
+    asked = []
+
+    async def fetch_sectors(d):
+        asked.append(d)
+        return None if d == date(2026, 10, 22) else {"電子": (1010.0, 10.0), "金融": (99.0, -1.0), "傳產": (500.0, 0.0)}
+
+    async def no_sleep(_):
+        return None
+
+    c = HistoryCollector(store=s, fetch_twse=None, fetch_tpex=None, reference=lambda: ({}, {}), clock=lambda: now,
+                         sleep=no_sleep, fetch_sectors=fetch_sectors)
+    asyncio.run(c.collect_sectors())
+    assert s.sector_dates("電子") == {date(2026, 10, 21)}  # today's empty answer is retried later
+    r = rotation(s, 2, "avg_pct", 5.0, up_to=date(2026, 10, 22))
+    names = [b["name"] for b in r["benchmarks"]]
+    assert names == ["大盤（加權）", "櫃買（OTC）", "電子（上市）", "金融（上市）", "傳產（上市）"]
+    sector = {b["name"]: b for b in r["benchmarks"]}
+    assert sector["電子（上市）"]["values"] == [1.0, None]  # the official index (10 / 1000); 10/22 not out: empty, not the stocks
+    assert sector["金融（上市）"]["values"][0] == -1.0 and "金融保險業" in sector["金融（上市）"]["hint"]
+    breadth = {b["name"]: b for b in rotation(s, 2, "breadth", 5.0, up_to=date(2026, 10, 22))["benchmarks"]}
+    assert breadth["電子（上市）"]["values"][1] is not None  # other metrics: the sector's 上市 common stocks

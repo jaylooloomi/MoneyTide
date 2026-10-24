@@ -43,6 +43,7 @@ from .sources.official import fetch_tpex_day, fetch_twse_day
 from .sources.official_index import fetch_index_month
 from .sources.institutional import fetch_inst_day
 from .sources.margin import fetch_margin_day
+from .sources.sector_index import fetch_sector_day
 from .sources.company_address import fetch_county_groups
 from .sources.google_news import fetch_headlines
 from .sources.news_themes import fetch_day_headlines
@@ -161,6 +162,7 @@ def create_app(
                 fetch_index=lambda market, month: fetch_index_month(client, market, month, asyncio.sleep, REQUEST_DELAY_SECONDS),
                 fetch_inst=lambda d: fetch_inst_day(client, d, asyncio.sleep, REQUEST_DELAY_SECONDS),
                 fetch_margin=lambda d: fetch_margin_day(client, d, asyncio.sleep, REQUEST_DELAY_SECONDS),
+                fetch_sectors=lambda d: fetch_sector_day(client, d),
             )
             tasks.append(asyncio.create_task(app.state.collector.run()))
             ptt_client = app.state.ptt_client = make_ptt_client()

@@ -364,7 +364,7 @@ def test_live_quote_day_before_open_is_the_last_session(store):
 def test_rotation_benchmark_rows(store):
     rot = rotation(store, days=3, metric="strong_ratio", threshold=5)
     names = [b["name"] for b in rot["benchmarks"]]
-    assert names == ["大盤（加權）", "櫃買（OTC）"]
+    assert names == ["大盤（加權）", "櫃買（OTC）", "電子（上市）", "金融（上市）", "傳產（上市）"]
     assert all(len(b["values"]) == len(rot["dates"]) for b in rot["benchmarks"])
     assert not any(g["name"] in names for g in rot["groups"])  # benchmarks are not mixed into the groups
 
@@ -375,9 +375,10 @@ def test_rotation_benchmark_change_uses_the_official_index(store):
     ix = SimpleNamespace(date=date(2026, 10, 21), open=100, high=103, low=99, close=102, change=2, turnover_yuan=1)
     store.save_index_month("上市", "2026-10", [ix], datetime(2026, 10, 22, tzinfo=TAIPEI))
     rot = rotation(store, days=3, metric="avg_pct", threshold=5)
-    twse, tpex = rot["benchmarks"]
+    twse, tpex, *sectors = rot["benchmarks"]
     assert twse["values"][-1] == pytest.approx(2 / 100 * 100)  # change / prev close
     assert tpex["values"] == [None, None, None]  # no OTC stocks or index in the fixture
+    assert all(s["values"] == [None, None, None] for s in sectors)  # no 類股指數 stored: empty, not the stocks' average
 
 
 def test_group_stats_average_amplitude():

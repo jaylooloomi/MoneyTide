@@ -26,6 +26,7 @@ IndexFetcher = Callable[[str, date], Awaitable[list]]  # (market, any day of the
 InstFetcher = Callable[[date], Awaitable[list | None]]  # day -> InstRow list, None when not published
 MarginFetcher = Callable[[date], Awaitable[list | None]]  # day -> MarginRow list, None when not published
 INST_DAYS = 250  # 三大法人 backfill window (stored trading days)
+SECTOR_DAYS = 120  # TWSE 類股指數 backfill window (one request a day)
 MARGIN_DAYS = 120  # 融資融券 backfill window (two requests a day, so a shorter first backfill)
 
 
@@ -87,6 +88,7 @@ class HistoryCollector:
         fetch_index: IndexFetcher | None = None,
         fetch_inst: InstFetcher | None = None,
         fetch_margin: MarginFetcher | None = None,
+        fetch_sectors: Callable[[date], Awaitable[dict | None]] | None = None,
     ) -> None:
         self.store = store
         self._fetch_twse = fetch_twse
@@ -102,6 +104,8 @@ class HistoryCollector:
         self.inst_state = BackfillState()
         self._fetch_margin = fetch_margin
         self.margin_state = BackfillState()
+        self._fetch_sectors = fetch_sectors
+        self.sector_state = BackfillState()
 
     def pending_days(self, now: datetime) -> list[date]:
         """Weekdays within the backfill window that are not stored yet, newest first."""
@@ -158,6 +162,7 @@ class HistoryCollector:
         await self.collect_index()
         await self.collect_inst()
         await self.collect_margin()
+        await self.collect_sectors()
         await asyncio.to_thread(warm_history_cache, self.store)  # bonus-19
 
     async def collect_index(self) -> None:
@@ -227,6 +232,32 @@ class HistoryCollector:
             self.margin_state.done += 1
             await self._sleep(self._delay)
         self.margin_state.running = False
+
+    async def collect_sectors(self) -> None:
+        """TWSE 電子／金融／傳產 類股指數 for stored trading days that have none yet (newest first)."""
+        if self._fetch_sectors is None:
+            return
+        from ..sources.sector_index import SECTORS
+
+        known = self.store.sector_dates(next(iter(SECTORS)))
+        todo = [d for d in self.store.trading_dates(limit=SECTOR_DAYS) if d not in known]
+        self.sector_state = BackfillState(running=bool(todo), total=len(todo))
+        for d in todo:
+            try:
+                rows = await self._fetch_sectors(d)
+                local = self._clock().astimezone(TAIPEI)
+                if rows is None and d == local.date() and local.time() < DAILY_GIVE_UP:
+                    pass  # published later in the afternoon: try again next pass
+                else:
+                    self.store.save_sector_day(d, rows, SECTORS, self._clock())
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:
+                log.warning("sector indices for %s failed: %s", d, exc)
+                self.sector_state.error = f"{d}: {exc}"
+            self.sector_state.done += 1
+            await self._sleep(self._delay)
+        self.sector_state.running = False
 
     async def run(self) -> None:
         while True:

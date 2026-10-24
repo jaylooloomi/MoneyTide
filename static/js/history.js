@@ -359,6 +359,13 @@ function rotationText(metric, v) {
   return v.toFixed(0);
 }
 
+/** A benchmark row's tooltip: what it holds under this metric (the sector rows also say what they cover). */
+export function benchHint(g, metric) {
+  if (!g.hint) return BENCH_HINT[metric] || '';
+  const what = metric === 'avg_pct' || metric === 'cap_pct' ? '證交所官方類股指數漲跌幅' : `${(BENCH_HINT[metric] || '').replace('全市場普通股', '這個類別上市普通股')}`;
+  return `${what}；範圍：${g.hint}`;
+}
+
 // what the 大盤 / 櫃買 rows hold under each metric (tooltip on the row name)
 const BENCH_HINT = {
   avg_pct: '官方指數漲跌幅',
@@ -433,7 +440,7 @@ async function loadRotationNow() {
   const rows = [...bench, ...data.groups]
     .map(
       (g) =>
-        `<tr${g.bench ? ' class="bench"' : ''}><td class="name"><span class="clip" title="${escapeHtml(g.bench ? `${g.name}：${BENCH_HINT[data.metric] || ''}` : g.name)}">${escapeHtml(g.name)}</span></td>` +
+        `<tr${g.bench ? ` class="bench${g.hint ? ' sector' : ''}"` : ''}><td class="name"><span class="clip" title="${escapeHtml(g.bench ? `${g.name}：${benchHint(g, data.metric)}` : g.name)}">${escapeHtml(g.name)}</span></td>` +
         g.values
           .map(
             (v, i) =>

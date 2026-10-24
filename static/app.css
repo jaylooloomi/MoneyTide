@@ -410,3 +410,4 @@ table.link-heat td.self { background: #3a3e48; }
 .ic-body.col { flex-direction: column; }
 .ic-body.col .ic-chart { flex: none; width: 100%; }
 .ic-side.below { width: 100%; overflow-x: auto; }
+#hRotation tr.bench.sector td.name, .rot tr.bench.sector td.name { color: #9fd3ff; }

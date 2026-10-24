@@ -296,6 +296,21 @@ class HistoryStore:
                 for r in c.execute("SELECT market, month, fetched_at FROM index_month")
             }
 
+    # ---- TWSE 類股指數 (C's 電子／金融／傳產 rows), kept in index_daily under those market names ----
+
+    def save_sector_day(self, day: date, rows: dict | None, names: Iterable[str], fetched_at: datetime) -> None:
+        """rows: {name: (close, change)}; every one of `names` gets a row, with a null close when the
+        day had none, so a day without data is not asked for again."""
+        with self._lock, self._conn() as c:
+            c.executemany(
+                "INSERT OR REPLACE INTO index_daily (date, market, close, change) VALUES (?, ?, ?, ?)",
+                [(day.isoformat(), n, *((rows or {}).get(n) or (None, None))) for n in names],
+            )
+
+    def sector_dates(self, name: str) -> set[date]:
+        with self._conn() as c:
+            return {date.fromisoformat(r["date"]) for r in c.execute("SELECT date FROM index_daily WHERE market = ?", (name,))}
+
     def index_rows(self) -> dict[str, dict[str, dict]]:
         """{date: {market: {open, high, low, close, change, turnover_yuan}}}"""
         out: dict[str, dict[str, dict]] = {}

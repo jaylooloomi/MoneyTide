@@ -23,17 +23,32 @@ def industry_grouping(row: dict) -> list[str]:
 
 industry_grouping.cache_key = "industry"  # groupings with a cache_key may reuse per-day results
 
-# C's two benchmark rows: the whole listed (TWSE) / OTC (TPEx) market as one "group" each
+# C's benchmark rows: the whole listed (TWSE) / OTC (TPEx) market as one "group" each, then the
+# TWSE 電子／金融／傳產 sectors (上市 only, like the official 類股指數 their change rows show)
 BENCHMARKS = {"上市": "大盤（加權）", "上櫃": "櫃買（OTC）"}
+SECTOR_BENCHMARKS = {"電子": "電子（上市）", "金融": "金融（上市）", "傳產": "傳產（上市）"}
+ELECTRONICS = {"半導體業", "電腦及週邊設備業", "光電業", "通信網路業", "電子零組件業", "電子通路業", "資訊服務業", "其他電子業"}  # 電子工業類指數
+BENCHMARK_HINTS = {
+    "電子（上市）": "證交所 8 個電子產業（半導體、電腦週邊、光電、通信網路、電子零組件、電子通路、資訊服務、其他電子）",
+    "金融（上市）": "證交所金融保險業",
+    "傳產（上市）": "上市普通股扣掉電子與金融（＝未含金融電子指數的範圍）",
+}
 
 
 def market_grouping(row: dict) -> list[str]:
-    """Common stocks by market, named as C's benchmark rows."""
+    """Common stocks by market, named as C's benchmark rows, plus the 上市 ones by sector."""
+    if row.get("kind") != "stock":
+        return []
     name = BENCHMARKS.get(row.get("market") or "")
-    return [name] if name and row.get("kind") == "stock" else []
+    out = [name] if name else []
+    if row.get("market") == "上市":
+        industry = row.get("industry") or ""
+        sector = "電子" if industry in ELECTRONICS else "金融" if industry == "金融保險業" else "傳產"
+        out.append(SECTOR_BENCHMARKS[sector])
+    return out
 
 
-market_grouping.cache_key = "market"
+market_grouping.cache_key = "market+sector"
 
 
 def daily_group_avgs(store: HistoryStore, dates: list[date], grouping: Grouping) -> list[tuple[dict, float | None]]:
@@ -179,10 +194,14 @@ def _rotation_rows(stats_by_day: list[list[dict]], dates: list[date], metric: st
 
 
 def _use_index_change(store: HistoryStore, bench: list[dict], dates: list[date]) -> None:
-    """The change rows show the official index move (加權／櫃買指數) where the index is stored."""
+    """The change rows show the official index move (加權／櫃買指數, 電子／金融／未含金融電子類指數)
+    where the index is stored; a sector day without its index stays empty, never the stocks' average."""
     index = store.index_rows()
     by_name = {g["name"]: g for g in bench}
-    for market, name in BENCHMARKS.items():
+    for name in SECTOR_BENCHMARKS.values():  # sectors: index only
+        if name in by_name:
+            by_name[name]["values"] = [None] * len(dates)
+    for market, name in {**BENCHMARKS, **SECTOR_BENCHMARKS}.items():
         row = by_name.setdefault(name, {"name": name, "values": [None] * len(dates)})
         if row not in bench:
             bench.append(row)
@@ -193,9 +212,12 @@ def _use_index_change(store: HistoryStore, bench: list[dict], dates: list[date])
 
 
 def _benchmark_rows(bench: list[dict], dates: list[str]) -> list[dict]:
-    """Both benchmark rows in a fixed order (大盤 then 櫃買), all-null when a market has no data."""
+    """The benchmark rows in a fixed order (大盤, 櫃買, 電子, 金融, 傳產), all-null when one has no data;
+    the sector rows carry a `hint` saying what they cover."""
     by_name = {g["name"]: g for g in bench}
-    return [by_name.get(n, {"name": n, "values": [None] * len(dates)}) for n in BENCHMARKS.values()]
+    names = [*BENCHMARKS.values(), *SECTOR_BENCHMARKS.values()]
+    rows = [by_name.get(n, {"name": n, "values": [None] * len(dates)}) for n in names]
+    return [{**r, "hint": BENCHMARK_HINTS[r["name"]]} if r["name"] in BENCHMARK_HINTS else r for r in rows]
 
 
 def day_stocks(store: HistoryStore, day: date, grouping: Grouping | None = None) -> list[dict]:
