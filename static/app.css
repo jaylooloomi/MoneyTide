@@ -497,6 +497,7 @@ table.link-heat td.self { background: #3a3e48; }
 .rp-gone { margin: 6px 0; }
 .rp-hot { border: 1px solid #ff6b3d55; background: #ff6b3d0d; border-radius: 6px; padding: 6px 10px; margin-bottom: 10px; }
 .rp-hot .rp-line { margin-left: 0; }
+.rp-shape { border: 1px solid #5b8cff55; background: #5b8cff0d; border-radius: 6px; padding: 6px 10px; margin-bottom: 10px; }
 .rp-hot-list { margin: 2px 0 4px; padding-left: 18px; font-size: 13px; line-height: 1.6; }
 .rp-track td.rp-dump { font-weight: 600; }
 .rp-progress { margin: 0 0 6px; color: #ffd400; }

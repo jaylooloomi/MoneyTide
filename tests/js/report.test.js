@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { concHtml, goneReading, hotHtml, hotNextDay, laggardsHtml, todayMove, mergeGroups, motiveOf, reportText, trackHtml, trackRows, watchOf } from '../../static/js/report.js';
+import { concHtml, goneReading, shapeHtml, hotHtml, hotNextDay, laggardsHtml, todayMove, mergeGroups, motiveOf, reportText, trackHtml, trackRows, watchOf } from '../../static/js/report.js';
 import { groupEvidenceItems } from '../../static/js/evidence.js';
 
 const m = (code, name = code) => ({ code, name, change_pct: 5 });
@@ -138,4 +138,13 @@ test('todayMove: yesterday’s groups today, less 大盤; nothing for a group ne
   const html = trackHtml(['2026-10-21', '2026-10-22'], [{ ...row, names: '甲、乙', status: '連 2 天', today: { avg: 0.5, excess: -0.5 } }]);
   assert.match(html, /<th title="[^"]*">今天漲跌<\/th>/);
   assert.match(html, /<td class="up" title="扣大盤 -0\.50%">\+0\.50%<small class="muted">（-0\.50%）<\/small><\/td>/);
+});
+
+test('shapeHtml: both lists merged, one entry a pair, closest first', () => {
+  const p = (a, b, dtw) => ({ members: [{ code: a, name: a, change_pct: 1 }, { code: b, name: b, change_pct: 2 }], dtw, peak_gap: 60, excess_r: 0.55 });
+  const html = shapeHtml([{ shape_pairs: [p('1301', '1326', 1.9), p('2383', '6213', 1.2)] }, { shape_pairs: [p('1326', '1301', 1.5)] }]);
+  assert.match(html, /高點錯開但走勢一樣 <small class="muted">2 對/);
+  assert.ok(html.indexOf('2383') < html.indexOf('1301')); // 1.2 before 1.5
+  assert.match(html, /高點差 60 分、扣指數 R 0\.55、形狀距離 1\.50/); // the closer of the two entries for 1301/1326
+  assert.equal(shapeHtml([null, {}]), '');
 });

@@ -30,7 +30,7 @@ from itertools import combinations
 from .linkage import align_bars, amplitude_pct, limit_up_price, minutes, pearson, turnover_rate
 from .store import HistoryStore
 
-FINDER_VERSION = 9  # part of the cache key: bump when the search logic changes, so stored results are redone (5 was used by a reverted experiment)
+FINDER_VERSION = 10  # part of the cache key: bump when the search logic changes, so stored results are redone (5 was used by a reverted experiment)
 EXCESS_R = 0.4  # 扣指數後分時 R: the funnel's default and the 🧾 扣指數 check alike (evidence.js EXCESS_R)
 INTRADAY_BASES = ("raw", "market", "sector")  # the 分時 R the funnel filters on: as is / 扣大盤 / 扣大盤＋類股
 PEAK_END = 240  # the intraday high is taken over 09:00–13:00
@@ -765,6 +765,42 @@ def theme_titles(term: str, news_days: list[dict], dates: list[str] | None, name
     return out[:THEME_TITLES]
 
 
+# ---- 高點錯開但走勢一樣 (shown only: N's groups stay as they are) -----------------------------------
+
+SHAPE_DTW_MAX = 2.5  # the median DTW distance of N's own pairs (research/m2, 2026-10-25)
+SHAPE_PAIRS_MAX = 10
+
+
+def staggered_pairs(cands: list[dict], feats: Mapping[str, Intraday], p: FinderParams, by_code: Mapping[str, dict]) -> list[dict]:
+    """可能分批推進: candidate pairs N drops only for 高點時間差太大 whose session shapes are as close as
+    N's own pairs (DTW ≤ SHAPE_DTW_MAX) — the money may be one, pushed in steps. The closest first."""
+    from .evidence import dtw, shape_path
+
+    seen, out = set(), []
+    paths: dict[str, list[float] | None] = {}
+    for c in cands:
+        for a, b in combinations(c["members"], 2):
+            key = (a, b) if a < b else (b, a)
+            if key in seen or a not in feats or b not in feats:
+                continue
+            seen.add(key)
+            chk = pair_check(feats[a], feats[b], p)
+            if chk["reason"] != "高點時間差太大":
+                continue
+            for x in key:
+                if x not in paths:
+                    paths[x] = shape_path(feats[x].returns[-(BUCKETS - 1):])
+            pa, pb = paths[key[0]], paths[key[1]]
+            if pa is None or pb is None:
+                continue
+            d = dtw(pa, pb)
+            if d <= SHAPE_DTW_MAX:
+                out.append({"members": [{"code": x, "name": by_code.get(x, {}).get("name", x), "change_pct": by_code.get(x, {}).get("change_pct")} for x in key],
+                            "dtw": round(d, 2), "peak_gap": chk["peak_gap"], "excess_r": chk["excess_r"], "intraday_r": chk["intraday_r"]})
+    out.sort(key=lambda x: x["dtw"])
+    return out[:SHAPE_PAIRS_MAX]
+
+
 # ---- 扣大盤／類股: each stock's returns once its index is taken out ------------------------------
 
 def add_excess(feats: dict[str, Intraday], by_code: Mapping[str, dict], rows: list[dict], sessions: list[date],
@@ -947,6 +983,7 @@ async def run_search(
     add_excess(feats, by_code, rows, sessions, store.sector_intraday(sessions), "market" if p.intraday_basis == "market" else "sector")
     funnel: dict = {}
     found = confirm(cands, feats, p, funnel)
+    shape_pairs = staggered_pairs(cands, feats, p, by_code)
     inst = store.inst_net([day]).get(day, {})
     market_turnover = sum(r.get("turnover_yuan") or 0 for r in rows)  # common stocks only (rows above)
     groups = [describe(g, by_code, feats, groupings, titles or [], inst, market_turnover) for g in found]
@@ -966,6 +1003,7 @@ async def run_search(
         "method": method,
         "params": asdict(p),
         "groupings": [GROUPING_LABELS.get(g, g) for g in groupings],
+        "shape_pairs": shape_pairs,
         "stats": {"candidates": len(cands), "pool": pool_size, "fetched": sum(1 for c in got if c in by_code), "groups": len(groups), "seconds": timing, "funnel": funnel},
         "groups": groups,
     }

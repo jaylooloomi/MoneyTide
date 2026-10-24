@@ -247,3 +247,32 @@ def group_branches(members: list[str], data: Mapping[str, Mapping], top: int = 1
     pairs = [shared_buyers(data[a], data[b]) for i, a in enumerate(have) for b in have[i + 1:]]
     strong = [p["strong"] for p in pairs if p is not None]
     return {"common": common[:5], "ok": (sum(strong) * 2 > len(strong)) if strong else None, "have": len(have)}
+
+
+# ---- 走勢形狀 (DTW): the same session shape even when the highs are far apart ------------------------
+
+def shape_path(returns: Sequence[float | None]) -> list[float] | None:
+    """The shown day's cumulative 5-minute path, z-normalized (a flat or empty day → None)."""
+    xs, acc = [], 0.0
+    for r in returns:
+        acc += r or 0.0
+        xs.append(acc)
+    if len(xs) < 10:
+        return None
+    m = sum(xs) / len(xs)
+    sd = (sum((x - m) ** 2 for x in xs) / len(xs)) ** 0.5
+    return [(x - m) / sd for x in xs] if sd > 0 else None
+
+
+def dtw(a: Sequence[float], b: Sequence[float], window: int = 6) -> float:
+    """DTW distance with a Sakoe–Chiba band of `window` steps (6 × 5 minutes = half an hour either way)."""
+    n, m = len(a), len(b)
+    inf = float("inf")
+    prev = [inf] * (m + 1)
+    prev[0] = 0.0
+    for i in range(1, n + 1):
+        cur = [inf] * (m + 1)
+        for j in range(max(1, i - window), min(m, i + window) + 1):
+            cur[j] = (a[i - 1] - b[j - 1]) ** 2 + min(prev[j], prev[j - 1], cur[j - 1])
+        prev = cur
+    return prev[m] ** 0.5

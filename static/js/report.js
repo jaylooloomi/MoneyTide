@@ -126,6 +126,24 @@ export function hotNextDay(dates, per, quotesByDay) {
   return { groups, stocks: closes.length, gap: mean(gaps), close: mean(closes), intraday: mean(intra), fadeShare: intra.length ? (intra.filter((v) => v < 0).length / intra.length) * 100 : null };
 }
 
+/** 高點錯開但走勢一樣: the pairs N drops only for their highs being far apart, whose session shapes are
+ *  as close as N's own (both methods' lists merged, closest first). Shown only — not groups, no evidence. */
+export function shapeHtml(results) {
+  const by = new Map();
+  for (const res of results) for (const x of res?.shape_pairs || []) {
+    const k = x.members.map((m) => m.code).sort().join(',');
+    if (!by.has(k) || by.get(k).dtw > x.dtw) by.set(k, x);
+  }
+  const list = [...by.values()].sort((a, b) => a.dtw - b.dtw);
+  if (!list.length) return '';
+  const rows = list
+    .map((x) => `<li>${x.members.map((m) => `<button type="button" class="rp-stock" data-code="${escapeHtml(m.code)}">${escapeHtml(m.name)} <small class="${m.change_pct > 0 ? 'up' : m.change_pct < 0 ? 'down' : ''}">${fmtPct(m.change_pct)}</small></button>`).join(' ')}
+      <small class="muted">高點差 ${x.peak_gap} 分、扣指數 R ${x.excess_r == null ? '—' : x.excess_r.toFixed(2)}、形狀距離 ${x.dtw.toFixed(2)}</small></li>`)
+    .join('');
+  return `<div class="rp-shape" title="這些配對只因「日內最高點差太多」沒被 N 收進群組，但兩檔整天的走勢形狀跟 N 找到的組合一樣像（DTW 距離 ≤ 2.5）：可能是同一批資金分批推進。只列出參考，不算群組、不算證據">
+    <h3 class="rp-h">高點錯開但走勢一樣 <small class="muted">${list.length} 對；可能分批推進</small></h3><ul class="rp-hot-list">${rows}</ul></div>`;
+}
+
 /** 🔥 隔日沖警示: today's 🔥 groups (risk, not evidence) and how such groups did the next day. */
 export function hotHtml(list, stats, wide = null) {
   const hot = list.filter((x) => x.g.daytrade?.hot);
@@ -277,8 +295,10 @@ export function mountReportPanel(container, { onStock, query, condText }) {
     body.innerHTML = '<p class="hint">整理中…</p>';
     const i = days.indexOf(date);
     const dates = days.slice(i, i + TRACK_DAYS).reverse(); // oldest → the report day
+    state.dayResults = [];
     const one = async (d, stored) => {
       const [known, fresh] = await Promise.all([result(d, 'known', stored), result(d, 'new', stored)]);
+      if (d === date) state.dayResults = [known, fresh]; // the report day's own lists (高點錯開但走勢一樣)
       return known || fresh ? mergeGroups(known, fresh) : null;
     };
     let index;
@@ -388,6 +408,7 @@ export function mountReportPanel(container, { onStock, query, condText }) {
     body.innerHTML = `<div class="rp-metrics">${metric('找到群組', list.length)}${metric('證據強', strong)}${metric('連續出現', going)}${metric('大盤／櫃買', bench.map((b) => `<span class="${b.change_pct > 0 ? 'up' : 'down'}">${fmtPct(b.change_pct)}</span>`).join(' / ') || '—')}</div>
       <div class="rp-cols"><div class="rp-left">
         ${hotHtml(list, hotStats, state.wide)}
+        ${shapeHtml(state.dayResults || [])}
         <h3 class="rp-h">${escapeHtml(date)} 找到的群組</h3>
         ${list.length ? list.map((x, k) => groupHtml(x, k, rows.find((r) => r.key === x.key))).join('') : '<p class="hint">這一天沒有找到群組（或 N 還沒算完，稍後再開）。</p>'}
       </div><div class="rp-right">

@@ -139,3 +139,16 @@ def test_peak_lag_says_who_moves_first():
     assert minute_evidence(a, b)["peak_lag"] == 2
     assert minute_evidence(b, a)["peak_lag"] == -2
     assert minute_evidence(a, a)["peak_lag"] == 0
+
+
+
+def test_shape_path_and_dtw():
+    from openmarket.history.evidence import dtw, shape_path
+
+    up = [0.1] * 30 + [-0.05] * 23
+    late = [0.0] * 3 + [0.1] * 30 + [-0.05] * 20  # the same run 15 minutes later
+    flat = [0.0] * 53
+    assert shape_path(flat) is None
+    a, b = shape_path(up), shape_path(late)
+    assert dtw(a, b) < 1.0  # the band absorbs the lag
+    assert dtw(a, shape_path([-x for x in up])) > 5  # the opposite day
