@@ -64,8 +64,33 @@ export function statsAt(data, m) {
     firstLock,
     locked,
     opens,
+    buyPct: volKnown ? buyShare(bars, prev) : null,
   };
 }
+
+/**
+ * 外盤估計: the share of the volume that looks buyer-driven, from the bars alone (bulk volume
+ * classification — no tick-by-tick 內外盤 is published): each bar's volume is split by where it closed
+ * in its range, (close − low) ÷ (high − low); a flat bar (one price, a locked limit) goes by its close
+ * against the bar before (up → bought, down → sold, same → half). null without volume.
+ */
+export function buyShare(bars, prev) {
+  let buy = 0;
+  let all = 0;
+  let before = prev;
+  for (const [, , h, l, c, v] of bars) {
+    if (v) {
+      const w = h > l ? (c - l) / (h - l) : c > before ? 1 : c < before ? 0 : 0.5;
+      buy += v * w;
+      all += v;
+    }
+    before = c;
+  }
+  return all > 0 ? (buy / all) * 100 : null;
+}
+
+const BUY_TIP = '外盤估計：用每根 K 的收盤在高低點之間的位置，把成交量拆成偏買（外盤）與偏賣（內盤）後的比例（成交量分類估法）。官方沒有公布逐筆內外盤，這是估計值；> 55% 偏買方主動、< 45% 偏賣方主動';
+const buyText = (v) => (v == null ? '—' : `<span class="${v >= 55 ? 'up' : v <= 45 ? 'down' : ''}">${v.toFixed(0)}%</span>`);
 
 /** 均價 path: cumulative Σ(close × volume) / Σvolume per bar, up to minute m (null without volume). */
 export function vwapPath(bars, m) {
@@ -368,6 +393,7 @@ export function compareInfoHtml(items, m) {
     ${row('振幅', (d, s) => `${s.amplitude.toFixed(2)}%`)}
     ${row('成交量', (d, s) => (s.volume == null ? '—' : `${Math.round(s.volume / 1000).toLocaleString()}`))}
     ${row('成交值', (d, s) => (s.turnover == null ? '—' : fmtTurnover(s.turnover / 1e8)))}
+    ${row(`<span title="${escapeHtml(BUY_TIP)}">外盤估計</span>`, (d, s) => buyText(s.buyPct))}
     ${row('最高點', (d, s) => (s.peak ? `${fmtClock(s.peak.m)}<br>${fmtPct((s.peak.price / d.prev_close - 1) * 100)}` : '—'))}
     ${row('鎖漲停', lockOf)}
   </table>`;
@@ -405,6 +431,7 @@ export function infoHtml(data, s, m) {
     ${row('均價', p(s.vwap))}
     ${row('成交量', s.volume == null ? '—' : `${Math.round(s.volume / 1000).toLocaleString()} 張`)}
     ${row('成交值', s.turnover == null ? '—' : fmtTurnover(s.turnover / 1e8))}
+    ${row(`<span title="${escapeHtml(BUY_TIP)}">外盤估計</span>`, buyText(s.buyPct))}
     ${row('最高點', s.peak ? `${fmtClock(s.peak.m)} ${fmtPct((s.peak.price / data.prev_close - 1) * 100)}` : '—')}
     ${lock}
   </table>`;

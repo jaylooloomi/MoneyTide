@@ -135,3 +135,12 @@ test('sinceOpen / benchPath(open): 大盤 and 櫃買 start together at the stock
   const opt = buildIntradayOption(data, 270, [{ name: '大盤', points: twse }], 'open');
   assert.equal(opt.series.find((x) => x.name === '大盤').data[0][1], opt.series.find((x) => x.name === '價').data[0][1]); // the stock line's first point
 });
+
+test('buyShare: each bar split by where it closed in its range; a flat bar by its move', async () => {
+  const { buyShare } = await import('../../static/js/intradaychart.js');
+  // [t, open, high, low, close, volume]
+  assert.equal(buyShare([[0, 10, 11, 10, 11, 100]], 10), 100); // closed on the high: all bought
+  assert.equal(buyShare([[0, 10, 11, 10, 10, 100]], 10), 0);
+  assert.equal(buyShare([[0, 10, 11, 10, 10.5, 100], [1, 11, 11, 11, 11, 100]], 10), 75); // 50 + the locked bar up from 10.5: 100
+  assert.equal(buyShare([[0, 10, 10, 10, 10, 0]], 10), null); // no volume
+});
