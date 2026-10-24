@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { evidenceHtml, evidenceItems } from '../../static/js/evidence.js';
+import { evidenceCount, evidenceHtml, evidenceItems, groupEvidenceHtml, groupEvidenceItems, isStrong } from '../../static/js/evidence.js';
 
 const EXT = {
   same_dir: { same: 16, total: 20 },
@@ -41,4 +41,26 @@ test('evidenceHtml: counts only the checks that had data', () => {
   assert.match(html, /<b class="up">✓<\/b> 甲/);
   assert.match(html, /<b class="down">✗<\/b> 乙/);
   assert.match(html, /<li class="muted"><span class="muted">—<\/span> 丙/);
+});
+
+test('groupEvidenceItems / groupEvidenceHtml / isStrong: an N group\'s checks', () => {
+  const g = {
+    evidence: {
+      excess: { ok: true, r: 0.55 }, baseline: { ok: true, pct: 96 }, burst: { ok: false, co: 1, expected: 2 },
+      sync: { ok: null, r0: null, r_off: null }, samedir: { ok: true, share: 0.8 },
+    },
+    seen_days: ['2026-10-21'], checked_days: 4, evidence_chips: { ok: true, pairs: 1 },
+    relations: [], rel_group: null, themes: [{ term: 'PCB', count: 2 }],
+  };
+  const items = groupEvidenceItems(g);
+  const c = evidenceCount(items);
+  assert.deepEqual(c, { yes: 6, known: 7 });
+  assert.equal(isStrong(c), true);
+  assert.equal(isStrong({ yes: 4, known: 4 }), false);
+  const html = groupEvidenceHtml(g);
+  assert.match(html, /class="fd-ev strong"/);
+  assert.match(html, /🧾 證據 <b>6<\/b>\/7/);
+  assert.match(html, /<span class="down">✗同爆量<\/span>/);
+  assert.match(html, /扣大盤／櫃買後分時 R 0\.55/);
+  assert.equal(groupEvidenceHtml({}), ''); // an old result without evidence: no line
 });

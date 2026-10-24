@@ -6,6 +6,7 @@
 import { addToGroup, createGroup } from './groups.js';
 import { renderBody } from './linkage.js';
 import { relationsHtml } from './relations.js';
+import { evidenceCount, groupEvidenceHtml, groupEvidenceItems, isStrong } from './evidence.js';
 import { colorFor, escapeHtml, fmtPct, fmtTurnover, toCsv } from './transform.js';
 
 export const METHODS = { known: '找法1 · 已知分類', new: '找法2 · 排行候選' };
@@ -131,6 +132,12 @@ export function rowsHeight(tops, rows = 2, gap = 10) {
   return starts.length > rows ? starts[rows] - starts[0] - gap : null;
 }
 
+/** Sort key for 依證據: supporting checks, then their share of those with data. */
+export function evidenceRank(g) {
+  const { yes, known } = evidenceCount(groupEvidenceItems(g));
+  return yes + (known ? yes / known : 0) / 10;
+}
+
 export function cardHtml(g, i) {
   const title =
     g.sources?.length
@@ -192,7 +199,7 @@ export function cardHtml(g, i) {
     <div class="fd-top"><span class="link-badge" style="background:${KIND_COLOR[g.kind] || '#3a3e48'}">${escapeHtml(g.kind)}</span>
       <span class="fd-title" title="${tip}">${title}</span>${seen}<span class="muted">${g.members.length} 檔</span>
       <button type="button" class="icon fd-save" data-save="${i}" title="把這群股票存成自訂族群，之後在 B／C／K 追蹤">＋族群</button></div>
-    <div class="fd-chips">${chips}</div>${money}${inst}${margin}${rel}
+    <div class="fd-chips">${chips}</div>${groupEvidenceHtml(g)}${money}${inst}${margin}${rel}
     <div class="fd-facts">${facts}</div>${themes}${news}
   </div>`;
 }
@@ -222,6 +229,7 @@ export function filterOptions(d) {
   }
   const related = groups.filter((g) => matchesFilter(g, '@rel', d.method)).length;
   if (related) opts.push({ key: '@rel', label: '🏢 有持股關係', n: related });
+  if (groups.some((g) => g.evidence)) opts.push({ key: '@ev', label: '🧾 證據強', n: groups.filter((g) => matchesFilter(g, '@ev', d.method)).length });
   return opts;
 }
 
@@ -236,6 +244,7 @@ export function matchesFilter(g, key, method) {
   if (!key || key === 'all') return true;
   if (key.startsWith('@src:')) return Object.values(g.pool || {}).some((from) => from.includes(POOL_LABELS[key.slice(5)]));
   if (key === '@rel') return !!(g.relations?.length || g.rel_group);
+  if (key === '@ev') return isStrong(evidenceCount(groupEvidenceItems(g)));
   if (key === '@inst+') return g.inst?.lots > 0;
   if (key === '@inst-') return g.inst?.lots < 0;
   return method === 'new' ? g.kind === key : !!g.sources?.some((s) => s.label === key);
@@ -396,7 +405,7 @@ export function mountFinderPanel(container, { onStock, onResult }) {
   const sec = document.createElement('section');
   sec.id = 'hFinderPanel';
   sec.className = 'panel hN';
-  const pref = { method: 'known', params: { ...DEFAULTS }, filter: { known: 'all', new: 'all' }, expanded: false };
+  const pref = { method: 'known', params: { ...DEFAULTS }, filter: { known: 'all', new: 'all' }, expanded: false, byEvidence: false };
   try {
     const saved = JSON.parse(localStorage.getItem(PREF_KEY) || '{}');
     if (saved.method in METHODS) pref.method = saved.method;
@@ -407,6 +416,7 @@ export function mountFinderPanel(container, { onStock, onResult }) {
     }
     Object.assign(pref.filter, saved.filter || {});
     pref.expanded = !!saved.expanded;
+    pref.byEvidence = !!saved.byEvidence;
   } catch {
     /* defaults */
   }
@@ -577,8 +587,14 @@ export function mountFinderPanel(container, { onStock, onResult }) {
       return;
     }
     const f = shownFilter(data, pref.filter[data.method]);
-    const cards = data.groups.map((g, i) => (matchesFilter(g, f, data.method) ? cardHtml(g, i) : '')).join('');
-    body.innerHTML = `${filterHtml(data, f)}<div class="fd-cards">${cards}</div>
+    // the card keeps its index in data.groups (clicks look it up); 依證據 only changes the order shown
+    const order = data.groups.map((g, i) => [g, i]);
+    if (pref.byEvidence) order.sort((x, y) => evidenceRank(y[0]) - evidenceRank(x[0]) || x[1] - y[1]);
+    const cards = order.map(([g, i]) => (matchesFilter(g, f, data.method) ? cardHtml(g, i) : '')).join('');
+    const sortBtn = data.groups.some((g) => g.evidence)
+      ? `<button type="button" class="icon wide fd-sort${pref.byEvidence ? ' on' : ''}" title="依資金一致性證據（支持項數）由多到少排">${pref.byEvidence ? '✓ ' : ''}依證據排序</button>`
+      : '';
+    body.innerHTML = `<div class="fd-filter-row">${filterHtml(data, f)}${sortBtn}</div><div class="fd-cards">${cards}</div>
       <div class="fd-more-row"><button type="button" class="icon wide fd-more" hidden></button><span class="hint">點卡片看這群股票的連動動畫與走勢（出現在卡片區下方）</span></div>`;
     fitRows();
     closeDetail();
@@ -603,6 +619,13 @@ export function mountFinderPanel(container, { onStock, onResult }) {
     pref.expanded = !pref.expanded;
     save();
     fitRows();
+  }, true);
+  body.addEventListener('click', (e) => {
+    if (!e.target.closest('.fd-sort') || !state.data) return;
+    e.stopPropagation();
+    pref.byEvidence = !pref.byEvidence;
+    save();
+    drawCards();
   }, true);
   body.addEventListener('click', (e) => {
     const b = e.target.closest('button[data-filter]');

@@ -456,3 +456,9 @@ table.link-heat td.self { background: #3a3e48; }
 .ev-h { font-weight: 600; margin-bottom: 2px; }
 .ev-list { list-style: none; margin: 0; padding: 0; }
 .ev-list li { padding: 1px 0; }
+.fd-ev { font-size: 12px; margin: 2px 0 4px; }
+.fd-ev.strong { color: #ffd400; }
+.fd-ev span { font-size: 11px; }
+.fd-filter-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.fd-sort { width: auto; white-space: nowrap; }
+.fd-sort.on { background: #2f5fd0; color: #fff; }

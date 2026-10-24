@@ -81,3 +81,45 @@ export function evidenceHtml(items) {
     .join('');
   return `<div class="ev-box"><div class="ev-h">🧾 資金一致性證據 <b>${yes}</b>／${yes + no} 項支持${none ? ` <small class="muted">（${none} 項資料不足，不算）</small>` : ''}</div><ul class="ev-list">${rows}</ul></div>`;
 }
+
+/** The same checks for an N group (each decided by most of its pairs on the server): [{key, ok, short, detail}]. */
+export function groupEvidenceItems(g) {
+  const ev = g.evidence || {};
+  const pick = (k) => ev[k] || {};
+  const items = [];
+  const add = (key, ok, short, detail) => items.push({ key, ok: ok ?? null, short, detail });
+  add('excess', pick('excess').ok, '扣大盤', pick('excess').r === null || pick('excess').r === undefined ? '資料不足' : `扣大盤／櫃買後分時 R ${r2(pick('excess').r)}`);
+  add('baseline', pick('baseline').ok, '隨機', pick('baseline').pct === null || pick('baseline').pct === undefined ? '資料不足' : `分時 R 高於 ${Math.round(pick('baseline').pct)}% 的同日隨機配對`);
+  add('burst', pick('burst').ok, '同爆量', pick('burst').co === null || pick('burst').co === undefined ? '沒有 1 分 K' : `同分鐘爆量 ${pick('burst').co} 次（隨機預期 ${pick('burst').expected}）`);
+  add('sync', pick('sync').ok, '同分鐘', pick('sync').r0 === null || pick('sync').r0 === undefined ? '沒有 1 分 K' : `1 分 K R ${r2(pick('sync').r0)}，錯開 1～3 分 ${r2(pick('sync').r_off)}`);
+  const seen = g.seen_days?.length;
+  add('repeat', g.checked_days ? seen > 0 : null, '不只一天', g.checked_days ? `近 ${g.checked_days + 1} 天第 ${(seen || 0) + 1} 次` : '沒有前幾天的結果');
+  add('chips', g.evidence_chips?.ok, '籌碼', g.evidence_chips?.pairs ? '投信同日買賣／今天法人同方向' : '法人還沒公布');
+  const rel = (g.relations?.length || 0) + (g.rel_group ? 1 : 0);
+  add('relation', rel ? true : null, '持股', rel ? '有持股／集團關係' : '沒有（或還沒抓到）');
+  add('samedir', pick('samedir').ok, '同漲跌', pick('samedir').share === null || pick('samedir').share === undefined ? '資料不足' : `近期 ${Math.round(pick('samedir').share * 100)}% 的日子同方向`);
+  add('theme', g.themes?.length ? true : null, '題材', g.themes?.length ? `📰 ${g.themes.map((t) => t.term).slice(0, 3).join('、')}` : '沒有共同題材');
+  return items;
+}
+
+/** {yes, known}: how many checks support, out of those with data. */
+export function evidenceCount(items) {
+  const known = items.filter((x) => x.ok !== null).length;
+  return { yes: items.filter((x) => x.ok === true).length, known };
+}
+
+/** A strong case: at least 5 checks, and 70% of those with data, support it. */
+export const isStrong = ({ yes, known }) => yes >= 5 && known > 0 && yes / known >= 0.7;
+
+/** N card's compact line: 「🧾 證據 6/8 ✓扣大盤 ✓隨機 ✗同爆量 …」, the full wording in the title. */
+export function groupEvidenceHtml(g) {
+  const items = groupEvidenceItems(g);
+  const { yes, known } = evidenceCount(items);
+  if (!known) return '';
+  const tip = items.map((x) => `${x.ok === true ? '✓' : x.ok === false ? '✗' : '—'} ${x.short}：${x.detail}`).join('\n');
+  const tags = items
+    .filter((x) => x.ok !== null)
+    .map((x) => `<span class="${x.ok ? 'up' : 'down'}">${x.ok ? '✓' : '✗'}${escapeHtml(x.short)}</span>`)
+    .join(' ');
+  return `<div class="fd-ev${isStrong({ yes, known }) ? ' strong' : ''}" title="${escapeHtml(`資金一致性證據（每項看群內多數組合）\n${tip}`)}">🧾 證據 <b>${yes}</b>/${known} ${tags}</div>`;
+}

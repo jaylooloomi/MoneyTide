@@ -834,6 +834,24 @@ def create_app(
                 same = len(leaders) == 1 and all(c in rg["groups"] for c in codes)
                 return {**grp, "relations": es, "rel_group": group_view(rg["groups"][codes[0]], rg["names"]) if same else None}
             groups = [with_rel(grp) for grp in groups]
+            # 🧾 籌碼同一邊, read now (法人 is posted after the close): 投信 on the same days / today's 法人, pair by pair
+            ev_codes = list({m["code"] for grp in groups for m in grp["members"]})
+            ev_days = store.trading_dates(up_to=d, limit=10)
+            ev_trust = store.inst_trust(ev_days, ev_codes)
+            ev_inst = store.inst_net([d], ev_codes).get(d, {})
+
+            def with_chips(grp: dict) -> dict:
+                codes = [m["code"] for m in grp["members"]]
+                oks = []
+                for i, a in enumerate(codes):
+                    for b in codes[i + 1:]:
+                        ch = chip_sync(a, b, ev_trust, ev_inst, {})
+                        same_inst = None if not ch["inst_a"] or not ch["inst_b"] else ch["inst_a"] == ch["inst_b"]
+                        oks.append(True if ch["trust_both_buy"] + ch["trust_both_sell"] >= 3 else same_inst)
+                known = [x for x in oks if x is not None]
+                return {**grp, "evidence_chips": {"ok": None if not known else sum(known) * 2 > len(known), "pairs": len(known)}}
+
+            groups = [with_chips(grp) for grp in groups]
             return {**res, "groups": finder_news_themes(groups, news, [x.isoformat() for x in news_dates])}
 
         if not refresh:

@@ -30,7 +30,7 @@ from itertools import combinations
 from .linkage import align_bars, amplitude_pct, limit_up_price, minutes, pearson, turnover_rate
 from .store import HistoryStore
 
-FINDER_VERSION = 6  # part of the cache key: bump when the search logic changes, so stored results are redone (5 was used by a reverted experiment)
+FINDER_VERSION = 7  # part of the cache key: bump when the search logic changes, so stored results are redone (5 was used by a reverted experiment)
 PEAK_END = 240  # the intraday high is taken over 09:00–13:00
 OPEN_MINUTES = 2  # a high at 09:00–09:02 is the open, not a signal (unless locked limit-up)
 BUCKETS = 54  # 5-minute buckets 09:00–13:25
@@ -716,6 +716,72 @@ def theme_titles(term: str, news_days: list[dict], dates: list[str] | None, name
     return out[:THEME_TITLES]
 
 
+# ---- 資金一致性證據 of a found group (the same checks as K's 🔗 交集, pair by pair) ----------------
+
+INDEX_ROWS = (("^TWII", "上市"), ("IX0043.TWO", "上櫃"))  # fetched with the candidates for the excess R
+
+
+def majority(oks: list[bool | None]) -> bool | None:
+    """A group passes a check when more than half of its pairs with data do; None without data."""
+    known = [x for x in oks if x is not None]
+    return None if not known else sum(known) * 2 > len(known)
+
+
+def group_evidence(members: list[str], feats: Mapping[str, Intraday], minute_bars: Mapping[str, list], index_returns: Mapping[str, list],
+                   markets: Mapping[str, str], pool: Mapping[str, list], series: Mapping[str, list], seed: str) -> dict:
+    """{excess, baseline, burst, sync, samedir}: each {ok, value…}, decided pair by pair (majority)."""
+    from .evidence import minute_evidence, percentile_of, residuals
+
+    def r_of(x: list, y: list, k: int = 20) -> float | None:
+        pts = [(a, b) for a, b in zip(x, y) if a is not None and b is not None]
+        return pearson([a for a, _ in pts], [b for _, b in pts]) if len(pts) >= k else None
+
+    res = {c: residuals(feats[c].returns, index_returns[markets[c]]) if c in feats and markets.get(c) in index_returns else None for c in members}
+    ex, base, burst, sync, same = [], [], [], [], []
+    v_ex, v_pct, v_co, v_exp, v_r0, v_off, v_same = [], [], [], [], [], [], []
+    for i, a in enumerate(members):
+        for b in members[i + 1:]:
+            if res.get(a) and res.get(b):
+                r = r_of(res[a], res[b])
+                if r is not None:
+                    v_ex.append(r)
+                ex.append(None if r is None else r >= 0.4)
+            raw = r_of(feats[a].returns, feats[b].returns) if a in feats and b in feats else None
+            pct = percentile_of(raw, pool, set(members), f"{seed}{a}{b}", min_points=20) if raw is not None else None
+            if pct:
+                v_pct.append(pct["pct"])
+            base.append(None if not pct else pct["pct"] >= 90)
+            mn = minute_evidence(minute_bars.get(a), minute_bars.get(b))
+            if mn and mn["expected"] is not None:
+                v_co.append(mn["co"])
+                v_exp.append(mn["expected"])
+                burst.append(mn["co"] >= 2 and mn["co"] >= 2 * max(mn["expected"], 0.5))
+            else:
+                burst.append(None)
+            if mn and mn["r0"] is not None and mn["r_off"] is not None:
+                v_r0.append(mn["r0"])
+                v_off.append(mn["r_off"])
+                sync.append(mn["r0"] >= 0.3 and mn["r0"] - mn["r_off"] >= 0.1)
+            else:
+                sync.append(None)
+            sa, sb = series.get(a), series.get(b)
+            days = [(x, y) for x, y in zip(sa or [], sb or []) if x is not None and y is not None]
+            if days:
+                share = sum((x > 0 and y > 0) or (x < 0 and y < 0) for x, y in days) / len(days)
+                v_same.append(share)
+                same.append(share >= 0.75)
+            else:
+                same.append(None)
+    mean = lambda xs: round(sum(xs) / len(xs), 3) if xs else None  # noqa: E731
+    return {
+        "excess": {"ok": majority(ex), "r": mean(v_ex)},
+        "baseline": {"ok": majority(base), "pct": mean(v_pct)},
+        "burst": {"ok": majority(burst), "co": sum(v_co) if v_co else None, "expected": round(sum(v_exp), 2) if v_exp else None},
+        "sync": {"ok": majority(sync), "r0": mean(v_r0), "r_off": mean(v_off)},
+        "samedir": {"ok": majority(same), "share": mean(v_same)},
+    }
+
+
 # ---- one full search ----------------------------------------------------------------------------
 
 _POOL = ThreadPoolExecutor(max_workers=2, thread_name_prefix="finder")
@@ -776,13 +842,16 @@ async def run_search(
     need = need[: p.max_fetch]
     sessions = sorted(store.trading_dates(up_to=day, limit=p.intraday_sessions))
     todo = [by_code[c] for c in need if c in by_code]
+    n_stocks = len(todo)  # the progress counts stocks; the two indexes ride along
+    if todo:  # 大盤／櫃買 too: their returns are taken out for the excess R (資金一致性證據)
+        todo += [{"code": sym, "market": mk, "kind": "index"} for sym, mk in INDEX_ROWS]
     fetched = [0]
 
     def one_done() -> None:  # fetch calls this after each stock
         fetched[0] += 1
-        report("fetch", fetched[0], len(todo))
+        report("fetch", min(fetched[0], n_stocks), n_stocks)
 
-    report("fetch", 0, len(todo))
+    report("fetch", 0, n_stocks)
     got = await fetch(todo, sessions, one_done) if todo else {}
     report("intraday", 0, 1)
     timing["fetch"] = round(time.perf_counter() - t, 2)
@@ -798,6 +867,15 @@ async def run_search(
     inst = store.inst_net([day]).get(day, {})
     market_turnover = sum(r.get("turnover_yuan") or 0 for r in rows)  # common stocks only (rows above)
     groups = [describe(g, by_code, feats, groupings, titles or [], inst, market_turnover) for g in found]
+    # 資金一致性證據 per group: index returns, the day's 1-minute bars, the fetched stocks as the random baseline
+    index_returns = {mk: feats[sym].returns for sym, mk in INDEX_ROWS if sym in feats}
+    minute_bars = {code: by_session.get(day) for code, (by_session, resolution) in got.items() if resolution == 1 and by_session.get(day)}
+    stock_feats = {c: f for c, f in feats.items() if c in by_code}
+    pool_returns = {c: f.returns for c, f in stock_feats.items()}
+    markets = {c: by_code[c].get("market") for c in stock_feats}
+    for g, raw in zip(groups, found):
+        codes = [m["code"] for m in g["members"]]
+        g["evidence"] = group_evidence(codes, stock_feats, minute_bars, index_returns, markets, pool_returns, series, f"{day}{method}")
     groups.sort(key=lambda g: (-len(g["members"]), -(g["intraday_r"] or 0)))
     timing["intraday"] = round(time.perf_counter() - t, 2)
     return {
@@ -805,6 +883,6 @@ async def run_search(
         "method": method,
         "params": asdict(p),
         "groupings": [GROUPING_LABELS.get(g, g) for g in groupings],
-        "stats": {"candidates": len(cands), "pool": pool_size, "fetched": len(got), "groups": len(groups), "seconds": timing, "funnel": funnel},
+        "stats": {"candidates": len(cands), "pool": pool_size, "fetched": sum(1 for c in got if c in by_code), "groups": len(groups), "seconds": timing, "funnel": funnel},
         "groups": groups,
     }

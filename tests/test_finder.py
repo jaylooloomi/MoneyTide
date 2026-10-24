@@ -256,7 +256,10 @@ def test_run_search_end_to_end(tmp_path):
 
     async def fetch(rows, sess, done):
         out = {}
+        assert [r["code"] for r in rows if r.get("kind") == "index"] == ["^TWII", "IX0043.TWO"]  # asked for the excess R
         for r in rows:
+            if r.get("kind") == "index":
+                continue  # no index bars here: the excess R stays 'no data'
             by = {}
             for si, ss in enumerate(sess):
                 bars, p = [], 100.0
@@ -585,3 +588,22 @@ def test_pair_extras_same_direction_groups_finder_and_themes():
     assert ab["themes"] == ["PCB", "AI"]  # more mentions first
     assert ac["same_dir"] == {"same": 1, "total": 3} and ac["groups"] == [] and ac["themes"] == []  # a 0% day is neither up nor down
     assert ac["finder"] == [{"date": "2026-03-03", "method": "new"}]
+
+
+def test_group_evidence_majority_of_pairs():
+    import random
+
+    from openmarket.history.finder import Intraday, group_evidence, majority
+
+    assert majority([True, True, False]) is True and majority([True, False]) is False and majority([None, None]) is None
+    rnd = random.Random(5)
+    idx = [rnd.gauss(0, 1) for _ in range(150)]
+    flow = [rnd.gauss(0, 1) for _ in range(150)]
+    feats = {c: Intraday(returns=[m + f + rnd.gauss(0, 0.3) for m, f in zip(idx, flow)]) for c in ("A", "B")}
+    pool = {f"P{i}": [rnd.gauss(0, 1) for _ in range(150)] for i in range(40)}
+    series = {"A": [1, 2, -1, -2, 1], "B": [2, 1, -1, -3, 2]}
+    ev = group_evidence(["A", "B"], feats, {}, {"上市": idx}, {"A": "上市", "B": "上市"}, pool, series, "s")
+    assert ev["excess"]["ok"] is True and ev["excess"]["r"] > 0.8
+    assert ev["baseline"]["ok"] is True and ev["baseline"]["pct"] >= 95
+    assert ev["burst"]["ok"] is None and ev["sync"]["ok"] is None  # no 1-minute bars: no data, not a ✗
+    assert ev["samedir"] == {"ok": True, "share": 1.0}

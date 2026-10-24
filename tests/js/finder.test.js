@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { PRESETS, rowsHeight, themeNewsHtml, cardHtml, digestText, shownFilter, finderMarkIndex, finderMarkTitle, csvExport, defaultGroupName, filterHtml, funnelText, presetOf, filterOptions, matchesFilter, progressView, queryOf, statsText } from '../../static/js/finder.js';
+import { PRESETS, evidenceRank, rowsHeight, themeNewsHtml, cardHtml, digestText, shownFilter, finderMarkIndex, finderMarkTitle, csvExport, defaultGroupName, filterHtml, funnelText, presetOf, filterOptions, matchesFilter, progressView, queryOf, statsText } from '../../static/js/finder.js';
 
 test('queryOf sends only the fields of the chosen method; blank 起漲差 means not required', () => {
   const p = { daily_r: 0.75, daily_window: 20, new_daily_r: 0.85, pool_top: 30, intraday_r: 0.5, peak_gap: 8, start_gap: '', require_burst: true, groupings: ['custom', 'news'], pool_sources: ['gain'] };
@@ -148,6 +148,10 @@ test('filter chips: 找法1 by source grouping (a group can count twice), 找法
   assert.ok(!filterOptions(known).some((o) => o.key === '@rel')); // none: no chip
   assert.match(cardHtml({ ...G, relations: rel.groups[0].relations }, 1), /<div class="fd-rel"[^>]*>🏢 <b>甲<\/b> 持有 <b>乙<\/b> 30%（權益法）/);
   assert.doesNotMatch(cardHtml(G, 1), /fd-rel/);
+  const strong = { evidence: { excess: { ok: true }, baseline: { ok: true }, burst: { ok: true }, sync: { ok: true }, samedir: { ok: true } } };
+  const evd = { ...known, groups: [{ ...known.groups[0], ...strong }, { ...known.groups[1], evidence: { excess: { ok: false } } }, known.groups[2]] };
+  assert.deepEqual(filterOptions(evd).at(-1), { key: '@ev', label: '🧾 證據強', n: 1 });
+  assert.ok(evidenceRank(evd.groups[0]) > evidenceRank(evd.groups[1]));
   const html = filterHtml(fresh, '跨族群新組合');
   assert.match(html, /data-filter="跨族群新組合" class="on"/);
   assert.match(html, /data-filter="已知族群的延伸" disabled/);
