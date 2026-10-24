@@ -45,7 +45,15 @@ def test_names_edges_and_groups():
     edges = relation_edges(invest, board, idx, ["1111", "2222", "3333"])
     assert [(e["src"], e["dst"], e["kind"]) for e in edges] == [("1111", "2222", "invest"), ("1111", "3333", "invest"), ("3333", "1111", "board")]
     groups = relation_groups(edges, {"1111": 100, "2222": 50, "3333": 300})
-    assert groups["1111"]["leader"] == "3333" and groups["1111"]["members"] == ["3333", "1111"]  # the largest market cap leads
+    # each holds the other (a 29.69% 權益法 stake / a board seat): a tie, so the larger market cap leads
+    assert groups["1111"]["leader"] == "3333" and groups["1111"]["members"] == ["3333", "1111"]
+    more = relation_groups(edges + [{"src": "1111", "dst": "2222", "kind": "board", "pct": 5, "title": "董事"}], {"1111": 100, "2222": 50, "3333": 300})
+    assert more["1111"]["leader"] == "1111"  # now 1111 holds two members: it leads despite the smaller cap
+    from openmarket.relations import merge_edges
+
+    merged = merge_edges(edges + [{"src": "3333", "dst": "1111", "kind": "board", "pct": 18.88, "title": "董事"}])
+    assert [(m["src"], m["dst"], m["pct"], m["method"], m["seats"]) for m in merged] == [
+        ("1111", "2222", 19.07, "綜合公允", []), ("1111", "3333", 29.69, "權益法", []), ("3333", "1111", 18.88, "", ["董事長", "董事"])]
     assert "2222" not in groups  # a 19% fair-value stake is a relation, not a group membership
 
 

@@ -7,6 +7,7 @@
 import { PICK_COLORS, mountIntraday, nextPicks } from './intradaychart.js';
 import { colorFor, escapeHtml, fmtPct, limitTag } from './transform.js';
 import { k5CardHtml, k5Svg, k5Title } from './k5.js';
+import { relationsHtml } from './relations.js';
 
 export const RACE_END = 270; // minutes after 09:00 → 13:30
 export const PEAK_END = 240; // the intraday high is taken over 09:00–13:00
@@ -224,7 +225,8 @@ export function pairCardHtml(f, ext, name, color) {
       row('同漲同跌', sd.total ? `<b>${sd.same}</b>／${sd.total} 天 <small class="${pct >= 75 ? 'up' : pct <= 50 ? 'muted' : ''}">${pct}%</small>` : '—', '近 20 個交易日兩檔同一天都漲或都跌的天數') +
       row('共同族群', ext.groups.length ? sharedGroupsHtml(ext.groups) : '<span class="muted">沒有</span>', ext.groups.map((g) => `${g.label}：${g.group}`).join('\n')) +
       row('N 找過', ext.finder.length ? `近 5 天 <b>${new Set(ext.finder.map((h) => h.date)).size}</b> 天：${ext.finder.map((h) => `${h.date.slice(5)}${h.method === 'new' ? '（找法2）' : ''}`).join('、')} 🔁` : '<span class="muted">近 5 天沒有</span>', '近 5 個交易日 N 存下的結果裡，這兩檔被找成同一群') +
-      row('共同題材', ext.themes.length ? ext.themes.map((t) => `📰 ${escapeHtml(t)}`).join('、') : '<span class="muted">沒有</span>', '近 3 個新聞日，兩檔都被同一個題材的新聞點名');
+      row('共同題材', ext.themes.length ? ext.themes.map((t) => `📰 ${escapeHtml(t)}`).join('、') : '<span class="muted">沒有</span>', '近 3 個新聞日，兩檔都被同一個題材的新聞點名') +
+      row('🏢 持股關係', ext.relations?.length || ext.group ? relationsHtml(ext.relations, ext.group) : '<span class="muted">沒有（或還沒抓到這兩檔的轉投資／董監資料）</span>', '轉投資、法人董監（MoneyDJ／公開資訊觀測站），以及由持股 ≥ 20%（權益法）或派任董監串起來的集團');
   }
   return `<table class="rt-pair">
     ${row('日相關', `R20 ${rTag(f.r20, 0.7, 0.3)}　R60 ${rTag(f.r60, 0.7, 0.3)}`, '近 20／60 個交易日日漲跌幅的相關係數')}

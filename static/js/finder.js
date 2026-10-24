@@ -5,6 +5,7 @@
 
 import { addToGroup, createGroup } from './groups.js';
 import { renderBody } from './linkage.js';
+import { relationsHtml } from './relations.js';
 import { colorFor, escapeHtml, fmtPct, fmtTurnover, toCsv } from './transform.js';
 
 export const METHODS = { known: '找法1 · 已知分類', new: '找法2 · 排行候選' };
@@ -175,6 +176,7 @@ export function cardHtml(g, i) {
   ].filter(Boolean);
   const inst = instParts.length ? `<div class="fd-inst">🏦 ${instParts.join('　')}</div>` : '';
   const margin = marginText(g);
+  const rel = g.relations?.length || g.rel_group ? `<div class="fd-rel" title="轉投資／法人董監（MoneyDJ 整理自公開資訊觀測站）：一起動有結構性的原因">🏢 ${relationsHtml(g.relations, g.rel_group)}</div>` : '';
   const news = g.news?.length ? `<div class="fd-news">📰 ${g.news.map((t) => escapeHtml(t)).join('<br>📰 ')}</div>` : '';
   const themes = g.themes?.length
     ? `<div class="fd-themes" title="近 3 個新聞日提到這幾檔的題材關鍵字（括號＝提到幾檔）；點題材看新聞標題">📰 題材：${g.themes
@@ -190,7 +192,7 @@ export function cardHtml(g, i) {
     <div class="fd-top"><span class="link-badge" style="background:${KIND_COLOR[g.kind] || '#3a3e48'}">${escapeHtml(g.kind)}</span>
       <span class="fd-title" title="${tip}">${title}</span>${seen}<span class="muted">${g.members.length} 檔</span>
       <button type="button" class="icon fd-save" data-save="${i}" title="把這群股票存成自訂族群，之後在 B／C／K 追蹤">＋族群</button></div>
-    <div class="fd-chips">${chips}</div>${money}${inst}${margin}
+    <div class="fd-chips">${chips}</div>${money}${inst}${margin}${rel}
     <div class="fd-facts">${facts}</div>${themes}${news}
   </div>`;
 }
@@ -218,6 +220,8 @@ export function filterOptions(d) {
   if (groups.some((g) => g.inst)) {
     for (const [key, label] of INST_FILTERS) opts.push({ key, label, n: groups.filter((g) => matchesFilter(g, key, d.method)).length });
   }
+  const related = groups.filter((g) => matchesFilter(g, '@rel', d.method)).length;
+  if (related) opts.push({ key: '@rel', label: '🏢 有持股關係', n: related });
   return opts;
 }
 
@@ -231,6 +235,7 @@ export function shownFilter(d, saved) {
 export function matchesFilter(g, key, method) {
   if (!key || key === 'all') return true;
   if (key.startsWith('@src:')) return Object.values(g.pool || {}).some((from) => from.includes(POOL_LABELS[key.slice(5)]));
+  if (key === '@rel') return !!(g.relations?.length || g.rel_group);
   if (key === '@inst+') return g.inst?.lots > 0;
   if (key === '@inst-') return g.inst?.lots < 0;
   return method === 'new' ? g.kind === key : !!g.sources?.some((s) => s.label === key);

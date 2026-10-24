@@ -76,9 +76,25 @@ def relation_edges(invest: Mapping[str, list[dict]], board: Mapping[str, list[di
     return out
 
 
+def merge_edges(edges: list[dict]) -> list[dict]:
+    """One entry per holder → held pair: {src, dst, pct (the stake, the largest stated), method (from the
+    轉投資 row), seats: [職稱, …] (from the 董監 rows, one per seat)}."""
+    by: dict[tuple[str, str], dict] = {}
+    for e in edges:
+        m = by.setdefault((e["src"], e["dst"]), {"src": e["src"], "dst": e["dst"], "pct": None, "method": "", "seats": []})
+        if e.get("pct") is not None:
+            m["pct"] = max(m["pct"] or 0, e["pct"])
+        if e["kind"] == "invest" and e.get("method"):
+            m["method"] = e["method"].strip()
+        if e["kind"] == "board":
+            m["seats"].append(e.get("title") or "董監")
+    return list(by.values())
+
+
 def relation_groups(edges: list[dict], caps: Mapping[str, float]) -> dict[str, dict]:
     """{code: {id, leader, members}} for stocks joined by a ≥ GROUP_PCT equity-method stake or a board
-    seat; a group is named after its largest market cap (leader). Lone stocks have no group."""
+    seat. The group is named after the member holding the most others (then the largest market cap);
+    members follow in that order. Lone stocks have no group."""
     parent: dict[str, str] = {}
 
     def find(x: str) -> str:
@@ -87,10 +103,12 @@ def relation_groups(edges: list[dict], caps: Mapping[str, float]) -> dict[str, d
             x = parent[x]
         return x
 
+    holds: dict[str, set[str]] = {}
     for e in edges:
         strong = e["kind"] == "board" or ("權益法" in (e.get("method") or "") and (e.get("pct") or 0) >= GROUP_PCT)
         if strong:
             parent[find(e["src"])] = find(e["dst"])
+            holds.setdefault(e["src"], set()).add(e["dst"])
     comps: dict[str, list[str]] = {}
     for c in list(parent):
         comps.setdefault(find(c), []).append(c)
@@ -98,7 +116,7 @@ def relation_groups(edges: list[dict], caps: Mapping[str, float]) -> dict[str, d
     for members in comps.values():
         if len(members) < 2:
             continue
-        members.sort(key=lambda c: -(caps.get(c) or 0))
+        members.sort(key=lambda c: (-len(holds.get(c, ())), -(caps.get(c) or 0)))
         g = {"id": members[0], "leader": members[0], "members": members}
         for c in members:
             out[c] = g

@@ -45,7 +45,7 @@ from .sources.institutional import fetch_inst_day
 from .sources.margin import fetch_margin_day
 from .sources.moneydj import fetch_relations
 from .sources.company_address import fetch_company_names
-from .relations import NameIndex, RelationCollector, relation_edges, relation_groups
+from .relations import NameIndex, RelationCollector, merge_edges, relation_edges, relation_groups
 from .sources.sector_index import fetch_sector_day
 from .sources.company_address import fetch_county_groups
 from .sources.google_news import fetch_headlines
@@ -121,7 +121,7 @@ def create_app(
         edges = relation_edges(invest, board, idx, [r["code"] for r in rows])
         by_pair: dict[frozenset, list[dict]] = {}
         by_code: dict[str, list[dict]] = {}
-        for e in edges:
+        for e in merge_edges(edges):  # one entry per holder → held (stake + seats)
             by_pair.setdefault(frozenset((e["src"], e["dst"])), []).append(e)
             by_code.setdefault(e["src"], []).append(e)
             by_code.setdefault(e["dst"], []).append(e)

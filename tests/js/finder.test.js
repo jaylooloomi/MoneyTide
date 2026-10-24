@@ -143,6 +143,11 @@ test('filter chips: 找法1 by source grouping (a group can count twice), 找法
   assert.match(csvExport({ ...pooled, date: '2026-10-22', groups: pooled.groups.map((g) => ({ ...g, members: [{ code: '1', name: '甲' }] })) }, '@src:gap')[0], /_開盤跳空\.csv$/);
   const tipCard = cardHtml({ ...G, sources: [], matches: [{ label: '官方產業', group: '電子零組件業', overlap: 0.5, outside: [] }, { label: '概念股', group: '被動元件', overlap: 0.4, outside: [] }] }, 1);
   assert.match(tipCard, /<span class="fd-title" title="最接近 官方產業：電子零組件業（重疊 50%）\n最接近 概念股：被動元件（重疊 40%）">/);
+  const rel = { ...known, groups: known.groups.map((g, k) => ({ ...g, relations: k === 0 ? [{ src_name: '甲', dst_name: '乙', pct: 30, method: '權益法', seats: [] }] : [] })) };
+  assert.deepEqual(filterOptions(rel).at(-1), { key: '@rel', label: '🏢 有持股關係', n: 1 });
+  assert.ok(!filterOptions(known).some((o) => o.key === '@rel')); // none: no chip
+  assert.match(cardHtml({ ...G, relations: rel.groups[0].relations }, 1), /<div class="fd-rel"[^>]*>🏢 <b>甲<\/b> 持有 <b>乙<\/b> 30%（權益法）/);
+  assert.doesNotMatch(cardHtml(G, 1), /fd-rel/);
   const html = filterHtml(fresh, '跨族群新組合');
   assert.match(html, /data-filter="跨族群新組合" class="on"/);
   assert.match(html, /data-filter="已知族群的延伸" disabled/);

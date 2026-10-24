@@ -25,6 +25,7 @@ import { mountNewsPanel } from './newsthemes.js';
 import { digestText, finderMarkIndex, finderMarkTitle, mountFinderPanel } from './finder.js';
 import { mountLinkagePanel } from './linkage.js';
 import { rotationInfoHtml } from './rotinfo.js';
+import { groupText, relText } from './relations.js';
 
 const PREFS_KEY = 'openmarket.history.v1';
 const $ = (sel) => document.querySelector(sel);
@@ -814,6 +815,27 @@ export function cardMarginRows(m) {
       <tr><td>融券</td><td>${n(m.short_chg)} 張</td><td>券資比</td><td>${m.short_ratio == null ? '—' : `${m.short_ratio.toFixed(1)}%`} ${s}</td></tr>`;
 }
 
+/** The card's 🏢 block: the listed companies it holds / is held by, and its group (crawled slowly). */
+export function cardRelationsHtml(r) {
+  if (!r) return '';
+  const list = (es) => es.map((e) => `<li>${relText(e)}</li>`).join('');
+  const parts = [];
+  if (r.group) parts.push(`<div>🏢 ${groupText(r.group)}</div>`);
+  if (r.holds?.length) parts.push(`<div class="muted">持有／派任董監的上市櫃公司</div><ul>${list(r.holds)}</ul>`);
+  if (r.held_by?.length) parts.push(`<div class="muted">被這些上市櫃公司持有</div><ul>${list(r.held_by)}</ul>`);
+  if (!parts.length) return `<div class="muted">🏢 ${r.fetched_at ? '沒有上市櫃之間的持股／董監關係' : '轉投資／董監資料還沒抓到這檔（背景慢慢抓）'}</div>`;
+  return parts.join('');
+}
+
+async function loadCardRelations(code) {
+  try {
+    const r = await getJson(`/api/history/relations/${encodeURIComponent(code)}`);
+    if (cardCode === code && $('#hCardRel')) $('#hCardRel').innerHTML = cardRelationsHtml(r);
+  } catch {
+    /* optional */
+  }
+}
+
 async function openHistCard(code) {
   cardCode = code;
   let d;
@@ -836,6 +858,7 @@ async function openHistCard(code) {
       ${cardInstRows(d.inst)}
       ${cardMarginRows(d.margin)}
     </table>
+    <div class="card-rel" id="hCardRel"></div>
     <div class="memb" data-memb="${escapeHtml(d.code)}"></div>
     <div class="btns">
       <a href="https://histock.tw/stock/${encodeURIComponent(d.code)}" target="_blank" rel="noopener noreferrer">HiStock ↗</a>
@@ -843,6 +866,7 @@ async function openHistCard(code) {
     </div>`;
   el.hidden = false;
   $('#hCardClose').addEventListener('click', closeHistCard);
+  loadCardRelations(d.code);
   fillMembership(el);
   if (cardChart) cardChart.dispose();
   cardChart = echarts.init($('#hCardSpark'));
