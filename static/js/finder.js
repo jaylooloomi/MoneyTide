@@ -188,6 +188,13 @@ export function cardHtml(g, i) {
         .map(([c, v]) => `${escapeHtml(g.members.find((m) => m.code === c)?.name || c)} ${v.toFixed(0)}%`)
         .join('、')}</div>`
     : '';
+  const nameOf = (c) => g.members.find((m) => m.code === c)?.name || c;
+  const br = g.branches?.common?.length
+    ? `<div class="fd-br" title="券商分點（HiStock，收盤後快照）：在 2 檔以上成員的買超前 15 名都出現的分點；括號＝名次">🏦 ${g.branches.common
+        .slice(0, 3)
+        .map((e) => `<b>${escapeHtml(e.name)}</b> ${Object.keys(e.ranks).map((c) => `${escapeHtml(nameOf(c))}（第 ${e.ranks[c]}）`).join('、')}`)
+        .join('；')}</div>`
+    : '';
   const rel = g.relations?.length || g.rel_group ? `<div class="fd-rel" title="轉投資／法人董監（MoneyDJ 整理自公開資訊觀測站）：一起動有結構性的原因">🏢 ${relationsHtml(g.relations, g.rel_group)}</div>` : '';
   const news = g.news?.length ? `<div class="fd-news">📰 ${g.news.map((t) => escapeHtml(t)).join('<br>📰 ')}</div>` : '';
   const themes = g.themes?.length
@@ -204,7 +211,7 @@ export function cardHtml(g, i) {
     <div class="fd-top"><span class="link-badge" style="background:${KIND_COLOR[g.kind] || '#3a3e48'}">${escapeHtml(g.kind)}</span>
       <span class="fd-title" title="${tip}">${title}</span>${seen}<span class="muted">${g.members.length} 檔</span>
       <button type="button" class="icon fd-save" data-save="${i}" title="把這群股票存成自訂族群，之後在 B／C／K 追蹤">＋族群</button></div>
-    <div class="fd-chips">${chips}</div>${groupEvidenceHtml(g)}${dt}${money}${inst}${margin}${rel}
+    <div class="fd-chips">${chips}</div>${groupEvidenceHtml(g)}${dt}${money}${inst}${margin}${br}${rel}
     <div class="fd-facts">${facts}</div>${themes}${news}
   </div>`;
 }

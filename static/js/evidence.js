@@ -106,6 +106,9 @@ export function groupEvidenceItems(g) {
   const rel = (g.relations?.length || 0) + (g.rel_group ? 1 : 0);
   add('relation', rel ? true : null, '持股', rel ? '有持股／集團關係' : '沒有（或還沒抓到）');
   add('samedir', pick('samedir').ok, '同漲跌', pick('samedir').share === null || pick('samedir').share === undefined ? '資料不足' : `近期 ${Math.round(pick('samedir').share * 100)}% 的日子同方向`);
+  const br = g.branches;
+  add('branch', br ? br.ok : null, '同分點',
+    br ? (br.common.length ? `${br.common[0].name} 同時買超 ${Object.keys(br.common[0].ranks).length} 檔` : '買超前 15 名沒有共同分點') : '分點還沒抓（收盤後快照）');
   add('theme', g.themes?.length ? true : null, '題材', g.themes?.length ? `📰 ${g.themes.map((t) => t.term).slice(0, 3).join('、')}` : '沒有共同題材');
   return items;
 }

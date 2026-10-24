@@ -466,3 +466,4 @@ table.link-heat td.self { background: #3a3e48; }
 .card-br { font-size: 12px; margin: 6px 0; }
 .card-br-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
 .card-br-cols ol { margin: 2px 0; padding-left: 18px; }
+.fd-br { font-size: 12px; margin-bottom: 4px; color: #b9c7ff; }

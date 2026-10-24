@@ -155,6 +155,9 @@ test('filter chips: 找法1 by source grouping (a group can count twice), 找法
   const hot = cardHtml({ ...G, daytrade: { by_code: { 1: 52.4, 2: 47 }, hot: true } }, 1);
   assert.match(hot, /<div class="fd-dt"[^>]*>🔥 當沖比高：甲 52%、乙 47%/);
   assert.doesNotMatch(cardHtml({ ...G, daytrade: { by_code: { 1: 10 }, hot: false } }, 1), /fd-dt/);
+  const brCard = cardHtml({ ...G, branches: { common: [{ name: '美商高盛', ranks: { 1: 2, 2: 2 }, nets: {} }], ok: true, have: 2 } }, 1);
+  assert.match(brCard, /<div class="fd-br"[^>]*>🏦 <b>美商高盛<\/b> 甲（第 2）、乙（第 2）/);
+  assert.doesNotMatch(cardHtml(G, 1), /fd-br/);
   const html = filterHtml(fresh, '跨族群新組合');
   assert.match(html, /data-filter="跨族群新組合" class="on"/);
   assert.match(html, /data-filter="已知族群的延伸" disabled/);

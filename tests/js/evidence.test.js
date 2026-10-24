@@ -73,3 +73,12 @@ test('evidenceItems: 同一個分點同時買超 from the 分點 pair', () => {
   assert.equal(pick(undefined).ok, null); // loading
   assert.equal(pick(null, '盤後才有分點資料').detail, '盤後才有分點資料');
 });
+
+test('groupEvidenceItems: 同分點 from the stored 分點, — until the snapshot has them', () => {
+  const item = (branches) => groupEvidenceItems({ branches }).find((x) => x.key === 'branch');
+  assert.equal(item({ common: [{ name: '高盛', ranks: { A: 1, B: 2 } }], ok: true }).ok, true);
+  assert.match(item({ common: [{ name: '高盛', ranks: { A: 1, B: 2 } }], ok: true }).detail, /高盛 同時買超 2 檔/);
+  assert.equal(item({ common: [], ok: false }).ok, false);
+  assert.equal(item(null).ok, null);
+  assert.match(item(null).detail, /收盤後快照/);
+});

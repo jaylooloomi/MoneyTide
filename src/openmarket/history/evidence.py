@@ -169,3 +169,24 @@ def shared_buyers(a: Mapping | None, b: Mapping | None) -> dict | None:
     ]
     shared.sort(key=lambda x: x["a_rank"] + x["b_rank"])
     return {"shared": shared, "strong": any(x["a_rank"] <= BRANCH_TOP and x["b_rank"] <= BRANCH_TOP for x in shared)}
+
+
+def group_branches(members: list[str], data: Mapping[str, Mapping], top: int = 15) -> dict | None:
+    """分點 of a group from the stored days: {common: [{name, ranks: {code: rank}, nets: {code: 張}}] (branches
+    among the top `top` 買超 of 2+ members, most members first), ok (most pairs share a top-5 buyer),
+    have: members with data}; None when fewer than two members have it."""
+    have = [c for c in members if data.get(c) and "error" not in data[c]]
+    if len(have) < 2:
+        return None
+    seen: dict[str, dict] = {}
+    for c in have:
+        for i, r in enumerate(data[c].get("buy", [])[:top]):
+            if r.get("net", 0) > 0:
+                e = seen.setdefault(r["name"], {"name": r["name"], "ranks": {}, "nets": {}})
+                e["ranks"][c] = i + 1
+                e["nets"][c] = r["net"]
+    common = [e for e in seen.values() if len(e["ranks"]) >= 2]
+    common.sort(key=lambda e: (-len(e["ranks"]), sum(e["ranks"].values())))
+    pairs = [shared_buyers(data[a], data[b]) for i, a in enumerate(have) for b in have[i + 1:]]
+    strong = [p["strong"] for p in pairs if p is not None]
+    return {"common": common[:5], "ok": (sum(strong) * 2 > len(strong)) if strong else None, "have": len(have)}

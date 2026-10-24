@@ -68,3 +68,17 @@ def test_shared_buyers_top_five_in_both():
     b2 = {"buy": [{"name": "國泰", "net": 300}, {"name": "凱基-台北", "net": 120}]}
     assert shared_buyers(a, b2)["strong"] is True
     assert shared_buyers(a, None) is None
+
+
+
+def test_group_branches_common_buyers_and_majority():
+    from openmarket.history.evidence import group_branches
+
+    buy = lambda *names: {"buy": [{"name": n, "net": 100 - i} for i, n in enumerate(names)], "sell": []}  # noqa: E731
+    data = {"A": buy("高盛", "野村", "元大"), "B": buy("國泰", "高盛", "凱基"), "C": buy("X1", "X2", "X3", "X4", "X5", "野村")}
+    g = group_branches(["A", "B", "C"], data)
+    assert [(e["name"], e["ranks"]) for e in g["common"]] == [("高盛", {"A": 1, "B": 2}), ("野村", {"A": 2, "C": 6})]
+    assert g["ok"] is False  # only A–B share a top-5 buyer: 1 of 3 pairs
+    assert g["have"] == 3
+    assert group_branches(["A", "Z"], data) is None  # one member without 分點 data
+    assert group_branches(["A", "B"], {**data, "B": {"error": "x"}}) is None

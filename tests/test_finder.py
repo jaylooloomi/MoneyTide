@@ -607,3 +607,31 @@ def test_group_evidence_majority_of_pairs():
     assert ev["baseline"]["ok"] is True and ev["baseline"]["pct"] >= 95
     assert ev["burst"]["ok"] is None and ev["sync"]["ok"] is None  # no 1-minute bars: no data, not a ✗
     assert ev["samedir"] == {"ok": True, "share": 1.0}
+
+
+def test_branch_snapshot_skips_stored_members(tmp_path):
+    import time as _t
+    from datetime import datetime
+
+    from fastapi.testclient import TestClient
+
+    from openmarket.api import create_app
+    from openmarket.config import AppConfig
+    from openmarket.history.store import HistoryStore
+
+    s = HistoryStore(tmp_path / "h.sqlite")
+    d = date(2026, 3, 2)
+    s.save_day(d, [{"code": c, "name": c, "market": "上市", "industry": "X", "kind": "stock", "close": 10.0, "prev_close": 10.0, "change": 0, "change_pct": 0} for c in ("A", "B")], datetime(2026, 3, 2, 15))
+    s.save_finder(d, "known", "k", {"groups": [{"members": [{"code": "A"}, {"code": "B"}]}]})
+    for c in ("A", "B"):  # already stored: the snapshot has nothing to fetch (no network here)
+        s.save_branches(c, d, {"buy": [], "sell": []}, datetime(2026, 3, 2, 16))
+    app = create_app(AppConfig(data_dir=tmp_path), start_polling=False, start_history=False, start_concepts=False, history_store=s)
+    with TestClient(app, base_url="http://127.0.0.1") as client:
+        client.post("/api/branches/snapshot")
+        for _ in range(50):
+            st = client.get("/api/branches/status").json()["snapshot"]
+            if st["last"]:
+                break
+            _t.sleep(0.05)
+        assert st["date"] == "2026-03-02" and st["total"] == 0 and st["errors"] == 0
+        assert client.get("/api/branches/status").json()["queue"]["today"] == 0  # not a single HiStock page

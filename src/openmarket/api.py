@@ -48,7 +48,7 @@ from .sources.margin import fetch_margin_day
 from .sources.moneydj import fetch_relations
 from .sources.company_address import fetch_company_names
 from .relations import NameIndex, RelationCollector, merge_edges, relation_edges, relation_groups
-from .history.evidence import bucket_of, chip_sync, excess_matrix, minute_evidence, percentile_of, shared_buyers
+from .history.evidence import bucket_of, chip_sync, excess_matrix, group_branches, minute_evidence, percentile_of, shared_buyers
 from .sources.sector_index import fetch_sector_day
 from .sources.daytrade import fetch_daytrade_day
 from .sources.histock_branch import BranchQueue
@@ -222,6 +222,7 @@ def create_app(
                 codes=listed_codes,
             )
             tasks.append(asyncio.create_task(app.state.relations.run()))
+            tasks.append(asyncio.create_task(branch_snapshot_loop()))  # 分點 of N's members after the close
             ptt_client = app.state.ptt_client = make_ptt_client()
             app.state.news = NewsThemeCollector(
                 store=app.state.history,
@@ -868,6 +869,9 @@ def create_app(
                 return {**grp, "daytrade": {"by_code": known, "hot": bool(known) and sum(known.values()) / len(known) >= DAYTRADE_HOT}}
 
             groups = [with_daytrade(grp) for grp in groups]
+            # 🏦 分點 from the stored days only (the after-close snapshot fills them): nothing is fetched here
+            stored_branches = store.branches(ev_codes, d)
+            groups = [{**grp, "branches": group_branches([m["code"] for m in grp["members"]], stored_branches)} for grp in groups]
             return {**res, "groups": finder_news_themes(groups, news, [x.isoformat() for x in news_dates])}
 
         if not refresh:
@@ -949,6 +953,68 @@ def create_app(
         return await linkage_payload(d, rows)
 
     BRANCH_MAX_CODES = 4  # stocks one request may fetch 分點 for (each page waits ≥ 5 s)
+    SNAPSHOT_MAX = 150  # 分點 snapshot: at most this many stocks a day (the queue's daily cap is shared)
+    SNAPSHOT_READY = time(15, 30)  # HiStock has the day's 分點 by then
+    snapshot_state = {"running": False, "date": None, "done": 0, "total": 0, "errors": 0, "last": None}
+
+    def snapshot_codes(d: date) -> list[str]:
+        """The members of every N result stored for d (any thresholds), most-found first."""
+        count: dict[str, int] = {}
+        for _, _, res in app.state.history.finder_any([d]):
+            for g in res.get("groups", []):
+                for m in g.get("members", []):
+                    count[m["code"]] = count.get(m["code"], 0) + 1
+        return sorted(count, key=lambda c: -count[c])[:SNAPSHOT_MAX]
+
+    async def branch_snapshot_once() -> dict:
+        """Fetch the 分點 of the latest day's N members that are not stored yet (slowly, one queue)."""
+        store = app.state.history
+        days = store.trading_dates(limit=1)
+        now = datetime.now(TAIPEI)
+        if not days or (days[0] == now.date() and now.time() < SNAPSHOT_READY):
+            return snapshot_state
+        d = days[0]
+        codes = snapshot_codes(d)
+        have = await asyncio.to_thread(store.branches, codes, d)
+        todo = [c for c in codes if c not in have]
+        snapshot_state.update(running=True, date=d.isoformat(), done=0, total=len(todo), errors=0)
+        try:
+            for c in todo:
+                try:
+                    data = await branch_queue().fetch(c, d)
+                    plain = {k: [{f: getattr(r, f) for f in r.__slots__} for r in v] for k, v in data.items()}
+                    await asyncio.to_thread(store.save_branches, c, d, plain, datetime.now(TAIPEI))
+                except Exception as exc:
+                    snapshot_state["errors"] += 1
+                    logging.getLogger(__name__).warning("branch snapshot %s %s failed: %s", c, d, exc)
+                    if "上限" in str(exc) or "暫停" in str(exc):
+                        break  # the daily cap or a refusal: stop for today
+                snapshot_state["done"] += 1
+        finally:
+            snapshot_state.update(running=False, last=datetime.now(TAIPEI).isoformat())
+        return snapshot_state
+
+    async def branch_snapshot_loop() -> None:
+        await asyncio.sleep(600)  # after the start-up and the N precompute
+        while True:
+            try:
+                await branch_snapshot_once()
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:
+                logging.getLogger(__name__).warning("branch snapshot pass failed: %s", exc)
+            await asyncio.sleep(1800)
+
+    @app.get("/api/branches/status")
+    def branches_status() -> dict:
+        return {"snapshot": snapshot_state, "queue": branch_queue().status()}
+
+    @app.post("/api/branches/snapshot")
+    async def branches_snapshot_now() -> dict:
+        """Start the 分點 snapshot now (in the background); see /api/branches/status."""
+        if not snapshot_state["running"]:
+            asyncio.create_task(branch_snapshot_once())
+        return snapshot_state
 
     def branch_queue() -> BranchQueue:
         q = getattr(app.state, "branch_queue", None)
