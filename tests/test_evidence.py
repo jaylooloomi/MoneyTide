@@ -113,3 +113,14 @@ def test_buy_streaks_count_back_until_a_gap():
     days = [day("甲", "乙", "丙"), day("甲", "乙"), day("甲"), None, day("甲")]  # newest first; day 4 not stored
     assert buy_streaks(days) == {"甲": 3, "乙": 2, "丙": 1}  # the gap ends 甲's run
     assert buy_streaks([None, day("甲")]) == {} and buy_streaks([]) == {}
+
+
+
+def test_foreign_branches_among_the_stored_top_15():
+    from openmarket.history.evidence import foreign_branch_net, is_foreign_branch
+
+    assert is_foreign_branch("美商高盛") and is_foreign_branch("摩根大通") and is_foreign_branch("台灣摩根士丹利")
+    assert not is_foreign_branch("元大-西屯") and not is_foreign_branch("凱基-台北")
+    data = {"buy": [{"name": "美商高盛", "net": 500}, {"name": "元大", "net": 300}], "sell": [{"name": "港商野村", "net": -200}]}
+    assert foreign_branch_net(data) == 300
+    assert foreign_branch_net({"buy": [], "sell": []}) is None and foreign_branch_net(None) is None

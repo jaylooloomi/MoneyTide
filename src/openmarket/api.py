@@ -49,7 +49,7 @@ from .sources.moneydj import fetch_relations
 from .sources.company_address import fetch_company_names
 from .relations import NameIndex, RelationCollector, merge_edges, relation_edges, relation_groups
 from .history.factors import factor_of, industry_sizes
-from .history.evidence import bucket_of, buy_streaks, buyer_cost, chip_sync, concentration, excess_matrix, group_branches, minute_evidence, percentile_of, shared_buyers
+from .history.evidence import bucket_of, buy_streaks, buyer_cost, foreign_branch_net, chip_sync, concentration, excess_matrix, group_branches, minute_evidence, percentile_of, shared_buyers
 from .sources.sector_index import fetch_sector_day
 from .sources.daytrade import fetch_daytrade_day, fetch_tpex_daytrade_day
 from .sources.histock_branch import BranchQueue
@@ -1144,6 +1144,11 @@ def create_app(
         rows_d = {r["code"]: r for r in await asyncio.to_thread(store.day_rows, d) if r["code"] in ok}
         out = {c: v if c not in ok else {**v, "concentration": concentration(v, rows_d.get(c, {}).get("volume_shares")),
                                          "cost": buyer_cost(v), "close": rows_d.get(c, {}).get("close")} for c, v in out.items()}
+        # 外資分點 against the official 外資 (TWSE／TPEx 三大法人): the same side, or another account at work
+        split = await asyncio.to_thread(store.inst_split, d)
+        for c in ok:
+            out[c]["foreign_net"] = foreign_branch_net(out[c])
+            out[c]["foreign_official"] = round(split[c][0] / 1000) if c in split else None
         # 主力連續買超: the stored 分點 of the trading days before (never fetched here)
         if ok:
             days_back = sorted(await asyncio.to_thread(lambda: store.trading_dates(up_to=d, limit=STREAK_DAYS)), reverse=True)[1:]

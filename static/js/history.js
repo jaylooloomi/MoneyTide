@@ -839,6 +839,17 @@ export function cardRelationsHtml(r) {
   return parts.join('');
 }
 
+/** 外資分點 vs 官方外資: the same direction, or not (another account — 外資自營、境外帳戶 — at work). */
+export function foreignLine(b) {
+  const f = b.foreign_net;
+  const o = b.foreign_official;
+  if (f == null || o == null || (f === 0 && o === 0)) return '';
+  const n = (v) => `<span class="${v > 0 ? 'up' : v < 0 ? 'down' : ''}">${v > 0 ? '+' : ''}${Math.round(v).toLocaleString()}</span>`;
+  const same = Math.sign(f) === Math.sign(o) || f === 0 || o === 0;
+  const tip = '外資分點＝分點名單（買超、賣超各前 15 名）裡外資券商的合計買賣超；官方外資＝證交所／櫃買公布的外資買賣超。方向相反時，常是外資自營、境外帳戶或非外資客戶透過外資券商下單；只看前 15 名，不是全部分點';
+  return `<div class="muted" title="${escapeHtml(tip)}">外資分點 ${n(f)} 張 vs 官方外資 ${n(o)} 張${same ? '' : ' <b class="down">方向相反</b>'}</div>`;
+}
+
 export const COST_TIP = '主力成本＝當天買超前 5 大分點的買進均價，依買超張數加權。收盤高於成本＝這批買家當天帳上獲利，低於＝套牢；只看這一天的進出，不是累積持股成本';
 export const CONC_TIP = '籌碼集中度＝（前 15 大買超分點的買超 − 前 15 大賣超分點的賣超）÷ 當日成交量。正數＝大買家吃下的比大賣家倒出的多，籌碼往少數人集中；常見的看法是 > 10% 偏集中、< −10% 偏分散';
 
@@ -856,7 +867,7 @@ export function cardBranchesHtml(b) {
   const conc = c == null ? '' : `　<span class="${c > 0 ? 'up' : c < 0 ? 'down' : ''}" title="${escapeHtml(CONC_TIP)}">籌碼集中度 ${c > 0 ? '+' : ''}${c.toFixed(1)}%</span>`;
   const gap = b.cost && b.close ? (b.close / b.cost - 1) * 100 : null;
   const cost = gap == null ? '' : `<div class="muted" title="${escapeHtml(COST_TIP)}">主力成本（前 5 大買超均價）<b>${b.cost.toFixed(2)}</b>，收盤 ${b.close} → <span class="${gap > 0 ? 'up' : gap < 0 ? 'down' : ''}">${gap > 0 ? '+' : ''}${gap.toFixed(1)}%</span>${gap > 0 ? '（主力帳上獲利）' : gap < 0 ? '（主力帳上套牢）' : ''}</div>`;
-  return `<div class="muted">🏦 分點（HiStock）買超前 5／賣超前 5，張${conc}</div>${cost}<div class="card-br-cols"><ol>${list(b.buy || [], 1)}</ol><ol>${list(b.sell || [], -1)}</ol></div>`;
+  return `<div class="muted">🏦 分點（HiStock）買超前 5／賣超前 5，張${conc}</div>${cost}${foreignLine(b)}<div class="card-br-cols"><ol>${list(b.buy || [], 1)}</ol><ol>${list(b.sell || [], -1)}</ol></div>`;
 }
 
 async function loadCardBranches(code, date) {

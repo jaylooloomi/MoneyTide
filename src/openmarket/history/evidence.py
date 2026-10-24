@@ -189,6 +189,23 @@ def buyer_cost(data: Mapping | None, top: int = 5) -> float | None:
     return round(sum(r["avg"] * r["net"] for r in rows) / net, 2) if net else None
 
 
+# foreign brokers' branches in HiStock's names: the 美商／港商… prefixes and the houses known by name
+FOREIGN_PREFIXES = ("美商", "港商", "新加坡商", "瑞士商", "英商", "法商", "德商", "日商", "荷商", "香港", "台灣摩根士丹利")
+FOREIGN_NAMES = ("摩根", "美林", "花旗", "高盛", "瑞銀", "野村", "麥格理", "大和", "匯豐", "巴克萊", "星展", "法國興業", "德意志")
+
+
+def is_foreign_branch(name: str) -> bool:
+    return name.startswith(FOREIGN_PREFIXES) or any(k in name for k in FOREIGN_NAMES)
+
+
+def foreign_branch_net(data: Mapping | None) -> float | None:
+    """外資分點 net 張 among the stored top-15 買超 and 賣超 (the rest of the branches are not stored);
+    None without 分點."""
+    if not data or "error" in data or not (data.get("buy") or data.get("sell")):
+        return None
+    return sum(r.get("net", 0) for side in ("buy", "sell") for r in data.get(side, []) if is_foreign_branch(r["name"]))
+
+
 def buy_streaks(days: list[Mapping | None], top: int = 5) -> dict[str, int]:
     """主力連續買超: for the top `top` 買超 分點 of days[0] (the shown day), how many trading days in a row,
     counting back, each one was among that day's 買超 (top 15). days: newest first, one entry per trading
