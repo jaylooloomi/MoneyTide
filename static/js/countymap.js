@@ -43,6 +43,7 @@ export function aggregateCounties(stocks, countyByCode) {
       .sort((a, b) => b.turnover_100m - a.turnover_100m)
       .slice(0, TOP_N)
       .map((s) => ({ code: s.code, name: s.name, turnover_100m: s.turnover_100m, change_pct: s.change_pct })),
+    members: members.map((s) => ({ code: s.code, name: s.name, industry: s.industry, turnover_100m: s.turnover_100m, change_pct: s.change_pct })),
   }));
   rows.sort((a, b) => b.turnover_100m - a.turnover_100m);
   return { rows, overseas, unknown };
@@ -128,6 +129,30 @@ export function countyListHtml(rows, metric = 'turnover') {
   return `<table class="grid"><thead><tr><th class="l">縣市</th><th>家數</th><th>成交值</th><th>占比</th><th>漲跌</th></tr></thead><tbody>${body}</tbody></table>`;
 }
 
+export const COMPANY_SORTS = { turnover_100m: '成交值', change_pct: '漲跌', code: '代號' };
+
+/** One county's companies (the right-hand list drilled down): back button, then every company,
+ *  sorted by `sort` (成交值 / 漲跌 high first, 代號 ascending); a row opens that stock's card. */
+export function countyCompaniesHtml(row, sort = 'turnover_100m') {
+  if (!row) return '';
+  const key = sort in COMPANY_SORTS ? sort : 'turnover_100m';
+  const list = [...(row.members || [])].sort((a, b) =>
+    key === 'code' ? a.code.localeCompare(b.code) : (b[key] ?? -Infinity) - (a[key] ?? -Infinity),
+  );
+  const th = (k, label, cls = '') =>
+    `<th class="${cls}${k === key ? ' sorted' : ''}" data-sort="${k}" style="cursor:pointer" title="依${label}排序">${label}${k === key ? ' ▾' : ''}</th>`;
+  const body = list
+    .map(
+      (s) => `<tr data-code="${escapeHtml(s.code)}" style="cursor:pointer" title="${escapeHtml(s.industry || '')}　點一下看資訊卡">
+        <td class="l">${escapeHtml(s.code)}</td><td class="l">${escapeHtml(s.name)}</td>
+        <td class="c" style="background:${colorFor(s.change_pct, 7)}">${fmtPct(s.change_pct)}</td><td>${fmtTurnover(s.turnover_100m)}</td></tr>`,
+    )
+    .join('');
+  return `<div class="cm-drill-h"><button type="button" class="icon wide" data-act="back">← 回縣市</button>
+      <b>${escapeHtml(row.name)}</b> <span class="muted">${row.count} 家 · ${fmtTurnover(row.turnover_100m)} · ${fmtPct(row.change_pct)}</span></div>
+    <table class="grid"><thead><tr>${th('code', '代號', 'l')}<th class="l">名稱</th>${th('change_pct', '漲跌')}${th('turnover_100m', '成交值')}</tr></thead><tbody>${body}</tbody></table>`;
+}
+
 // ---- DOM / ECharts ---------------------------------------------------------------------
 
 let geoPromise = null;
@@ -158,8 +183,9 @@ function loadMapping() {
  * A county map inside `el` with a metric <select> placed into `controls` and a note element.
  * render(stocks, caption) redraws; metric choice is kept in localStorage under `prefKey`.
  */
-export function mountCountyMap(el, { controls, note, prefKey }) {
-  const state = { chart: null, stocks: [], caption: '', metric: 'turnover', retry: null };
+export function mountCountyMap(el, { controls, note, prefKey, onStock }) {
+  // county: the county drilled into on the right (null = the county ranking); kept across redraws
+  const state = { chart: null, stocks: [], caption: '', metric: 'turnover', retry: null, county: null, sort: 'turnover_100m', rows: [] };
   try {
     const saved = localStorage.getItem(prefKey);
     if (saved in MAP_METRICS) state.metric = saved;
@@ -204,16 +230,49 @@ export function mountCountyMap(el, { controls, note, prefKey }) {
       });
       el.querySelector('.cm-list').addEventListener('mouseout', (e) => {
         const tr = e.target.closest('tr[data-county]');
-        if (tr) state.chart.dispatchAction({ type: 'downplay', name: tr.dataset.county });
+        if (tr && tr.dataset.county !== state.county) state.chart.dispatchAction({ type: 'downplay', name: tr.dataset.county });
+      });
+      // 點縣市（地圖或右側清單）→ 右側換成那個縣市的公司；← 回縣市 回到排行
+      state.chart.on('click', (p) => p.name && drill(p.name));
+      el.querySelector('.cm-list').addEventListener('click', (e) => {
+        if (e.target.closest('[data-act="back"]')) return drill(null);
+        const th = e.target.closest('th[data-sort]');
+        if (th) {
+          state.sort = th.dataset.sort;
+          return showList();
+        }
+        const company = e.target.closest('tr[data-code]');
+        if (company) return onStock?.(company.dataset.code);
+        const county = e.target.closest('tr[data-county]');
+        if (county) drill(county.dataset.county);
       });
     }
     const { rows, overseas, unknown } = aggregateCounties(state.stocks, mapping);
+    state.rows = rows;
     state.chart.setOption(buildMapOption(rows, state.metric), { notMerge: true });
-    el.querySelector('.cm-list').innerHTML = countyListHtml(rows, state.metric);
+    showList();
     const parts = [state.caption, `${rows.reduce((a, r) => a + r.count, 0)} 家依公司總部縣市`];
     if (overseas) parts.push(`總部在海外 ${overseas} 家未顯示`);
     if (unknown) parts.push(`地址無法判斷 ${unknown} 家未顯示`);
     note.textContent = parts.filter(Boolean).join('　·　');
+  }
+
+  function drill(name) {
+    if (name && !state.rows.some((r) => r.name === name)) return; // a county without listed head offices
+    if (state.county) state.chart?.dispatchAction({ type: 'downplay', name: state.county });
+    state.county = name || null;
+    showList(true);
+  }
+
+  function showList(top = false) {
+    const list = el.querySelector('.cm-list');
+    if (!list) return;
+    const row = state.county && state.rows.find((r) => r.name === state.county);
+    if (state.county && !row) state.county = null; // gone on this day: back to the ranking
+    const keep = list.scrollTop; // a live poll redraws: do not jump back to the top
+    list.innerHTML = row ? countyCompaniesHtml(row, state.sort) : countyListHtml(state.rows, state.metric);
+    list.scrollTop = top ? 0 : keep;
+    if (row) state.chart?.dispatchAction({ type: 'highlight', name: row.name });
   }
 
   return {

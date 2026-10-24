@@ -389,3 +389,5 @@ table.link-heat td.self { background: #3a3e48; }
 .fd-detail .panel-h .fd-themes { margin-top: 0; }
 .fd-digest { color: #ffd400; border-color: #6b5a1e; margin-right: 8px; white-space: nowrap; }
 .fd-inst { font-size: 12px; margin-bottom: 4px; color: #cfd3dc; }
+.cm-drill-h { display: flex; align-items: center; gap: 6px; padding: 4px 2px 6px; position: sticky; top: 0; background: var(--panel); z-index: 1; }
+.cm-drill-h button { width: auto; white-space: nowrap; }

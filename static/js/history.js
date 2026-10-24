@@ -1448,7 +1448,7 @@ function mountCountyPanel() {
       <span id="hMapCtl"></span><span id="hWordsCtl" hidden></span><span class="muted" id="hMapNote" style="margin-left:auto"></span><span class="muted" id="hWordsNote" style="margin-left:auto" hidden></span></div>
     <div id="hMap" style="height:620px"></div><div id="hWords" style="height:620px" hidden></div>`;
   $('#historyView').appendChild(sec);
-  countyPanel.ctl = mountCountyMap($('#hMap'), { controls: $('#hMapCtl'), note: $('#hMapNote'), prefKey: 'openmarket.history.mapMetric' });
+  countyPanel.ctl = mountCountyMap($('#hMap'), { controls: $('#hMapCtl'), note: $('#hMapNote'), prefKey: 'openmarket.history.mapMetric', onStock: openHistCard });
   countyPanel.words = mountWordCloud($('#hWords'), {
     controls: $('#hWordsCtl'),
     note: $('#hWordsNote'),

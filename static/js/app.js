@@ -1059,7 +1059,7 @@ function renderLiveMap(stocks, grouped) {
       '<button data-value="words" title="目前分組的族群名稱：字越大成交值越大，紅漲綠跌">關鍵字圖</button>';
     $('#liveControls').prepend(seg);
     liveOverlay('liveMapBox', '<div class="panel-h" style="gap:8px"><span id="liveMapCtl"></span><span class="muted" id="liveMapNote"></span></div><div id="liveMap" style="flex:1;min-height:0"></div>');
-    liveMap.ctl = mountCountyMap($('#liveMap'), { controls: $('#liveMapCtl'), note: $('#liveMapNote'), prefKey: 'openmarket.live.mapMetric' });
+    liveMap.ctl = mountCountyMap($('#liveMap'), { controls: $('#liveMapCtl'), note: $('#liveMapNote'), prefKey: 'openmarket.live.mapMetric', onStock: openCard });
     liveOverlay('liveWordsBox', '<div class="panel-h" style="gap:8px"><span id="liveWordsCtl"></span><span class="muted" id="liveWordsNote"></span></div><div id="liveWords" style="flex:1;min-height:0"></div>');
     liveMap.words = mountWordCloud($('#liveWords'), {
       controls: $('#liveWordsCtl'),
