@@ -233,3 +233,32 @@ def test_parse_daytrade_and_ratios(tmp_path):
     s.save_daytrade_day(d, {"1": 4_500_000}, datetime(2026, 10, 22, 19, tzinfo=TAIPEI))
     assert daytrade_ratios(s, [d], ["1", "2"]) == {"1": {d: 45.0}, "2": {}}
     assert s.daytrade_dates() == {d}
+
+
+def test_ex_rights_fill_the_missing_prev_close(tmp_path):
+    from openmarket.sources.exright import parse_tpex_exright, parse_twse_exright
+
+    twse = {"stat": "OK", "fields": ["資料日期", "股票代號", "股票名稱", "除權息前收盤價", "除權息參考價"],
+            "data": [["115年08月03日", "2367", "燿華", "36.30", "36.10"]]}
+    tpex = {"tables": [{"fields": ["除權息日期", "代號", "名稱", "除權息前收盤價", "除權息參考價"], "data": [["115/08/03", "3306", "鼎天  ", "43.75", "42.05"]]}]}
+    assert parse_twse_exright(twse) == {date(2026, 8, 3): {"2367": 36.1}}
+    assert parse_tpex_exright(tpex) == {date(2026, 8, 3): {"3306": 42.05}}
+    assert parse_twse_exright({"stat": "很抱歉"}) == {}
+
+    s = HistoryStore(tmp_path / "h.sqlite")
+    d = date(2026, 8, 3)
+    # "1": ex-dividend (TWSE 'X': no change), "2": an ordinary day
+    s.save_day(d, build_rows([DailyRow("1", "1", "上市", 38.0, None, 36.1, 38.65, 36.0, 1e6, 3.8e7),
+                              DailyRow("2", "2", "上市", 10.0, 0.5, 9.5, 10, 9.5, 1e6, 1e7)], INFOS, {}), datetime(2026, 8, 3, 15, tzinfo=TAIPEI))
+    assert s.ex_rights_gaps() == [d]
+
+    async def fetch(a, b):
+        assert (a, b) == (d, d)
+        return {d: {"1": 36.1, "2": 1.0}}
+
+    c = HistoryCollector(store=s, fetch_twse=None, fetch_tpex=None, reference=lambda: ({}, {}), sleep=lambda _: asyncio.sleep(0), fetch_exrights=fetch)
+    asyncio.run(c.collect_exrights())
+    rows = {r["code"]: r for r in s.rows([d])[d]}
+    assert rows["1"]["prev_close"] == 36.1 and rows["1"]["change"] == 1.9 and rows["1"]["change_pct"] == round((38 / 36.1 - 1) * 100, 4)
+    assert rows["2"]["prev_close"] == 9.5  # a row that had its 昨收 is left alone
+    assert s.ex_rights_gaps() == []  # looked up: not asked again

@@ -517,6 +517,7 @@ export function mountIntraday(el, { date, onCard, onDate, benchmarks = [] }) {
   }
 
   function draw() {
+    const m = viewDate === date ? state.m : END; // another day (a 5 日 K candle): the whole session
     const items = state.items.filter((x) => x.data);
     if (!items.length || items.length < state.items.length) return;
     layoutSeg.hidden = items.length < 2;
@@ -526,13 +527,13 @@ export function mountIntraday(el, { date, onCard, onDate, benchmarks = [] }) {
     if (items.length >= 2 && layout === 'overlay') {
       const withBars = items.filter((x) => x.data.bars.length);
       if (!withBars.length) return empty(slots[0]);
-      paintSlot(slots[0], buildCompareOption(withBars, state.m, benches(), align), compareInfoHtml(withBars, state.m));
+      paintSlot(slots[0], buildCompareOption(withBars, m, benches(), align), compareInfoHtml(withBars, m));
       return;
     }
     items.forEach((x, i) => {
       if (slots[i].sub) slots[i].sub.textContent = `${x.name || x.code} ${x.code}`; // 上下: which chart is which
       if (!x.data.bars.length) return empty(slots[i], x.name);
-      paintSlot(slots[i], buildIntradayOption(x.data, state.m, benches(), align), infoHtml(x.data, statsAt(x.data, state.m), state.m));
+      paintSlot(slots[i], buildIntradayOption(x.data, m, benches(), align), infoHtml(x.data, statsAt(x.data, m), m));
     });
   }
 

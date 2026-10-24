@@ -7,7 +7,7 @@ import logging
 import mimetypes
 import random
 from dataclasses import asdict
-from datetime import date, datetime, time
+from datetime import date, datetime, time, timedelta
 from itertools import takewhile
 from collections.abc import AsyncIterator, Mapping
 from pathlib import Path
@@ -212,6 +212,7 @@ def create_app(
                 fetch_margin=lambda d: fetch_margin_day(client, d, asyncio.sleep, REQUEST_DELAY_SECONDS),
                 fetch_sectors=lambda d: fetch_sector_day(client, d),
                 fetch_daytrade=lambda d: fetch_daytrade_day(client, d),
+                fetch_exrights=lambda a, b: fetch_exrights_range(client, a, b),
             )
             tasks.append(asyncio.create_task(app.state.collector.run()))
             # 轉投資／董監 from MoneyDJ: one stock at a time, slowly, after the start-up has settled
@@ -1141,6 +1142,16 @@ def create_app(
 
         return {"date": d.isoformat(), "days": PAIR_DAYS, "pairs": await asyncio.to_thread(build)}
 
+    async def fetch_exrights_range(client: httpx.AsyncClient, start: date, end: date) -> dict:
+        """Both sites' 除權息參考價 for the range, merged ({day: {code: ref}})."""
+        from .sources.exright import fetch_tpex_exright, fetch_twse_exright
+
+        out = await fetch_twse_exright(client, start, end)
+        await asyncio.sleep(REQUEST_DELAY_SECONDS)
+        for d, refs in (await fetch_tpex_exright(client, start, end)).items():
+            out.setdefault(d, {}).update(refs)
+        return out
+
     @app.get("/api/history/intraday")
     async def stock_intraday(code: str, day: str = Query(..., alias="date")) -> dict:
         """One stock's session minute by minute for K's chart beside the animation: Yahoo 1-minute bars
@@ -1153,7 +1164,10 @@ def create_app(
         rows = [r for r in store.stock_rows(code, d, 1) if r["date"] == d.isoformat()]
         if not rows:
             raise HTTPException(404, f"no data for {code} on {day}")
-        r = rows[0]
+        r = dict(rows[0])
+        if r["prev_close"] is None:  # 不比價 (not looked up yet): the day before's close, so the % axis still works
+            before = store.stock_rows(code, d - timedelta(days=1), 1)
+            r["prev_close"] = before[0]["close"] if before else None
         bars, step, source, note = [], 1, "none", ""
         async with httpx.AsyncClient(timeout=20, headers={"User-Agent": USER_AGENT}, follow_redirects=True) as http:
             mb, err = await minute_bars_for(http, code, r["market"], d)
@@ -1177,7 +1191,8 @@ def create_app(
             "day": {k: r[k] for k in ("open", "high", "low", "close", "change", "change_pct", "volume_shares", "turnover_yuan")},
             "step_min": step,
             "source": source,
-            "bars": with_close_bar(bars, r),
+            # Yahoo's floats (36.099998474121094) to the exchange's 2 decimals
+            "bars": [[b[0], *(round(x, 2) if isinstance(x, float) else x for x in b[1:5]), *b[5:]] for b in with_close_bar(bars, r)],
             "note": note,
         }
 

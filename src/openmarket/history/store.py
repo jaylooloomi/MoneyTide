@@ -58,6 +58,16 @@ CREATE TABLE IF NOT EXISTS margin_day (
     rows INTEGER NOT NULL DEFAULT 0,
     fetched_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS exright_day (
+    date TEXT PRIMARY KEY,
+    filled INTEGER NOT NULL DEFAULT 0,
+    fetched_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS sector_intraday (
+    date TEXT PRIMARY KEY,
+    data TEXT NOT NULL,
+    fetched_at TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS branch_day (
     code TEXT NOT NULL,
     date TEXT NOT NULL,
@@ -711,6 +721,52 @@ class HistoryStore:
         with self._conn() as c:
             rows = c.execute(f"SELECT code, data FROM branch_day WHERE date = ? AND code IN ({', '.join('?' for _ in codes)})", [day.isoformat(), *codes]).fetchall()
         return {r["code"]: json.loads(r["data"]) for r in rows}
+
+    # ---- 除權息: the day rows with no 昨收 get the official 參考價 ------------------------------------
+
+    def ex_rights_gaps(self) -> list[date]:
+        """Stored days with a traded stock whose 昨收 is missing (an ex-rights day) and not looked up yet."""
+        with self._conn() as c:
+            rows = c.execute(
+                """SELECT DISTINCT date FROM daily_quote WHERE prev_close IS NULL AND close IS NOT NULL
+                   AND date NOT IN (SELECT date FROM exright_day) ORDER BY date DESC"""
+            ).fetchall()
+        return [date.fromisoformat(r["date"]) for r in rows]
+
+    def fill_ex_rights(self, day: date, refs: dict[str, float], fetched_at: datetime) -> int:
+        """昨收 = 除權息參考價 where it is missing, and the change against it (as the exchanges report it);
+        rows that already have a 昨收 are left alone. Returns the rows filled."""
+        n = 0
+        with self._lock, self._conn() as c:
+            for code, ref in refs.items():
+                n += c.execute(
+                    """UPDATE daily_quote SET prev_close = ?, change = ROUND(close - ?, 4), change_pct = ROUND((close / ? - 1) * 100, 4)
+                       WHERE date = ? AND code = ? AND prev_close IS NULL AND close IS NOT NULL""",
+                    (ref, ref, ref, day.isoformat(), code),
+                ).rowcount
+            c.execute("INSERT OR REPLACE INTO exright_day (date, filled, fetched_at) VALUES (?, ?, ?)", (day.isoformat(), n, fetched_at.isoformat()))
+        self.derived_cache.clear()
+        return n
+
+    # ---- 類股指數 on the 5-minute axis (TWSE MI_5MINS_INDEX, 上市 only) ------------------------------
+
+    def save_sector_intraday(self, day: date, data: dict, fetched_at: datetime) -> None:
+        import json
+
+        with self._lock, self._conn() as c:
+            c.execute("INSERT OR REPLACE INTO sector_intraday (date, data, fetched_at) VALUES (?, ?, ?)",
+                      (day.isoformat(), json.dumps(data, ensure_ascii=False), fetched_at.isoformat()))
+
+    def sector_intraday(self, days: Iterable[date]) -> dict[date, dict[str, list]]:
+        """{day: {index name: [close of bucket 0 … 53]}} for the stored days among `days`."""
+        import json
+
+        days = sorted(set(days))
+        if not days:
+            return {}
+        with self._conn() as c:
+            rows = c.execute(f"SELECT date, data FROM sector_intraday WHERE date IN ({', '.join('?' for _ in days)})", [d.isoformat() for d in days]).fetchall()
+        return {date.fromisoformat(r["date"]): json.loads(r["data"]) for r in rows}
 
     # ---- 當日沖銷 shares per listed stock (TWSE only) ----------------------------------------------
 

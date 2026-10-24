@@ -91,6 +91,7 @@ class HistoryCollector:
         fetch_margin: MarginFetcher | None = None,
         fetch_sectors: Callable[[date], Awaitable[dict | None]] | None = None,
         fetch_daytrade: Callable[[date], Awaitable[dict | None]] | None = None,
+        fetch_exrights: Callable[[date, date], Awaitable[dict]] | None = None,
     ) -> None:
         self.store = store
         self._fetch_twse = fetch_twse
@@ -110,6 +111,8 @@ class HistoryCollector:
         self.sector_state = BackfillState()
         self._fetch_daytrade = fetch_daytrade
         self.daytrade_state = BackfillState()
+        self._fetch_exrights = fetch_exrights
+        self.exright_state = BackfillState()
 
     def pending_days(self, now: datetime) -> list[date]:
         """Weekdays within the backfill window that are not stored yet, newest first."""
@@ -168,6 +171,7 @@ class HistoryCollector:
         await self.collect_margin()
         await self.collect_sectors()
         await self.collect_daytrade()
+        await self.collect_exrights()
         await asyncio.to_thread(warm_history_cache, self.store)  # bonus-19
 
     async def collect_index(self) -> None:
@@ -289,6 +293,28 @@ class HistoryCollector:
             self.daytrade_state.done += 1
             await self._sleep(self._delay)
         self.daytrade_state.running = False
+
+    async def collect_exrights(self) -> None:
+        """除權息參考價 for the stored days whose rows lack a 昨收, one request per month and site."""
+        if self._fetch_exrights is None:
+            return
+        gaps = self.store.ex_rights_gaps()
+        months = sorted({(d.year, d.month) for d in gaps}, reverse=True)
+        self.exright_state = BackfillState(running=bool(months), total=len(months))
+        for y, mo in months:
+            days = [d for d in gaps if (d.year, d.month) == (y, mo)]
+            try:
+                refs = await self._fetch_exrights(min(days), max(days))
+                for d in days:
+                    self.store.fill_ex_rights(d, refs.get(d, {}), self._clock())
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:
+                log.warning("ex-rights reference prices for %s-%02d failed: %s", y, mo, exc)
+                self.exright_state.error = f"{y}-{mo:02d}: {exc}"
+            self.exright_state.done += 1
+            await self._sleep(self._delay)
+        self.exright_state.running = False
 
     async def run(self) -> None:
         while True:
