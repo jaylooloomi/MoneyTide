@@ -785,3 +785,18 @@ def test_finder_days_any_version_takes_the_same_thresholds_newest_first(tmp_path
     assert [(d.isoformat(), r["groups"][0]["tag"]) for d, r in got] == [("2026-08-03", "old"), ("2026-08-04", "new")]
     assert [d.isoformat() for d, _ in s.finder_days("known", key(10))] == ["2026-08-04"]
     assert [d.isoformat() for d, _ in s.finder_days("known", key(10), any_version=True, min_version=10)] == ["2026-08-04"]
+
+
+
+def test_finder_days_takes_a_day_stored_without_news(tmp_path):
+    import json
+
+    from openmarket.history.store import HistoryStore
+
+    s = HistoryStore(tmp_path / "h.sqlite")
+    head = json.dumps({"excess_r": 0.4, "v": 10}, sort_keys=True)
+    s.save_finder(date(2026, 8, 3), "known", head + "|chain,industry,news", {"groups": [{"tag": "with news"}]})
+    s.save_finder(date(2026, 8, 4), "known", head + "|chain,industry", {"groups": [{"tag": "no news that day"}]})
+    s.save_finder(date(2026, 8, 5), "known", head + "|group,industry", {"groups": [{"tag": "集團 ticked"}]})
+    got = s.finder_days("known", head + "|chain,industry,news", any_version=True, groupings=("industry", "chain", "news"))
+    assert [r["groups"][0]["tag"] for _, r in got] == ["with news", "no news that day"]  # not the one with 集團

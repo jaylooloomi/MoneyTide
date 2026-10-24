@@ -431,12 +431,13 @@ def hot_class(group: Mapping) -> str:
     return "surge" if xs and sum(xs) / len(xs) >= SURGE_X else "habitual"
 
 
-def next_day_stats(results: list[tuple[date, list[list[str]]]], class_of, rows_on, next_of, index_pct) -> dict:
+def next_day_stats(results: list[tuple[date, list[list[str]]]], class_of, rows_on, next_of, index_pct, parents: Mapping[str, str] | None = None) -> dict:
     """隔天表現 of N's groups by class: results [(day, [member codes per group])], class_of(day, codes) →
     'hot'／'rest' or any other class name (True/False read as hot/rest), rows_on(day) → {code: row},
     next_of(day) → the next trading day or None, index_pct(day) → 大盤 % or None. Per class: {groups,
     stocks, days, gap, close, excess, intraday, fade, down} — means in %, fade = the share closing below
-    the open, down = the share closing below 昨收; excess = close − 大盤."""
+    the open, down = the share closing below 昨收; excess = close − 大盤. parents {class: parent}: a group
+    also counts toward its parent class (🔥 as the sum of its kinds)."""
     acc: dict[str, dict] = {k: {"groups": 0, "days": set(), "gap": [], "close": [], "excess": [], "intraday": []} for k in ("hot", "rest")}
     for day, groups in results:
         nd = next_of(day)
@@ -447,23 +448,26 @@ def next_day_stats(results: list[tuple[date, list[list[str]]]], class_of, rows_o
         for codes in groups:
             k = class_of(day, codes)
             k = "hot" if k is True else "rest" if k is False else k
-            a = acc.setdefault(k, {"groups": 0, "days": set(), "gap": [], "close": [], "excess": [], "intraday": []})
+            targets = [acc.setdefault(x, {"groups": 0, "days": set(), "gap": [], "close": [], "excess": [], "intraday": []})
+                       for x in ([k, parents[k]] if parents and k in parents else [k])]
             got = False
             for c in codes:
                 r = nxt.get(c)
                 if not r or r.get("change_pct") is None:
                     continue
                 got = True
-                a["close"].append(r["change_pct"])
-                if idx is not None:
-                    a["excess"].append(r["change_pct"] - idx)
-                if r.get("open") and r.get("prev_close"):
-                    a["gap"].append((r["open"] / r["prev_close"] - 1) * 100)
-                if r.get("open") and r.get("close"):
-                    a["intraday"].append((r["close"] / r["open"] - 1) * 100)
+                for a in targets:
+                    a["close"].append(r["change_pct"])
+                    if idx is not None:
+                        a["excess"].append(r["change_pct"] - idx)
+                    if r.get("open") and r.get("prev_close"):
+                        a["gap"].append((r["open"] / r["prev_close"] - 1) * 100)
+                    if r.get("open") and r.get("close"):
+                        a["intraday"].append((r["close"] / r["open"] - 1) * 100)
             if got:
-                a["groups"] += 1
-                a["days"].add(day)
+                for a in targets:
+                    a["groups"] += 1
+                    a["days"].add(day)
     mean = lambda xs: round(sum(xs) / len(xs), 2) if xs else None  # noqa: E731
     out = {}
     for k, a in acc.items():
@@ -472,19 +476,6 @@ def next_day_stats(results: list[tuple[date, list[list[str]]]], class_of, rows_o
                   "fade": round(sum(1 for x in a["intraday"] if x < 0) / len(a["intraday"]) * 100, 1) if a["intraday"] else None,
                   "down": round(sum(1 for x in a["close"] if x < 0) / len(a["close"]) * 100, 1) if a["close"] else None}
     return out
-
-
-def merge_next(parts: list[dict]) -> dict:
-    """Two classes of next_day_stats as one (stock-weighted means; days as the larger of the two)."""
-    n = sum(p["stocks"] for p in parts)
-
-    def w(k):
-        xs = [(p[k], p["stocks"]) for p in parts if p.get(k) is not None and p["stocks"]]
-        tot = sum(m for _, m in xs)
-        return round(sum(v * m for v, m in xs) / tot, 2) if tot else None
-
-    return {"groups": sum(p["groups"] for p in parts), "days": max(p["days"] for p in parts), "stocks": n,
-            **{k: w(k) for k in ("gap", "close", "excess", "intraday")}, "fade": w("fade"), "down": w("down")}
 
 
 def daytrade_ratios(store: HistoryStore, days: list[date], codes: list[str]) -> dict[str, dict[date, float]]:

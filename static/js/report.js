@@ -299,6 +299,7 @@ export function mountReportPanel(container, { onStock, query, condText }) {
   async function refresh(date, days) {
     if (!date) return;
     const t = ++state.ticket;
+    state.last = null; // nothing of the previous date may be drawn again (a late next-day reply)
     sec.querySelector('#rpNote').textContent = `找法1＋找法2，用分頁2 的條件：${condText ? condText() : '預設'}`;
     body.innerHTML = '<p class="hint">整理中…</p>';
     const i = days.indexOf(date);
@@ -318,7 +319,7 @@ export function mountReportPanel(container, { onStock, query, condText }) {
       .then((w) => {
         if (t !== state.ticket || !w) return;
         state.wide = w;
-        if (state.last) draw(...state.last);
+        if (state.last?.[0] === date) draw(...state.last);
       })
       .catch(() => {});
     try {

@@ -883,10 +883,13 @@ class HistoryStore:
             ).fetchall()
         return [(r["date"], r["method"], json.loads(r["result"])) for r in rows]
 
-    def finder_days(self, method: str, params: str, any_version: bool = False, min_version: int = 0) -> list[tuple[date, dict]]:
+    def finder_days(self, method: str, params: str, any_version: bool = False, min_version: int = 0,
+                    groupings: Iterable[str] | None = None) -> list[tuple[date, dict]]:
         """Every day with an N result stored under these thresholds, oldest first. any_version: also under
         an earlier FINDER_VERSION with the same thresholds (the newest one a day) — for statistics over the
-        groups, which a version bump that only adds fields leaves as they were; min_version: no older one."""
+        groups, which a version bump that only adds fields leaves as they were; min_version: no older one.
+        groupings: the names asked for — a day stored with only some of them (新聞族群 not ready that day)
+        still counts; without it the groupings after "|" must match exactly."""
         import json
 
         if not any_version:
@@ -904,13 +907,34 @@ class HistoryStore:
             return json.dumps(fields, sort_keys=True, ensure_ascii=False) + "|" + tail, v
 
         want, _ = strip(params)
-        best: dict[str, tuple[int, str]] = {}
+        want_head, _, want_tail = want.partition("|")
+        allowed = set(groupings) if groupings is not None else None
+        best: dict[str, tuple[int, int]] = {}  # date → (version, rowid): the params are read first, the blobs after
         with self._conn() as c:
-            for r in c.execute("SELECT date, params, result FROM finder_result WHERE method = ?", (method,)):
+            for r in c.execute("SELECT rowid, date, params FROM finder_result WHERE method = ?", (method,)):
                 k, v = strip(r["params"])
-                if k == want and v >= min_version and v >= best.get(r["date"], (-1, ""))[0]:
-                    best[r["date"]] = (v, r["result"])
-        return [(date.fromisoformat(d), json.loads(res)) for d, (_, res) in sorted(best.items())]
+                head, _, tail = k.partition("|")
+                tail_ok = (set(x for x in tail.split(",") if x) <= allowed and bool(tail)) if allowed is not None else tail == want_tail
+                if head == want_head and tail_ok and v >= min_version and v >= best.get(r["date"], (-1, 0))[0]:
+                    best[r["date"]] = (v, r["rowid"])
+            out = []
+            for d, (_, rowid) in sorted(best.items()):
+                row = c.execute("SELECT result FROM finder_result WHERE rowid = ?", (rowid,)).fetchone()
+                out.append((date.fromisoformat(d), json.loads(row["result"])))
+        return out
+
+    def quotes(self, days: list[date], codes: Iterable[str]) -> dict[date, dict[str, dict]]:
+        """{day: {code: {change_pct, open, close, prev_close}}} for the given stocks only."""
+        codes = sorted(set(codes))
+        if not days or not codes:
+            return {}
+        out: dict[date, dict[str, dict]] = {d: {} for d in days}
+        sql = (f"SELECT date, code, change_pct, open, close, prev_close FROM daily_quote WHERE date IN ({', '.join('?' for _ in days)}) "
+               f"AND code IN ({', '.join('?' for _ in codes)})")
+        with self._conn() as c:
+            for r in c.execute(sql, [d.isoformat() for d in days] + codes):
+                out[date.fromisoformat(r["date"])][r["code"]] = {k: r[k] for k in ("change_pct", "open", "close", "prev_close")}
+        return out
 
     def finder(self, day: date, method: str, params: str) -> dict | None:
         import json

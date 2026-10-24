@@ -25,7 +25,7 @@ from .explain import explain_day
 from .history.linkage import (
     pearson,
     INTRADAY_HIGH_R, INTRADAY_LOW_R, bucket_closes, daily_linkage, fmt_minute, pair_matrix, peak_minute_from_bars, peak_minute_from_ticks,
-    align_bars, amplitude_pct, limit_down_pct, limit_up_pct, minute_bars, turnover_rate, peak_stats, tick_bars, with_close_bar, race_points, returns, locked_level, daily_k, index_k, daytrade_ratios, daytrade_group, hot_class, merge_next, next_day_stats, DAYTRADE_BASE_DAYS, DAYTRADE_HOT, top_members, verdict_r, verdict_timing,
+    align_bars, amplitude_pct, limit_down_pct, limit_up_pct, minute_bars, turnover_rate, peak_stats, tick_bars, with_close_bar, race_points, returns, locked_level, daily_k, index_k, daytrade_ratios, daytrade_group, hot_class, next_day_stats, DAYTRADE_BASE_DAYS, DAYTRADE_HOT, top_members, verdict_r, verdict_timing,
 )
 from .history.finder import INST_STREAK_DAYS, INTRADAY_BASES, FinderParams, laggards, inst_streak, inst_summary, margin_changes, margin_summary, pair_extras, persistence, run_search
 from .history.finder import news_themes as finder_news_themes  # api.py has its own news_themes route
@@ -764,17 +764,18 @@ def create_app(
         store = app.state.history
         p = finder_params(request.query_params)
         days_all = sorted(store.trading_dates(limit=400))
+        pos = {d: i for i, d in enumerate(days_all)}
         nxt = {d: days_all[i + 1] for i, d in enumerate(days_all[:-1])}
         per_day: dict[date, set] = {}
+        key = p.key() + "|" + ",".join(sorted(p.groupings))  # the tail: any subset of these (a day may lack 新聞族群)
         for method in ("known", "new"):
-            groupings, _ = finder_groupings(p.groupings, days_all[-1]) if days_all else ({}, [])
-            key = p.key() + "|" + ",".join(sorted(groupings))
-            for d, res in store.finder_days(method, key, any_version=True, min_version=NEXT_DAY_MIN_VERSION):
+            for d, res in store.finder_days(method, key, any_version=True, min_version=NEXT_DAY_MIN_VERSION, groupings=p.groupings):
                 per_day.setdefault(d, set()).update(tuple(sorted(m["code"] for m in g["members"])) for g in res.get("groups", []))
-        results = sorted((d, [list(g) for g in gs]) for d, gs in per_day.items())
+        # days outside the trading-day window (older than 400 days, or since unmarked) are left out
+        results = sorted((d, [list(g) for g in gs]) for d, gs in per_day.items() if d in pos)
         codes = sorted({c for _, gs in results for g in gs for c in g})
         # each day's 當沖比 and the DAYTRADE_BASE_DAYS before it (平常, for 突然湧入 against 平常就這樣)
-        need = sorted({x for d, _ in results for x in days_all[max(0, days_all.index(d) - DAYTRADE_BASE_DAYS):days_all.index(d) + 1]}) if results else []
+        need = sorted({x for d, _ in results for x in days_all[max(0, pos[d] - DAYTRADE_BASE_DAYS):pos[d] + 1]})
         ratios = daytrade_ratios(store, need, codes)
         index = store.index_rows()
 
@@ -784,22 +785,19 @@ def create_app(
                 return None
             return row["change"] / (row["close"] - row["change"]) * 100
 
-        rows_cache: dict[date, dict] = {}
+        # the members' next-day quotes only (not every stock of every day)
+        quotes = store.quotes(sorted({nxt[d] for d, _ in results if d in nxt}), codes)
 
         def rows_on(d: date) -> dict:
-            if d not in rows_cache:
-                rows_cache[d] = {r["code"]: r for r in store.day_rows(d)}
-            return rows_cache[d]
+            return quotes.get(d, {})
 
         def class_of(d: date, cs: list[str]) -> str:
-            before = days_all[max(0, days_all.index(d) - DAYTRADE_BASE_DAYS):days_all.index(d)]
+            before = days_all[max(0, pos[d] - DAYTRADE_BASE_DAYS):pos[d]]
             g = daytrade_group({c: ratios.get(c, {}).get(d) for c in cs}, {c: [v for x in before if (v := ratios.get(c, {}).get(x)) is not None] for c in cs})
             return hot_class(g)
 
-        stats = next_day_stats(results, class_of, rows_on, nxt.get, index_pct)
-        # the 🔥 total as before, the two kinds beside it
-        hot = [stats[k] for k in ("surge", "habitual") if k in stats]
-        stats["hot"] = merge_next(hot) if hot else stats.get("hot")
+        # 🔥 as a whole, and its two kinds (突然湧入／平常就這樣) beside it
+        stats = next_day_stats(results, class_of, rows_on, nxt.get, index_pct, parents={"surge": "hot", "habitual": "hot"})
         return {"days": len(results), "first": results[0][0].isoformat() if results else None, "last": results[-1][0].isoformat() if results else None, "stats": stats}
 
     @app.get("/api/history/index-race")
@@ -1221,7 +1219,7 @@ def create_app(
             out[c]["foreign_official"] = round(split[c][0] / 1000) if c in split else None
         # 主力連續買超: the stored 分點 of the trading days before (never fetched here)
         if ok:
-            days_back = sorted(await asyncio.to_thread(lambda: store.trading_dates(up_to=d, limit=STREAK_DAYS)), reverse=True)[1:]
+            days_back = [x for x in sorted(await asyncio.to_thread(lambda: store.trading_dates(up_to=d, limit=STREAK_DAYS + 1)), reverse=True) if x < d][:STREAK_DAYS - 1]
             history = {x: await asyncio.to_thread(store.branches, list(ok), x) for x in days_back}
             for c in ok:
                 out[c]["streaks"] = buy_streaks([out[c]] + [history[x].get(c) for x in days_back])
