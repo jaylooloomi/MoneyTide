@@ -22,7 +22,7 @@ def _date(text: str) -> date:
         raise HTTPException(422, f"invalid date {text!r}, expected YYYY-MM-DD") from exc
 
 
-GROUPINGS = ("industry", "custom", "concept", "chain", "news")
+GROUPINGS = ("industry", "custom", "concept", "chain", "news", "group")
 
 
 def create_history_router(

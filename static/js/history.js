@@ -552,6 +552,7 @@ const LOADED_GROUPINGS = {
   concept: { url: '/api/concepts/status', label: '概念股分類', source: 'Yahoo 股市概念股分類', timer: null },
   news: { url: '/api/news-themes/status', label: '新聞族群', source: '新聞熱門族群（依當天新聞，每日更新）', timer: null },
   chain: { url: '/api/chains/status', label: '細產業分類', source: '櫃買中心產業價值鏈平台', timer: null },
+  group: { url: '/api/relations/grouping-status', label: '集團分類', source: 'MoneyDJ 轉投資（權益法 ≥ 20%）與董監席位串起來的集團', timer: null },
 };
 
 async function refreshConceptStatus() {
@@ -1259,10 +1260,10 @@ async function loadPeriods({ cachedOnly = false } = {}) {
 
 // ---- bonus-12: bookmarkable view state in the URL hash (#history/<date>/<grouping>) ----
 
-const GROUPINGS_OK = new Set(['industry', 'custom', 'concept', 'chain', 'news']);
+const GROUPINGS_OK = new Set(['industry', 'custom', 'concept', 'chain', 'news', 'group']);
 
 function parseHash() {
-  const m = /^#history(?:\/(\d{4}-\d{2}-\d{2}))?(?:\/(industry|custom|concept|chain|news))?(?:\/([123]))?$/.exec(location.hash);
+  const m = /^#history(?:\/(\d{4}-\d{2}-\d{2}))?(?:\/(industry|custom|concept|chain|news|group))?(?:\/([123]))?$/.exec(location.hash);
   return m ? { date: m[1] || null, grouping: m[2] || null, tab: m[3] ? Number(m[3]) : null } : null;
 }
 

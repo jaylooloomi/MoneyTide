@@ -89,3 +89,17 @@ def test_store_and_collector_pause_after_failures(tmp_path):
     # an error keeps the rows fetched before
     s.save_relations("1111", None, None, now, error="boom")
     assert s.relation_rows()[0]["1111"][0]["name"] == "乙電子"
+
+
+def test_group_grouping_status_without_relations(tmp_path):
+    from fastapi.testclient import TestClient
+
+    from openmarket.api import create_app
+    from openmarket.config import AppConfig
+    from openmarket.history.store import HistoryStore
+
+    app = create_app(AppConfig(data_dir=tmp_path), start_polling=False, start_history=False, start_concepts=False, history_store=HistoryStore(tmp_path / "h.sqlite"))
+    with TestClient(app, base_url="http://127.0.0.1") as client:
+        st = client.get("/api/relations/grouping-status").json()
+        assert st["ready"] is False and st["count"] == 0  # nothing crawled: B's 集團 button stays off
+        assert client.get("/api/history/groups", params={"date": "2026-10-22", "grouping": "group"}).status_code == 422

@@ -71,7 +71,7 @@ class FinderParams:
         return json.dumps({**fields, "v": FINDER_VERSION}, sort_keys=True, ensure_ascii=False)
 
 
-GROUPING_LABELS = {"industry": "官方產業", "custom": "自訂族群", "concept": "概念股", "chain": "細產業", "news": "新聞族群"}
+GROUPING_LABELS = {"industry": "官方產業", "custom": "自訂族群", "concept": "概念股", "chain": "細產業", "news": "新聞族群", "group": "集團"}
 
 
 # ---- stage A: daily ------------------------------------------------------------------------------

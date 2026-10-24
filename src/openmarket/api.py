@@ -136,6 +136,14 @@ def create_app(
         rel_cache.update(version=key, edges=edges, by_pair=by_pair, by_code=by_code, groups=groups, names=names)
         return rel_cache
 
+    def conglomerates() -> dict[str, list[str]]:
+        """{「XX集團」: member codes} from the relation groups (named after the member holding the most others)."""
+        rel = relation_graph()
+        out: dict[str, list[str]] = {}
+        for g in {id(g): g for g in rel["groups"].values()}.values():
+            out[f"{rel['names'].get(g['leader'], g['leader'])}集團"] = list(g["members"])
+        return out
+
     def edge_view(e: dict, names: Mapping[str, str]) -> dict:
         return {**e, "src_name": names.get(e["src"], e["src"]), "dst_name": names.get(e["dst"], e["dst"])}
 
@@ -180,6 +188,13 @@ def create_app(
                 return None
             g = mapping_grouping(themes_mapping(themes))
             g.cache_key = f"news:{used.isoformat()}:{app.state.history.news_version()}"
+            return g
+        if name == "group":  # 集團: stocks joined by ≥ 20% equity-method stakes or board seats (MoneyDJ)
+            by_group = conglomerates()
+            if not by_group:
+                return None
+            g = mapping_grouping({c: [name] for name, codes in by_group.items() for c in codes})  # code → its 集團
+            g.cache_key = f"group:{app.state.history.relations_version}"
             return g
         if name == "chain":  # 細產業 (TPEx 產業價值鏈)
             loader = app.state.chains
@@ -1170,6 +1185,14 @@ def create_app(
             "group": group_view(g["groups"].get(code), g["names"]),
             "fetched_at": fetched["fetched_at"] if fetched and not fetched["error"] else None,
         }
+
+    @app.get("/api/relations/grouping-status")
+    def relations_grouping_status() -> dict:
+        """B's 集團 button: ready once the relation crawl has joined any groups."""
+        groups = conglomerates()
+        st = app.state.relations.status() if getattr(app.state, "relations", None) else {}
+        return {"ready": bool(groups), "count": len(groups), "saved_at": max((v["fetched_at"] for v in app.state.history.relation_fetched().values()), default=None) if groups else None,
+                "running": bool(st.get("running")), "done": st.get("done", 0), "total": st.get("total", 0), "error": st.get("error", "")}
 
     @app.get("/api/relations/status")
     def relations_status() -> dict:
