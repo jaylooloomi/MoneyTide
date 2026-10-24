@@ -49,7 +49,7 @@ from .sources.moneydj import fetch_relations
 from .sources.company_address import fetch_company_names
 from .relations import NameIndex, RelationCollector, merge_edges, relation_edges, relation_groups
 from .history.factors import factor_of, industry_sizes
-from .history.evidence import bucket_of, buyer_cost, chip_sync, concentration, excess_matrix, group_branches, minute_evidence, percentile_of, shared_buyers
+from .history.evidence import bucket_of, buy_streaks, buyer_cost, chip_sync, concentration, excess_matrix, group_branches, minute_evidence, percentile_of, shared_buyers
 from .sources.sector_index import fetch_sector_day
 from .sources.daytrade import fetch_daytrade_day, fetch_tpex_daytrade_day
 from .sources.histock_branch import BranchQueue
@@ -1028,6 +1028,7 @@ def create_app(
         rows.sort(key=lambda r: -(r.get("market_cap") or 0))
         return await linkage_payload(d, rows)
 
+    STREAK_DAYS = 10  # 主力連續買超 counts back at most this many trading days
     BRANCH_MAX_CODES = 4  # stocks one request may fetch 分點 for (each page waits ≥ 5 s)
     SNAPSHOT_MAX = 150  # 分點 snapshot: at most this many stocks a day (the queue's daily cap is shared)
     SNAPSHOT_READY = time(15, 30)  # HiStock has the day's 分點 by then
@@ -1140,6 +1141,12 @@ def create_app(
         rows_d = {r["code"]: r for r in await asyncio.to_thread(store.day_rows, d) if r["code"] in ok}
         out = {c: v if c not in ok else {**v, "concentration": concentration(v, rows_d.get(c, {}).get("volume_shares")),
                                          "cost": buyer_cost(v), "close": rows_d.get(c, {}).get("close")} for c, v in out.items()}
+        # 主力連續買超: the stored 分點 of the trading days before (never fetched here)
+        if ok:
+            days_back = sorted(await asyncio.to_thread(lambda: store.trading_dates(up_to=d, limit=STREAK_DAYS)), reverse=True)[1:]
+            history = {x: await asyncio.to_thread(store.branches, list(ok), x) for x in days_back}
+            for c in ok:
+                out[c]["streaks"] = buy_streaks([out[c]] + [history[x].get(c) for x in days_back])
         pairs = {f"{a},{b}": shared_buyers(ok.get(a), ok.get(b)) for i, a in enumerate(wanted) for b in wanted[i + 1:]}
         return {"date": d.isoformat(), "branches": out, "pairs": pairs, "queue": branch_queue().status()}
 

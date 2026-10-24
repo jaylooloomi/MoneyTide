@@ -846,8 +846,12 @@ export const CONC_TIP = '籌碼集中度＝（前 15 大買超分點的買超 �
 export function cardBranchesHtml(b) {
   if (!b) return '';
   if (b.error) return `<span class="muted">🏦 ${escapeHtml(b.error)}</span>`;
+  const streak = (r) => {
+    const n = b.streaks?.[r.name];
+    return n >= 2 ? ` <small class="up" title="這個分點連續 ${n} 個交易日都在買超名單（只算有存分點的日子）">連買 ${n} 天</small>` : '';
+  };
   const list = (rows, sign) =>
-    rows.slice(0, 5).map((r) => `<li>${escapeHtml(r.name)} <span class="${sign > 0 ? 'up' : 'down'}">${sign > 0 ? '+' : ''}${Math.round(r.net).toLocaleString()}</span>${r.avg ? ` <small class="muted">@${r.avg}</small>` : ''}</li>`).join('');
+    rows.slice(0, 5).map((r) => `<li>${escapeHtml(r.name)}${sign > 0 ? streak(r) : ''} <span class="${sign > 0 ? 'up' : 'down'}">${sign > 0 ? '+' : ''}${Math.round(r.net).toLocaleString()}</span>${r.avg ? ` <small class="muted">@${r.avg}</small>` : ''}</li>`).join('');
   const c = b.concentration;
   const conc = c == null ? '' : `　<span class="${c > 0 ? 'up' : c < 0 ? 'down' : ''}" title="${escapeHtml(CONC_TIP)}">籌碼集中度 ${c > 0 ? '+' : ''}${c.toFixed(1)}%</span>`;
   const gap = b.cost && b.close ? (b.close / b.cost - 1) * 100 : null;

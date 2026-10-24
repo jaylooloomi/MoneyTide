@@ -189,6 +189,23 @@ def buyer_cost(data: Mapping | None, top: int = 5) -> float | None:
     return round(sum(r["avg"] * r["net"] for r in rows) / net, 2) if net else None
 
 
+def buy_streaks(days: list[Mapping | None], top: int = 5) -> dict[str, int]:
+    """主力連續買超: for the top `top` 買超 分點 of days[0] (the shown day), how many trading days in a row,
+    counting back, each one was among that day's 買超 (top 15). days: newest first, one entry per trading
+    day (None = no 分點 stored that day, which ends the count — a gap is not a buy)."""
+    if not days or not days[0] or "error" in days[0]:
+        return {}
+    out = {}
+    for r in days[0].get("buy", [])[:top]:
+        n = 0
+        for d in days:
+            if not d or "error" in d or not any(x["name"] == r["name"] and x.get("net", 0) > 0 for x in d.get("buy", [])):
+                break
+            n += 1
+        out[r["name"]] = n
+    return out
+
+
 def group_branches(members: list[str], data: Mapping[str, Mapping], top: int = 15) -> dict | None:
     """分點 of a group from the stored days: {common: [{name, ranks: {code: rank}, nets: {code: 張}}] (branches
     among the top `top` 買超 of 2+ members, most members first), ok (most pairs share a top-5 buyer),

@@ -103,3 +103,13 @@ def test_buyer_cost_is_the_top_buyers_net_weighted_price():
     assert buyer_cost(data) == 51.0  # (300×50 + 100×54) ÷ 400; 丙 has no price
     assert buyer_cost(data, top=1) == 50.0
     assert buyer_cost({"buy": [], "sell": []}) is None and buyer_cost(None) is None and buyer_cost({"error": "x"}) is None
+
+
+
+def test_buy_streaks_count_back_until_a_gap():
+    from openmarket.history.evidence import buy_streaks
+
+    day = lambda *names: {"buy": [{"name": n, "net": 10} for n in names], "sell": []}  # noqa: E731
+    days = [day("甲", "乙", "丙"), day("甲", "乙"), day("甲"), None, day("甲")]  # newest first; day 4 not stored
+    assert buy_streaks(days) == {"甲": 3, "乙": 2, "丙": 1}  # the gap ends 甲's run
+    assert buy_streaks([None, day("甲")]) == {} and buy_streaks([]) == {}
