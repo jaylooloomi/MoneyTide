@@ -6,7 +6,7 @@
 import { addToGroup, createGroup } from './groups.js';
 import { renderBody } from './linkage.js';
 import { relationsHtml } from './relations.js';
-import { evidenceCount, groupEvidenceHtml, groupEvidenceItems, isStrong } from './evidence.js';
+import { evidenceCount, groupEvidenceHtml, groupEvidenceItems, isStrong, surgeText } from './evidence.js';
 import { colorFor, escapeHtml, fmtPct, fmtTurnover, toCsv } from './transform.js';
 
 export const METHODS = { known: '找法1 · 已知分類', new: '找法2 · 排行候選' };
@@ -197,7 +197,7 @@ export function cardHtml(g, i) {
   const inst = instParts.length ? `<div class="fd-inst">🏦 ${instParts.join('　')}</div>` : '';
   const margin = marginText(g);
   const dt = g.daytrade?.hot
-    ? `<div class="fd-dt" title="當沖成交股數 ÷ 成交股數（上市、上櫃都有）；有當沖資料的成員平均 ≥ 50% 才標 🔥（沒資料的成員不算進平均）。當沖比高多半是隔日沖等短線熱錢，跟有計畫的佈局不同（不算在 🧾 證據裡）">🔥 當沖比高${g.daytrade.avg != null ? `（平均 ${g.daytrade.avg.toFixed(1)}%）` : ''}：${Object.entries(g.daytrade.by_code)
+    ? `<div class="fd-dt" title="當沖成交股數 ÷ 成交股數（上市、上櫃都有）；有當沖資料的成員平均 ≥ 50% 才標 🔥（沒資料的成員不算進平均）。當沖比高多半是隔日沖等短線熱錢，跟有計畫的佈局不同（不算在 🧾 證據裡）">🔥 當沖比高${g.daytrade.avg != null ? `（平均 ${g.daytrade.avg.toFixed(1)}%）` : ''}${surgeText(g.daytrade)}：${Object.entries(g.daytrade.by_code)
         .map(([c, v]) => {
           const base = g.daytrade.base?.[c];
           // 平常: the 20 days before; ×2 or more is a sudden rush, not a stock that is always day-traded

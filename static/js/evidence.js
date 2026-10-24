@@ -101,6 +101,19 @@ export function evidenceItems(f, ext, ev) {
 export const BASE_RATES = { excess: 0.007, baseline: 0.1, burst: 0.398, sync: 0.048, samedir: 0.058, chips: 0.513 };
 export const baseText = (key) => (BASE_RATES[key] == null ? '' : `隨機配對約 ${BASE_RATES[key] < 0.01 ? '<1' : Math.round(BASE_RATES[key] * 100)}% 也會出現`);
 
+/** A group's 當沖比 as a multiple of its members' usual (the 20 days before), averaged; null without both. */
+export function surgeMultiple(dt) {
+  const xs = Object.entries(dt?.by_code || {}).filter(([c]) => dt.base?.[c]).map(([c, v]) => v / dt.base[c]);
+  return xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null;
+}
+
+// research/exp7 (60 days, 2026-10-25): the next day's 盤中 (close − open) by that multiple
+export const SURGE_TIP = '當沖比是成員平常（前 20 個交易日）的幾倍。回測 60 天：≥ 1.3 倍隔天盤中平均 −0.88%（215 檔次）、≥ 1.5 倍 −1.50%（75）、≥ 2 倍 −2.42%（16）、≥ 3 倍 −3.66%（4）；倍數越高，隔天越常開高走低。只是統計，不是交易建議';
+export function surgeText(dt) {
+  const x = surgeMultiple(dt);
+  return x == null ? '' : `<small class="${x >= 1.5 ? 'up' : 'muted'}" title="${escapeHtml(SURGE_TIP)}">（平常的 ${x.toFixed(1)} 倍）</small>`;
+}
+
 /** The ✓／✗ list with its count: 「9 項裡 6 項支持（2 項資料不足）」. */
 export function evidenceHtml(items) {
   const yes = items.filter((x) => x.ok === true).length;

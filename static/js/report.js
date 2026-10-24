@@ -3,7 +3,7 @@
 // opening it starts no search for past days. Pure functions first (node --test), the panel last.
 
 import { escapeHtml, fmtPct } from './transform.js';
-import { evidenceCount, groupEvidenceItems, isStrong } from './evidence.js';
+import { evidenceCount, groupEvidenceItems, isStrong, surgeMultiple, surgeText } from './evidence.js';
 
 export const DUMP_VOL = 2; // 出貨: a member that fell on 2× its 5-day volume the day the group vanished
 export const GONE_SHOWN = 12; // 消失 rows listed before 「其餘 N 組」
@@ -163,7 +163,7 @@ export function hotHtml(list, stats, wide = null) {
         const base = dt.base?.[c];
         return `${escapeHtml(x.g.members.find((m) => m.code === c)?.name || c)} ${v.toFixed(1)}%${base != null ? `<small class="muted">（平常 ${base.toFixed(0)}%）</small>` : ''}`;
       });
-      return `<li>${escapeHtml(namesOf(x.g))}：平均 <b>${dt.avg.toFixed(1)}%</b>　${cells.join('、')}</li>`;
+      return `<li>${escapeHtml(namesOf(x.g))}：平均 <b>${dt.avg.toFixed(1)}%</b>${surgeText(dt)}　${cells.join('、')}</li>`;
     })
     .join('');
   const s = stats
@@ -190,10 +190,7 @@ export function hotHtml(list, stats, wide = null) {
 
 /** 🔥 突然湧入: a 🔥 group whose members day-trade at 2× their usual or more (on average). */
 export function isSurge(g) {
-  const dt = g.daytrade;
-  if (!dt?.hot) return false;
-  const xs = Object.entries(dt.by_code || {}).filter(([c]) => dt.base?.[c]).map(([c, v]) => v / dt.base[c]);
-  return xs.length > 0 && xs.reduce((a, b) => a + b, 0) / xs.length >= 2;
+  return !!g.daytrade?.hot && (surgeMultiple(g.daytrade) ?? 0) >= 2;
 }
 
 /**

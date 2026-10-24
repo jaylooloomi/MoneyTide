@@ -105,3 +105,12 @@ test('lagText: the cross-correlation peak in words', async () => {
   assert.equal(lagText(-3, { nameA: '甲', nameB: '乙' }), '；峰值錯開 3 分：乙 先動');
   assert.equal(lagText(null, {}), '');
 });
+
+test('surgeMultiple: the group’s 當沖比 against its members’ usual', async () => {
+  const { surgeMultiple, surgeText } = await import('../../static/js/evidence.js');
+  assert.equal(surgeMultiple({ by_code: { 1: 60, 2: 40 }, base: { 1: 30, 2: 40 } }), 1.5);
+  assert.equal(surgeMultiple({ by_code: { 1: 60 }, base: {} }), null);
+  assert.match(surgeText({ by_code: { 1: 60 }, base: { 1: 30 } }), /<small class="up"[^>]*>（平常的 2\.0 倍）<\/small>/);
+  assert.match(surgeText({ by_code: { 1: 60 }, base: { 1: 55 } }), /class="muted"/);
+  assert.equal(surgeText(null), '');
+});
