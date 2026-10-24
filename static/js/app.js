@@ -645,7 +645,8 @@ function setMode(mode) {
   $('#liveControls').hidden = !live;
   $('#historyView').hidden = live;
   $('#histControls').hidden = live;
-  $('#historyTab2').hidden = live || !$('#historyView').classList.contains('tab-off'); // 歷史 分頁2 (history.js)
+  $('#historyTab2').hidden = live || $('#historyView').dataset.tab !== '2'; // 歷史 分頁2／3 (history.js)
+  $('#historyTab3').hidden = live || $('#historyView').dataset.tab !== '3';
   for (const b of $('#modeSwitch').querySelectorAll('button')) {
     b.classList.toggle('on', b.dataset.mode === mode);
     b.setAttribute('aria-pressed', String(b.dataset.mode === mode));

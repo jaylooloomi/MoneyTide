@@ -475,3 +475,21 @@ table.link-heat td.self { background: #3a3e48; }
 .card-br-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
 .card-br-cols ol { margin: 2px 0; padding-left: 18px; }
 .fd-br { font-size: 12px; margin-bottom: 4px; color: #b9c7ff; }
+/* 分頁3 · 盤後報告 */
+.hReport .rp-body { padding: 8px 10px; }
+.rp-metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin-bottom: 10px; }
+.rp-metric { background: #1b1f27; border-radius: 6px; padding: 6px 10px; }
+.rp-metric small { display: block; color: var(--muted); font-size: 11px; }
+.rp-metric b { font-size: 18px; }
+.rp-group { border-top: 1px solid var(--line); padding: 8px 0; font-size: 13px; }
+.rp-gh { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-bottom: 4px; }
+.rp-n { color: var(--muted); width: 18px; text-align: right; }
+.rp-stock { background: none; border: 1px solid var(--line); border-radius: 4px; color: #fff; padding: 1px 6px; cursor: pointer; font-size: 13px; }
+.rp-ev { font-size: 12px; padding: 1px 8px; border-radius: 4px; background: #2a2f3a; }
+.rp-ev.strong { background: #6b5a1e; color: #ffe08a; }
+.rp-src { font-size: 11px; }
+.rp-line { margin: 2px 0 2px 24px; line-height: 1.6; }
+.rp-chips span { margin-right: 6px; }
+.rp-h { font-size: 14px; margin: 14px 0 6px; }
+.rp-track td, .rp-track th { text-align: center; }
+@media (max-width: 760px) { .rp-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); } }

@@ -24,6 +24,7 @@ import { mountHistoryAiPanel } from './ainews.js';
 import { mountNewsPanel } from './newsthemes.js';
 import { digestText, finderMarkIndex, finderMarkTitle, mountFinderPanel } from './finder.js';
 import { mountLinkagePanel } from './linkage.js';
+import { mountReportPanel } from './report.js';
 import { rotationInfoHtml } from './rotinfo.js';
 import { groupText, relText } from './relations.js';
 
@@ -57,6 +58,7 @@ let indexPanel = null; // G: TAIEX + TPEx timeline (indexchart.js)
 let aiPanel = null; // I: AI news explanations (ainews.js)
 let newsPanel = null; // J: news-driven hot groups (newsthemes.js)
 let linkPanel = null; // K: group linkage (linkage.js)
+let reportPanel = null; // 分頁3: 盤後報告 (report.js)
 let finderPanel = null; // N: 資金連動搜尋 (finder.js)
 const finderMarks = { date: null, byKey: new Map(), ticket: 0 }; // B's 🔗: N's stored 找法1 result for the day
 const countyPanel = { ctl: null, words: null, view: 'map', ticket: 0, cache: new Map() }; // H: county money map (countymap.js) or group word cloud (wordcloud.js)
@@ -163,6 +165,7 @@ async function selectDate(date) {
   newsPanel?.load(); // J: that day's hot groups
   linkPanel?.refresh(st.date, st.grouping); // K follows the day
   finderPanel?.refresh(st.date); // N too (loads only while on screen)
+  if (histTab.current === 3) reportPanel?.refresh(st.date, st.days); // 盤後報告 only while shown
 }
 
 // ---- A: day heatmap ---------------------------------------------------------
@@ -753,6 +756,8 @@ export async function showHistory() {
       },
     });
     finderPanel.refresh(st.date);
+    reportPanel = mountReportPanel($('#historyTab3'), { onStock: openHistCard });
+    if (histTab.current === 3) reportPanel.refresh(st.date, st.days);
     setTimeout(() => {
       // once K/N/J have their content, C's real position decides (it loads when scrolled near)
       rotationLazy.ready = true;
@@ -1235,13 +1240,13 @@ async function loadPeriods({ cachedOnly = false } = {}) {
 const GROUPINGS_OK = new Set(['industry', 'custom', 'concept', 'chain', 'news']);
 
 function parseHash() {
-  const m = /^#history(?:\/(\d{4}-\d{2}-\d{2}))?(?:\/(industry|custom|concept|chain|news))?(?:\/([12]))?$/.exec(location.hash);
+  const m = /^#history(?:\/(\d{4}-\d{2}-\d{2}))?(?:\/(industry|custom|concept|chain|news))?(?:\/([123]))?$/.exec(location.hash);
   return m ? { date: m[1] || null, grouping: m[2] || null, tab: m[3] ? Number(m[3]) : null } : null;
 }
 
 function writeHash() {
   if ($('#historyView').hidden || !st.date) return;
-  const hash = `#history/${st.date}/${st.grouping}${histTab.current === 2 ? '/2' : ''}`;
+  const hash = `#history/${st.date}/${st.grouping}${histTab.current > 1 ? `/${histTab.current}` : ''}`;
   if (location.hash !== hash) history.replaceState(null, '', hash);
 }
 
@@ -1250,13 +1255,14 @@ function writeHash() {
 const TAB_KEY = 'openmarket.history.tab';
 const histTab = { current: 1 };
 try {
-  if (localStorage.getItem(TAB_KEY) === '2') histTab.current = 2;
+  const saved = Number(localStorage.getItem(TAB_KEY));
+  if (saved === 2 || saved === 3) histTab.current = saved;
 } catch {
   /* default */
 }
 
 function setHistTab(tab) {
-  histTab.current = tab === 2 ? 2 : 1;
+  histTab.current = tab === 2 || tab === 3 ? tab : 1;
   try {
     localStorage.setItem(TAB_KEY, String(histTab.current));
   } catch {
@@ -1264,7 +1270,9 @@ function setHistTab(tab) {
   }
   const view = $('#historyView');
   view.classList.toggle('tab-off', histTab.current !== 1);
+  view.dataset.tab = String(histTab.current);
   $('#historyTab2').hidden = view.hidden || histTab.current !== 2;
+  $('#historyTab3').hidden = view.hidden || histTab.current !== 3;
   for (const b of $('#hTabs').querySelectorAll('[data-tab]')) {
     const on = Number(b.dataset.tab) === histTab.current;
     b.classList.toggle('on', on);
@@ -1273,6 +1281,7 @@ function setHistTab(tab) {
   if (histTab.current === 1) window.dispatchEvent(new Event('resize')); // charts drawn while hidden get their size back
   // N is on 分頁2: its on-screen observer can miss a tab being shown, so tell it directly
   if (histTab.current === 2 && st.date) finderPanel?.refresh(st.date);
+  if (histTab.current === 3 && st.date) reportPanel?.refresh(st.date, st.days);
   writeHash();
 }
 
