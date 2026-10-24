@@ -31,6 +31,7 @@ from .linkage import align_bars, amplitude_pct, limit_up_price, minutes, pearson
 from .store import HistoryStore
 
 FINDER_VERSION = 9  # part of the cache key: bump when the search logic changes, so stored results are redone (5 was used by a reverted experiment)
+EXCESS_R = 0.4  # 扣指數後分時 R: the funnel's default and the 🧾 扣指數 check alike (evidence.js EXCESS_R)
 INTRADAY_BASES = ("raw", "market", "sector")  # the 分時 R the funnel filters on: as is / 扣大盤 / 扣大盤＋類股
 PEAK_END = 240  # the intraday high is taken over 09:00–13:00
 OPEN_MINUTES = 2  # a high at 09:00–09:02 is the open, not a signal (unless locked limit-up)
@@ -47,7 +48,7 @@ class FinderParams:
     new_daily_r: float = 0.8
     intraday_r: float = 0.5  # 5-minute returns (basis "raw")
     intraday_basis: str = "sector"  # INTRADAY_BASES: the funnel's 分時 R once each stock's index is taken out
-    excess_r: float = 0.3  # the threshold on that excess R (it runs well below the raw R)
+    excess_r: float = EXCESS_R  # the threshold on that excess R (it runs well below the raw R)
     intraday_sessions: int = 3
     intraday_min_points: int = 20
     peak_gap: int = 8  # minutes between intraday highs
@@ -794,7 +795,7 @@ def group_evidence(members: list[str], feats: Mapping[str, Intraday], minute_bar
                 r = r_of(res[a], res[b])
                 if r is not None:
                     v_ex.append(r)
-                ex.append(None if r is None else r >= 0.4)
+                ex.append(None if r is None else r >= EXCESS_R)
             raw = r_of(feats[a].returns, feats[b].returns) if a in feats and b in feats else None
             pct = percentile_of(raw, pool, set(members), f"{seed}{a}{b}", min_points=20) if raw is not None else None
             if pct:

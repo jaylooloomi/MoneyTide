@@ -218,7 +218,7 @@ test('funnelText: what removed the pairs, most first, then how many passed', () 
 });
 
 test('presets only set the linkage thresholds; the current values map back to one or to 自訂', () => {
-  const mine = { min_amplitude: 4, min_volume_lots: 500, daily_r: 0.8, new_daily_r: 0.8, intraday_r: 0.5, excess_r: 0.3, peak_gap: 8 };
+  const mine = { min_amplitude: 4, min_volume_lots: 500, daily_r: 0.8, new_daily_r: 0.8, intraday_r: 0.5, excess_r: 0.4, peak_gap: 8 };
   assert.equal(presetOf(mine), 'standard');
   const loose = { ...mine, ...PRESETS.loose.values };
   assert.equal(presetOf(loose), 'loose');

@@ -5,6 +5,9 @@
 
 import { escapeHtml } from './transform.js';
 
+/** 扣指數後分時 R that counts: the same 0.4 as N's default 扣指數後相關 (finder.EXCESS_R). */
+export const EXCESS_R = 0.4;
+
 const r2 = (v) => (v === null || v === undefined ? '—' : v.toFixed(2));
 
 /** [{key, ok: true|false|null, label, detail}] for one pair. */
@@ -16,7 +19,7 @@ export function evidenceItems(f, ext, ev) {
   const ex = ev?.excess;
   const fac = (ev?.factors || []).filter(Boolean);
   const facText = fac.length ? (fac[0] === fac[1] ? `扣${fac[0]}` : `扣${fac.join('／')}`) : '扣大盤／類股';
-  add('excess', ex === null || ex === undefined ? null : ex >= 0.4,
+  add('excess', ex === null || ex === undefined ? null : ex >= EXCESS_R,
     '扣掉大盤／類股後還是很像',
     ex === null || ex === undefined ? '資料不足' : `${facText}後分時 R ${r2(ex)}（原 ${r2(f.ri)}）`);
 

@@ -392,9 +392,9 @@ export function progressView(p) {
  * the test that removes the most pairs (10/22 funnel: 143 of 197).
  */
 export const PRESETS = {
-  strict: { label: '嚴格', values: { daily_r: 0.85, new_daily_r: 0.85, intraday_r: 0.6, excess_r: 0.4, peak_gap: 5 } },
-  standard: { label: '標準', values: { daily_r: 0.8, new_daily_r: 0.8, intraday_r: 0.5, excess_r: 0.3, peak_gap: 8 } },
-  loose: { label: '寬鬆', values: { daily_r: 0.7, new_daily_r: 0.75, intraday_r: 0.35, excess_r: 0.2, peak_gap: 15 } },
+  strict: { label: '嚴格', values: { daily_r: 0.85, new_daily_r: 0.85, intraday_r: 0.6, excess_r: 0.5, peak_gap: 5 } },
+  standard: { label: '標準', values: { daily_r: 0.8, new_daily_r: 0.8, intraday_r: 0.5, excess_r: 0.4, peak_gap: 8 } },
+  loose: { label: '寬鬆', values: { daily_r: 0.7, new_daily_r: 0.75, intraday_r: 0.35, excess_r: 0.3, peak_gap: 15 } },
 };
 
 /** The preset the current values match exactly, or null (自訂). */
@@ -449,7 +449,7 @@ const DEFAULTS = {
   min_volume_lots: 300,
   new_min_volume_lots: 300,
   daily_r: 0.8, daily_window: 20, new_daily_r: 0.8, new_daily_window: 10, pool_top: 50,
-  intraday_basis: 'sector', intraday_r: 0.5, excess_r: 0.3, intraday_sessions: 3, peak_gap: 8, start_gap: '', require_burst: false, dense: 0.7, min_size: 2,
+  intraday_basis: 'sector', intraday_r: 0.5, excess_r: 0.4, intraday_sessions: 3, peak_gap: 8, start_gap: '', require_burst: false, dense: 0.7, min_size: 2,
   vol_ratio_window: 5,
   groupings: Object.keys(GROUPINGS), pool_sources: Object.keys(SOURCES),
 };
@@ -464,6 +464,8 @@ export function mountFinderPanel(container, { onStock, onResult }) {
     if (saved.method in METHODS) pref.method = saved.method;
     Object.assign(pref.params, saved.params || {});
     // saved before 開盤跳空／量比 existed: turn the two new rankings on once (later choices are kept)
+    // saved with the first 扣指數 default (0.3): the one threshold is 0.4 now, as the 🧾 扣指數 check
+    if ((saved.v || 1) < 3 && saved.params?.excess_r === 0.3) pref.params.excess_r = 0.4;
     if ((saved.v || 1) < 2 && Array.isArray(saved.params?.pool_sources)) {
       pref.params.pool_sources = [...new Set([...saved.params.pool_sources, 'gap', 'vol_ratio'])];
     }
@@ -476,7 +478,7 @@ export function mountFinderPanel(container, { onStock, onResult }) {
   }
   const save = () => {
     try {
-      localStorage.setItem(PREF_KEY, JSON.stringify({ ...pref, v: 2 }));
+      localStorage.setItem(PREF_KEY, JSON.stringify({ ...pref, v: 3 }));
     } catch {
       /* ignore */
     }

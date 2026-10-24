@@ -660,7 +660,7 @@ def test_factor_choice_and_sector_returns():
 def test_pair_check_on_the_excess_r():
     up = [0.1, 0.3, -0.2, 0.5, 0.1] * 6
     noise = [(-1) ** i * 0.3 for i in range(30)]
-    p = FinderParams()  # basis "sector", excess_r 0.3
+    p = FinderParams()  # basis "sector", excess_r 0.4
     same = mk(60, rets=up)
     same.excess = up
     twin = mk(62, rets=[x * 1.1 for x in up])
