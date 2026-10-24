@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { concHtml, goneReading, highlights, highlightsHtml, isSurge, shapeHtml, shapeList, hotHtml, hotNextDay, laggardsHtml, todayMove, mergeGroups, motiveOf, reportText, trackHtml, trackRows, watchOf } from '../../static/js/report.js';
+import { concHtml, goneReading, highlights, hotByMultiple, highlightsHtml, isSurge, shapeHtml, shapeList, hotHtml, hotNextDay, laggardsHtml, todayMove, mergeGroups, motiveOf, reportText, trackHtml, trackRows, watchOf } from '../../static/js/report.js';
 import { groupEvidenceItems } from '../../static/js/evidence.js';
 
 const m = (code, name = code) => ({ code, name, change_pct: 5 });
@@ -187,4 +187,10 @@ test('highlights: what stands out today, five lines at most', () => {
   assert.match(highlightsHtml(top), /<div class="rp-top"><b>今天重點<\/b><ul><li>/);
   assert.equal(highlightsHtml([]), '');
   assert.match(reportText('2026-10-22', [], list, rows, null, shapes), /今天重點：\n・🔥 隔日沖熱錢突然湧入/);
+});
+
+test('hotByMultiple: the 🔥 groups furthest above their usual first', () => {
+  const g = (codes, v, base) => grp(codes, {}, { daytrade: { hot: true, by_code: { [codes[0]]: v }, base: { [codes[0]]: base }, avg: v } });
+  const list = mergeGroups({ groups: [g(['1', '2'], 60, 50), g(['3', '4'], 60, 20), grp(['5', '6'])] }, null);
+  assert.deepEqual(hotByMultiple(list).map((x) => x.key), ['3,4', '1,2']); // 3× before 1.2×, the cold one out
 });

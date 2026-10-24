@@ -152,9 +152,14 @@ export function highlightsHtml(lines) {
   return lines.length ? `<div class="rp-top"><b>今天重點</b><ul>${lines.map((t) => `<li>${escapeHtml(t)}</li>`).join('')}</ul></div>` : '';
 }
 
+/** The 🔥 groups, the furthest above their usual 當沖比 first (research/exp7: the likeliest to fade). */
+export function hotByMultiple(list) {
+  return list.filter((x) => x.g.daytrade?.hot).sort((a, b) => (surgeMultiple(b.g.daytrade) ?? 0) - (surgeMultiple(a.g.daytrade) ?? 0));
+}
+
 /** 🔥 隔日沖警示: today's 🔥 groups (risk, not evidence) and how such groups did the next day. */
 export function hotHtml(list, stats, wide = null) {
-  const hot = list.filter((x) => x.g.daytrade?.hot);
+  const hot = hotByMultiple(list);
   const p = (v) => (v == null ? '—' : `<span class="${v > 0 ? 'up' : v < 0 ? 'down' : ''}">${fmtPct(v)}</span>`);
   const rows = hot
     .map((x) => {
@@ -219,7 +224,7 @@ export function reportText(date, index, list, rows, hotStats = null, shapes = []
   lines.push(`找到 ${list.length} 組，證據強 ${list.filter((x) => x.strong).length} 組，連續出現 ${rows.filter((r) => r.streak >= 1 && r.cells.at(-1) != null).length} 組`);
   const top = highlights(list, rows, shapes);
   if (top.length) lines.push('', '今天重點：', ...top.map((t) => `・${t}`));
-  const hot = list.filter((x) => x.g.daytrade?.hot);
+  const hot = hotByMultiple(list);
   if (hot.length) {
     lines.push('', `🔥 隔日沖警示（${hot.length} 組，隔天常開高走低）：`);
     for (const x of hot) lines.push(`   ${namesOf(x.g)}：平均當沖比 ${x.g.daytrade.avg.toFixed(1)}%`);
