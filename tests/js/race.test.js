@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { branchHtml, riDaysHtml, sharedGroupsHtml, pairCardHtml, pairFacts, pairTableHtml, verdictOf, RACE_END, amplitudeSoFar, fmtClock, instTip, isLimitUp, leadOf, pathPoints, peakSoFar, raceDomain, raceFrames, raceOrder } from '../../static/js/race.js';
+import { branchHtml, minuteOf, riDaysHtml, sharedGroupsHtml, pairCardHtml, pairFacts, pairTableHtml, verdictOf, RACE_END, amplitudeSoFar, fmtClock, instTip, isLimitUp, leadOf, pathPoints, peakSoFar, raceDomain, raceFrames, raceOrder } from '../../static/js/race.js';
 
 test('raceFrames forward-fills closes, remembers when a value was reached, keeps highs per minute', () => {
   const f = raceFrames({ A: [[0, 1, 2], [5, 10, 10], [6, 10, 10], [30, 9, 9.5]] }, ['A', 'B']);
@@ -157,4 +157,11 @@ test('branchHtml: the shared buyers, or why there are none', () => {
   assert.match(branchHtml({ ...f, branch: { shared: [], strong: false } }, name), /沒有共同的分點/);
   assert.match(branchHtml({ ...f, branch: undefined }, name), /載入中/);
   assert.match(branchHtml({ ...f, branch: undefined, branchErr: '盤後才有分點資料' }, name), /盤後才有/);
+});
+
+test('minuteOf: the pair’s 1-minute stats in the asked order, the lead flipped when the server keyed it the other way', () => {
+  const minute = { 'A,B': { r0: 0.5, peak_lag: 2 } };
+  assert.equal(minuteOf(minute, 'A', 'B').peak_lag, 2);
+  assert.equal(minuteOf(minute, 'B', 'A').peak_lag, -2);
+  assert.equal(minuteOf(minute, 'A', 'C'), null);
 });

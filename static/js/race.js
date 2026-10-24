@@ -138,6 +138,13 @@ export function verdictOf(r, high, low) {
 
 /** One pair's figures from K's data at minute m: daily / intraday R, who peaked and locked first, the
  *  change gap and 法人. a / b are codes; d is the linkage payload, frames its raceFrames. */
+/** The pair's 1-minute stats in a → b order (the server keys each pair once; its peak_lag is from the first). */
+export function minuteOf(minute, a, b) {
+  if (minute?.[`${a},${b}`]) return minute[`${a},${b}`];
+  const x = minute?.[`${b},${a}`];
+  return x ? { ...x, peak_lag: x.peak_lag == null ? x.peak_lag : -x.peak_lag } : null;
+}
+
 export function pairFacts(d, frames, a, b, m) {
   const idx = new Map(d.members.map((x, i) => [x.code, i]));
   const i = idx.get(a);
@@ -173,8 +180,9 @@ export function pairFacts(d, frames, a, b, m) {
     lockA: A.lock, lockB: B.lock, firstLock: first(A.lock, B.lock),
     nowA: A.now, nowB: B.now, diff: A.now !== null && B.now !== null ? A.now - B.now : null,
     instA: member(a).inst_net ?? null, instB: member(b).inst_net ?? null,
+    nameA: member(a).name ?? a, nameB: member(b).name ?? b,
     // 資金一致性 from the payload: R after the index, and the 1-minute pair stats (either key order)
-    ev: { excess: cell(d.evidence?.excess), factors: [d.evidence?.factors?.[i] || '', d.evidence?.factors?.[j] || ''], minute: d.evidence?.minute?.[`${a},${b}`] ?? d.evidence?.minute?.[`${b},${a}`] ?? null },
+    ev: { excess: cell(d.evidence?.excess), factors: [d.evidence?.factors?.[i] || '', d.evidence?.factors?.[j] || ''], minute: minuteOf(d.evidence?.minute, a, b) },
   };
 }
 

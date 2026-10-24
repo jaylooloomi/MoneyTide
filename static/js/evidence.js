@@ -10,6 +10,14 @@ export const EXCESS_R = 0.4;
 
 const r2 = (v) => (v === null || v === undefined ? '—' : v.toFixed(2));
 
+/** Where the 1-minute cross-correlation peaks, in words (shown only): the same minute, or who moves first. */
+export function lagText(lag, f) {
+  if (lag === null || lag === undefined) return '';
+  if (lag === 0) return '；峰值在同一分鐘（像同時下單）';
+  const lead = lag > 0 ? f?.nameA || '前一檔' : f?.nameB || '後一檔';
+  return `；峰值錯開 ${Math.abs(lag)} 分：${lead} 先動`;
+}
+
 /** [{key, ok: true|false|null, label, detail}] for one pair. */
 export function evidenceItems(f, ext, ev) {
   const items = [];
@@ -44,7 +52,7 @@ export function evidenceItems(f, ext, ev) {
   const sync = mn && mn.r0 !== null && mn.r_off !== null ? mn : null;
   add('sync', sync ? sync.r0 >= 0.3 && sync.r0 - sync.r_off >= 0.1 : null,
     '同一分鐘同步（不是一前一後）',
-    sync ? `1 分 K R ${r2(sync.r0)}，錯開 1～3 分最多 ${r2(sync.r_off)}` : '沒有 1 分 K');
+    sync ? `1 分 K R ${r2(sync.r0)}，錯開 1～3 分最多 ${r2(sync.r_off)}${lagText(sync.peak_lag, f)}` : '沒有 1 分 K');
 
   // 5. found again on other days
   const days = ext ? new Set((ext.finder || []).map((h) => h.date)).size : null;

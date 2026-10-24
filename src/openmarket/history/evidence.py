@@ -17,6 +17,7 @@ from .linkage import pair_matrix, pearson
 
 BURST_RATIO = 3.0  # a minute trading ≥ this × the stock's median 1-minute volume is a burst
 LAGS = (1, 2, 3)  # minutes either way for the same-minute check
+PEAK_LAGS = range(-5, 6)  # where the cross-correlation peaks (shown only: 0 = the same minute, +k = a leads by k)
 MIN_MINUTE_POINTS = 60
 BASELINE_PAIRS = 300
 
@@ -74,7 +75,9 @@ def lag_r(a: Mapping[int, float], b: Mapping[int, float], k: int) -> float | Non
 
 
 def minute_evidence(bars_a: Sequence[tuple] | None, bars_b: Sequence[tuple] | None) -> dict | None:
-    """{bursts_a, bursts_b, co, expected, r0, r_off} for one pair; None without 1-minute bars for both."""
+    """{bursts_a, bursts_b, co, expected, r0, r_off, peak_lag} for one pair; None without 1-minute bars for
+    both. peak_lag: the lag in −5…+5 minutes where the 1-minute returns correlate most (+k: a moves k
+    minutes before b); shown only, the 同分鐘 check stays r0 against r_off."""
     if not bars_a or not bars_b:
         return None
     ra, va = minute_series(bars_a)
@@ -85,11 +88,13 @@ def minute_evidence(bars_a: Sequence[tuple] | None, bars_b: Sequence[tuple] | No
     expected = (len(ba & both) * len(bb & both) / len(both)) if both else None
     r0 = lag_r(ra, rb, 0)
     offs = [x for k in LAGS for x in (lag_r(ra, rb, k), lag_r(ra, rb, -k)) if x is not None]
+    by_lag = {k: v for k in PEAK_LAGS if (v := r0 if k == 0 else lag_r(ra, rb, k)) is not None}  # lag_r(a, b, k) pairs a at t with b at t + k
     return {
         "bursts_a": len(ba), "bursts_b": len(bb), "co": co,
         "expected": round(expected, 2) if expected is not None else None,
         "r0": round(r0, 3) if r0 is not None else None,
         "r_off": round(max(offs), 3) if offs else None,
+        "peak_lag": max(by_lag, key=lambda k: (by_lag[k], -abs(k))) if by_lag else None,
     }
 
 

@@ -97,3 +97,11 @@ test('the base rate of each check rides along (shown only, the count is unchange
   assert.match(html, /<b>2<\/b>／2 項支持/); // still 2 of 2
   assert.ok(Object.values(BASE_RATES).every((v) => v > 0 && v < 1));
 });
+
+test('lagText: the cross-correlation peak in words', async () => {
+  const { lagText } = await import('../../static/js/evidence.js');
+  assert.equal(lagText(0, {}), '；峰值在同一分鐘（像同時下單）');
+  assert.equal(lagText(2, { nameA: '甲', nameB: '乙' }), '；峰值錯開 2 分：甲 先動');
+  assert.equal(lagText(-3, { nameA: '甲', nameB: '乙' }), '；峰值錯開 3 分：乙 先動');
+  assert.equal(lagText(null, {}), '');
+});

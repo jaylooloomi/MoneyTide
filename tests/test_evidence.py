@@ -124,3 +124,18 @@ def test_foreign_branches_among_the_stored_top_15():
     data = {"buy": [{"name": "美商高盛", "net": 500}, {"name": "元大", "net": 300}], "sell": [{"name": "港商野村", "net": -200}]}
     assert foreign_branch_net(data) == 300
     assert foreign_branch_net({"buy": [], "sell": []}) is None and foreign_branch_net(None) is None
+
+
+
+def test_peak_lag_says_who_moves_first():
+    from openmarket.history.evidence import minute_evidence
+
+    import math
+    moves = [math.sin(i * 0.7) * (1 + (i % 5)) for i in range(200)]
+    bar = lambda t, c: (f"{9 + t // 60:02d}:{t % 60:02d}", c, c, c, c, 1000)  # noqa: E731
+    path = lambda xs: [bar(t, 100 + sum(xs[: t + 1])) for t in range(len(xs))]  # noqa: E731
+    a = path(moves)
+    b = path([0, 0] + moves[:-2])  # b repeats a two minutes later
+    assert minute_evidence(a, b)["peak_lag"] == 2
+    assert minute_evidence(b, a)["peak_lag"] == -2
+    assert minute_evidence(a, a)["peak_lag"] == 0
