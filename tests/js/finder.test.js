@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { PRESETS, BIG_MIN, DEFAULT_GROUPINGS, condText, isBig, factorText, evidenceRank, rowsHeight, themeNewsHtml, cardHtml, digestText, shownFilter, finderMarkIndex, finderMarkTitle, csvExport, defaultGroupName, filterHtml, funnelText, presetOf, filterOptions, matchesFilter, progressView, queryOf, statsText } from '../../static/js/finder.js';
+import { FIELDS, PRESETS, BIG_MIN, DEFAULT_GROUPINGS, condText, isBig, factorText, evidenceRank, rowsHeight, themeNewsHtml, cardHtml, digestText, shownFilter, finderMarkIndex, finderMarkTitle, csvExport, defaultGroupName, filterHtml, funnelText, presetOf, filterOptions, matchesFilter, progressView, queryOf, statsText } from '../../static/js/finder.js';
 
 test('queryOf sends only the fields of the chosen method; blank 起漲差 means not required', () => {
   const p = { daily_r: 0.75, daily_window: 20, new_daily_r: 0.85, pool_top: 30, intraday_r: 0.5, peak_gap: 8, start_gap: '', require_burst: true, groupings: ['custom', 'news'], pool_sources: ['gain'] };
@@ -322,4 +322,10 @@ test('🔥 隔日沖 chip: the groups whose members average ≥ 50% 當沖比', 
   assert.match(chip.tip, /隔天常開高走低/);
   assert.ok(matchesFilter(d.groups[0], '@dt', 'known') && !matchesFilter(d.groups[1], '@dt', 'known'));
   assert.ok(!filterOptions({ ...d, groups: [g(false)] }).some((o) => o.key === '@dt')); // none: no chip
+});
+
+test('a 5-minute card says its peak-gap rule only resolves to 5 minutes', () => {
+  const g = { members: [{ code: '1', name: '甲' }], sources: [], matches: [], kind: '已知族群', resolution: 5 };
+  assert.match(cardHtml(g, 0), /title="這天只有 5 分 K：高點時間只到 5 分鐘精度[^"]*">5 分 K<\/span>/);
+  assert.match(FIELDS.find((f) => f[0] === 'peak_gap')[4], /6～9 跟 5 效果一樣/);
 });

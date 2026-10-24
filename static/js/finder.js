@@ -34,7 +34,7 @@ export const FIELDS = [
   ['intraday_r', '分時相關 ≥', 'num', '', '原始的分時相關門檻（分時 R 用「原始」時才篩這個）：最近幾個交易日 5 分 K 報酬；鎖漲停的平線不計'],
   ['excess_r', '扣指數後相關 ≥', 'num', '', '扣掉大盤／類股之後剩下的分時相關門檻（分時 R 用「扣大盤」或「扣大盤＋類股」時篩這個）；扣過的 R 通常比原始 R 低很多'],
   ['intraday_sessions', '分時天數', 'int', '', ''],
-  ['peak_gap', '高點差 ≤（分）', 'int', '', '日內最高點（09:00–13:00）的時間差'],
+  ['peak_gap', '高點差 ≤（分）', 'int', '', '日內最高點（09:00–13:00）的時間差。高點時間的精度跟著分 K：1 分 K（約 30 天內）精確到分鐘；只有 5 分 K 的舊日子只會落在 0、5、10…分，所以 6～9 跟 5 效果一樣'],
   ['start_gap', '起漲差 ≤（分）', 'opt', '', '空白＝只顯示、不篩選'],
   ['require_burst', '要同時爆量', 'bool', '', '同一個 5 分鐘兩檔都爆量（≥ 3 倍自己的中位數）'],
   ['dense', '群內至少', 'num', '', '每檔要跟群內這個比例的人都符合條件（0.7＝七成）'],
@@ -182,7 +182,7 @@ export function cardHtml(g, i) {
     `高點差 <b>${g.peak_spread ?? '—'}</b> 分`,
     g.start_spread != null ? `起漲差 ${g.start_spread} 分` : '',
     g.together_bursts?.length ? `同時爆量 ${g.together_bursts.slice(0, 3).join('、')}` : '',
-    g.resolution === 5 ? '<span class="muted">5 分 K</span>' : '',
+    g.resolution === 5 ? '<span class="muted" title="這天只有 5 分 K：高點時間只到 5 分鐘精度，高點差 ≤ 8 分實際等於 ≤ 5 分">5 分 K</span>' : '',
   ]
     .filter(Boolean)
     .join('　');
