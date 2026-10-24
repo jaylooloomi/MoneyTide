@@ -104,7 +104,7 @@ test('pairFacts / pairCardHtml / pairTableHtml: 交集 of two picked stocks at t
   const frames = raceFrames({ A: [[0, 1, 1], [50, 9.9, 9.9], [55, 10, 10]], B: [[0, 2, 2], [45, 8, 8.6], [60, 8.6, 8.6]], C: [[0, -1, -1]] }, ['A', 'B', 'C'], { A: 10, B: 10, C: 10 });
   const f = pairFacts(d, frames, 'A', 'B', 270);
   assert.deepEqual([f.r20, f.r60, f.ri], [0.82, 0.65, 0.71]);
-  assert.deepEqual(f.riDays, [{ date: '2026-10-22', r: 0.72 }, { date: '2026-10-21', r: 0.58 }, { date: '2026-10-20', r: null }]); // newest first
+  assert.deepEqual(f.riDays.map(({ date, r }) => ({ date, r })), [{ date: '2026-10-22', r: 0.72 }, { date: '2026-10-21', r: 0.58 }, { date: '2026-10-20', r: null }]); // newest first
   assert.deepEqual([f.peakA, f.peakB, f.peakGap, f.firstPeak], [55, 45, 10, 'B']);
   assert.deepEqual([f.dayPeakA, f.dayPeakB, f.dayPeakGap], [55, 45, 10]);
   assert.deepEqual([f.lockA, f.lockB, f.firstLock], [55, null, 'A']);
@@ -141,8 +141,11 @@ test('sharedGroupsHtml: each kind once, at most three names, the rest counted', 
 });
 
 test('riDaysHtml: 今日／昨日／前日 intraday R, — when a session had too few points', () => {
-  const html = riDaysHtml([{ date: '2026-10-22', r: 0.72 }, { date: '2026-10-21', r: 0.15 }, { date: '2026-10-20', r: null }]);
-  assert.match(html, /今日 <b class="up" title="2026-10-22">0\.72<\/b>　昨日 <b class="muted"[^>]*>0\.15<\/b>　前日 <b class="muted"[^>]*>—<\/b>/);
+  const html = riDaysHtml([{ date: '2026-10-22', r: 0.72, points: 54 }, { date: '2026-10-21', r: 0.15, points: 40 }, { date: '2026-10-20', r: null, points: 6, min: 15 }]);
+  assert.match(html, /今日 <b class="up" title="2026-10-22：54 個 5 分 K 點">0\.72<\/b>　昨日 <b class="muted"[^>]*>0\.15<\/b>　前日 <b class="muted"[^>]*>—<\/b><small class="muted">（只剩 6 點）<\/small>/);
+  assert.match(html, /鎖漲停的平線不計/);
+  assert.match(riDaysHtml([{ date: '2026-10-22', r: null, points: 0, missing: true }]), /（無分 K）/);
+  assert.match(riDaysHtml([{ date: '2026-07-31', r: null, points: 0, missing: false }]), /（整天鎖住）/); // e.g. a stock locked limit-up all day
   assert.equal(riDaysHtml([]), '');
   assert.equal(riDaysHtml(undefined), '');
 });

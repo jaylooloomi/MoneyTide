@@ -161,7 +161,13 @@ export function pairFacts(d, frames, a, b, m) {
     a, b,
     r20: cell(d.daily?.matrix20), r60: cell(d.daily?.matrix60), ri: cell(d.intraday?.matrix),
     // each session's R, the shown day first (今日, 昨日, 前日)
-    riDays: [...(d.intraday?.by_session || [])].reverse().map((s) => ({ date: s.date, r: cell(s.matrix) })),
+    riDays: [...(d.intraday?.by_session || [])].reverse().map((s) => ({
+      date: s.date,
+      r: cell(s.matrix),
+      points: cell(s.points),
+      missing: s.has && i !== undefined && j !== undefined ? !s.has[i] || !s.has[j] : false,
+      min: s.min_points ?? 15,
+    })),
     peakA: pa, peakB: pb, peakGap: pa !== null && pb !== null ? Math.abs(pa - pb) : null, firstPeak: first(pa, pb),
     dayPeakA: da, dayPeakB: db, dayPeakGap: da !== null && db !== null ? Math.abs(da - db) : null,
     lockA: A.lock, lockB: B.lock, firstLock: first(A.lock, B.lock),
@@ -186,7 +192,14 @@ export function riDaysHtml(days) {
   if (!days?.length) return '';
   const one = (x, i) => {
     const cls = x.r === null ? 'muted' : x.r > 0.5 ? 'up' : x.r < 0.2 ? 'muted' : '';
-    return `${DAY_NAMES[i] || x.date.slice(5)} <b class="${cls}" title="${escapeHtml(x.date)}">${x.r === null ? '—' : x.r.toFixed(2)}</b>`;
+    // an empty day says why: no bars for one of them, or too few points left (locked limit-up steps are dropped)
+    const why = x.r !== null ? '' : x.missing ? '（無分 K）' : x.points === 0 ? '（整天鎖住）' : x.points !== null && x.points !== undefined ? `（只剩 ${x.points} 點）` : '';
+    const tip = x.r !== null
+      ? `${x.date}：${x.points ?? '—'} 個 5 分 K 點`
+      : x.missing
+        ? `${x.date}：其中一檔這天沒有分 K（停牌、剛上市或資料缺）`
+        : `${x.date}：兩檔都有成交的 5 分 K 只剩 ${x.points ?? 0} 點（少於 ${x.min} 不算）——鎖漲停的平線不計，多半是鎖住了`;
+    return `${DAY_NAMES[i] || x.date.slice(5)} <b class="${cls}" title="${escapeHtml(tip)}">${x.r === null ? '—' : x.r.toFixed(2)}</b>${why ? `<small class="muted">${why}</small>` : ''}`;
   };
   return `<br><span class="rt-ri-days">${days.map(one).join('　')}</span>`;
 }

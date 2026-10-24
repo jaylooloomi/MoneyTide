@@ -328,7 +328,7 @@ table.link-matrix td, table.link-matrix th { padding: 2px 4px; font-size: 11px; 
 .race-main { flex: 1 1 700px; min-width: 700px; max-width: 1100px; } /* the track keeps ≥ 360px: the 5 日 K column wraps first */
 @media (max-width: 760px) { .race-main { min-width: 0; } }
 .race-side { flex: 1 1 520px; min-width: 360px; max-width: 760px; border: 1px solid var(--line, #2a2e37); border-radius: 6px; padding: 6px 8px; }
-.rt-row.on { background: #ffffff0d; outline: 1px solid #ffd40066; border-radius: 3px; }
+.rt-row.on { background: #ffffff0d; outline: 1px solid #ffd40066; outline-offset: -1px; border-radius: 3px; z-index: 2; } /* inside the row and above its neighbours: rows are placed by rank, not DOM order */
 .ic-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 4px; }
 .ic-head .ic-card { margin-left: auto; }
 .ic-body { display: flex; gap: 8px; }

@@ -608,10 +608,14 @@ def create_app(
         minute_ev = await asyncio.to_thread(minute_pairs)
         # the same R per session (今日／昨日／前日), for the 🔗 交集: one session has 54 returns at most
         step = len(axis) - 1
-        by_session = [
-            {"date": s.isoformat(), "matrix": pair_matrix([r[k * step:(k + 1) * step] for r in series], min_points=SESSION_MIN_POINTS)[0]}
-            for k, s in enumerate(sessions)
-        ]
+        def one_session(k: int, s: date) -> dict:
+            part = [r[k * step:(k + 1) * step] for r in series]
+            # why a cell can be empty: the points both had (locked limit-up steps are left out) and who had bars at all
+            points = [[sum(1 for x, y in zip(a, b) if x is not None and y is not None) for b in part] for a in part]
+            return {"date": s.isoformat(), "matrix": pair_matrix(part, min_points=SESSION_MIN_POINTS)[0], "points": points,
+                    "has": [bool(per_code_sessions[c].get(s)) for c in codes], "min_points": SESSION_MIN_POINTS}
+
+        by_session = [one_session(k, s) for k, s in enumerate(sessions)]
         for m in members:  # 13:30 = the official close (no Yahoo bar covers the closing auction)
             if race[m["code"]] and m.get("change_pct") is not None:
                 close = round(m["change_pct"], 2)
