@@ -210,7 +210,7 @@ export function highlights(list, rows, shapes = []) {
   const dumped = rows.filter((r) => r.status.includes('出貨')).map((r) => r.names);
   if (dumped.length) out.push(`疑似出貨（昨天的組合今天爆量收黑）：${names(dumped)}`);
   const strong = list.filter((x) => x.strong).map((x) => namesOf(x.g));
-  if (strong.length) out.push(`證據強：${names(strong)}`);
+  if (strong.length) out.push(`證據強（同步得很整齊；回測 60 天：證據多的組合後續不一定較強）：${names(strong)}`);
   const runs = rows.filter((r) => r.streak >= 2 && r.cells.at(-1) != null).map((r) => `${r.names}（連 ${r.streak + 1} 天）`);
   if (runs.length) out.push(`連續出現：${names(runs)}`);
   if (shapes.length) out.push(`高點錯開但走勢一樣：${shapes.slice(0, 2).map((x) => x.members.map((m) => m.name).join('＋')).join('／')}${shapes.length > 2 ? ` 等 ${shapes.length} 對` : ''}`);

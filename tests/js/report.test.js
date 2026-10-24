@@ -194,3 +194,9 @@ test('hotByMultiple: the 🔥 groups furthest above their usual first', () => {
   const list = mergeGroups({ groups: [g(['1', '2'], 60, 50), g(['3', '4'], 60, 20), grp(['5', '6'])] }, null);
   assert.deepEqual(hotByMultiple(list).map((x) => x.key), ['3,4', '1,2']); // 3× before 1.2×, the cold one out
 });
+
+test('the 證據強 highlight says what the backtest found', () => {
+  const g = grp(['1', '2'], { excess: true, baseline: true, burst: true, sync: true, samedir: true });
+  const top = highlights(mergeGroups({ groups: [g] }, null), []);
+  assert.match(top.find((t) => t.startsWith('證據強')), /回測 60 天：證據多的組合後續不一定較強/);
+});
