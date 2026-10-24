@@ -148,6 +148,10 @@ export function shapeHtml(results) {
     <h3 class="rp-h">高點錯開但走勢一樣 <small class="muted">${list.length} 對；可能分批推進</small></h3><ul class="rp-hot-list">${rows}</ul></div>`;
 }
 
+export function highlightsHtml(lines) {
+  return lines.length ? `<div class="rp-top"><b>今天重點</b><ul>${lines.map((t) => `<li>${escapeHtml(t)}</li>`).join('')}</ul></div>` : '';
+}
+
 /** 🔥 隔日沖警示: today's 🔥 groups (risk, not evidence) and how such groups did the next day. */
 export function hotHtml(list, stats, wide = null) {
   const hot = list.filter((x) => x.g.daytrade?.hot);
@@ -184,11 +188,40 @@ export function hotHtml(list, stats, wide = null) {
     ${hot.length ? `<ul class="rp-hot-list">${rows}</ul>` : '<p class="rp-line muted">今天沒有 🔥 組合。</p>'}${s}${all}${evLine}</div>`;
 }
 
+/** 🔥 突然湧入: a 🔥 group whose members day-trade at 2× their usual or more (on average). */
+export function isSurge(g) {
+  const dt = g.daytrade;
+  if (!dt?.hot) return false;
+  const xs = Object.entries(dt.by_code || {}).filter(([c]) => dt.base?.[c]).map(([c, v]) => v / dt.base[c]);
+  return xs.length > 0 && xs.reduce((a, b) => a + b, 0) / xs.length >= 2;
+}
+
+/**
+ * 今天重點: at most five lines of what stands out today, from what the report already worked out —
+ * 突然湧入 hot money, 疑似出貨, 證據強, a run of days, and the closest 高點錯開 pair. [text]
+ */
+export function highlights(list, rows, shapes = []) {
+  const out = [];
+  const names = (xs) => xs.slice(0, 3).join('／') + (xs.length > 3 ? ` 等 ${xs.length} 組` : '');
+  const surge = list.filter((x) => isSurge(x.g)).map((x) => namesOf(x.g));
+  if (surge.length) out.push(`🔥 隔日沖熱錢突然湧入：${names(surge)}（歷史上這類隔天多半開高走低）`);
+  const dumped = rows.filter((r) => r.status.includes('出貨')).map((r) => r.names);
+  if (dumped.length) out.push(`疑似出貨（昨天的組合今天爆量收黑）：${names(dumped)}`);
+  const strong = list.filter((x) => x.strong).map((x) => namesOf(x.g));
+  if (strong.length) out.push(`證據強：${names(strong)}`);
+  const runs = rows.filter((r) => r.streak >= 2 && r.cells.at(-1) != null).map((r) => `${r.names}（連 ${r.streak + 1} 天）`);
+  if (runs.length) out.push(`連續出現：${names(runs)}`);
+  if (shapes.length) out.push(`高點錯開但走勢一樣：${shapes.slice(0, 2).map((x) => x.members.map((m) => m.name).join('＋')).join('／')}${shapes.length > 2 ? ` 等 ${shapes.length} 對` : ''}`);
+  return out.slice(0, 5);
+}
+
 /** The report as plain text (複製成文字: for notes or a chat). */
 export function reportText(date, index, list, rows, hotStats = null, shapes = []) {
   const lines = [`${date} 盤後報告`];
   if (index.length) lines.push(index.map((b) => `${b.name} ${fmtPct(b.change_pct)}`).join('　'));
   lines.push(`找到 ${list.length} 組，證據強 ${list.filter((x) => x.strong).length} 組，連續出現 ${rows.filter((r) => r.streak >= 1 && r.cells.at(-1) != null).length} 組`);
+  const top = highlights(list, rows, shapes);
+  if (top.length) lines.push('', '今天重點：', ...top.map((t) => `・${t}`));
   const hot = list.filter((x) => x.g.daytrade?.hot);
   if (hot.length) {
     lines.push('', `🔥 隔日沖警示（${hot.length} 組，隔天常開高走低）：`);
@@ -423,6 +456,7 @@ export function mountReportPanel(container, { onStock, query, condText }) {
     const metric = (label, value) => `<div class="rp-metric"><small>${label}</small><b>${value}</b></div>`;
     // 摘要 across the top; the day's groups (A1) on the left, 跨天追蹤 (A3) on the right
     body.innerHTML = `<div class="rp-metrics">${metric('找到群組', list.length)}${metric('證據強', strong)}${metric('連續出現', going)}${metric('大盤／櫃買', bench.map((b) => `<span class="${b.change_pct > 0 ? 'up' : 'down'}">${fmtPct(b.change_pct)}</span>`).join(' / ') || '—')}</div>
+      ${highlightsHtml(highlights(list, rows, shapeList(state.dayResults || [])))}
       <div class="rp-cols"><div class="rp-left">
         ${hotHtml(list, hotStats, state.wide)}
         ${shapeHtml(state.dayResults || [])}

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { concHtml, goneReading, shapeHtml, shapeList, hotHtml, hotNextDay, laggardsHtml, todayMove, mergeGroups, motiveOf, reportText, trackHtml, trackRows, watchOf } from '../../static/js/report.js';
+import { concHtml, goneReading, highlights, highlightsHtml, isSurge, shapeHtml, shapeList, hotHtml, hotNextDay, laggardsHtml, todayMove, mergeGroups, motiveOf, reportText, trackHtml, trackRows, watchOf } from '../../static/js/report.js';
 import { groupEvidenceItems } from '../../static/js/evidence.js';
 
 const m = (code, name = code) => ({ code, name, change_pct: 5 });
@@ -168,4 +168,23 @@ test('hotHtml shows the next day by evidence count when the server sends it', ()
   assert.match(html, /依證據數分組（所有已存的日子）隔天：<br>✓ ≥ 4 項 2 組／2 檔次/);
   assert.match(html, /✓ ≤ 1 項 7 組/);
   assert.doesNotMatch(html, /✓ 2～3 項/); // none in that class
+});
+
+test('highlights: what stands out today, five lines at most', () => {
+  const hot = grp(['1', '2'], {}, { daytrade: { hot: true, by_code: { 1: 62, 2: 58 }, base: { 1: 25, 2: 30 }, avg: 60 } });
+  hot.members = [m('1', '甲'), m('2', '乙')];
+  const habit = grp(['3', '4'], {}, { daytrade: { hot: true, by_code: { 3: 60 }, base: { 3: 58 }, avg: 60 } });
+  assert.ok(isSurge(hot) && !isSurge(habit));
+  const list = mergeGroups({ groups: [hot, habit] }, null);
+  const rows = [{ names: '戊、己', status: '消失・疑似出貨（爆量收黑）', streak: 0, cells: [1, null] }, { names: '庚、辛', status: '連 3 天', streak: 2, cells: [1, 1, 1] }];
+  const shapes = [{ members: [{ name: '台塑' }, { name: '台化' }], dtw: 1.2 }];
+  const top = highlights(list, rows, shapes);
+  assert.equal(top[0], '🔥 隔日沖熱錢突然湧入：甲、乙（歷史上這類隔天多半開高走低）');
+  assert.match(top[1], /疑似出貨.*戊、己/);
+  assert.match(top.find((t) => t.startsWith('連續出現')), /庚、辛（連 3 天）/);
+  assert.match(top.at(-1), /高點錯開但走勢一樣：台塑＋台化/);
+  assert.ok(top.length <= 5);
+  assert.match(highlightsHtml(top), /<div class="rp-top"><b>今天重點<\/b><ul><li>/);
+  assert.equal(highlightsHtml([]), '');
+  assert.match(reportText('2026-10-22', [], list, rows, null, shapes), /今天重點：\n・🔥 隔日沖熱錢突然湧入/);
 });
