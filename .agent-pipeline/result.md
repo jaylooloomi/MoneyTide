@@ -36,6 +36,7 @@
 | 14 | 高點差門檻依分 K 解析度說清楚 | 3.0（scores-08.md） | 本專案 research/exp1（5 分 K 下 ≤ 8 與 ≤ 5 結果相同） | 「條件」高點差說明、5 分 K 卡片提示、agent-brief.md 各補一句：5 分 K 的日子高點時間只落在 5 的倍數，≤ 8 實際等於 ≤ 5。動到 finder.js、agent-brief.md | `node --test tests/js/finder.test.js` | ✅ node 132 | ① 依解析度自動換算門檻（改判定）② 隱藏 5 分 K 日子的高點差欄（資訊變少） |
 | 15 | 交接文件補上研究結論 | 3.0（scores-08.md） | 本專案兩個研究分支的 REPORT.md | docs/study.md 每節末加「實驗結果」，指向 night-shift/study-* 與 night-shift/methods-* | — | 文件 | ① 把 REPORT.md 整份搬進主分支（研究分支各自保留比較清楚） |
 | 16 | 高點錯開但走勢一樣（可能分批推進） | 2.0（scores-09.md） | Sakoe & Chiba (1978) DTW；本專案 research/m2 | N 計算時，對「只因高點差太大被刷掉」的候選配對算分時形狀距離（DTW，帶寬 6），≤ 2.5 的前 10 對存進結果 shape_pairs；盤後報告加一區列出。N 群組與證據不變；FINDER_VERSION 升到 10（舊結果會重算）。動到 evidence.py、finder.py、report.js、app.css。離線 53 天找出 143 對（國巨＋千如、陽明＋萬海、茂矽＋漢磊、台塑＋台化…）；上線 10/21：光頡＋金山電（高點差 9 分）、國巨＋立隆電（28 分）等 5 對 | `.venv/Scripts/python -m pytest -q tests/test_evidence.py`；`node --test tests/js/report.test.js` | ✅ pytest 294、node 133；瀏覽器確認 10/21 報告 | ① 直接把這些配對併進 N 群組（改判定）② 對全部前 150 檔配對都算（上線要多抓分 K） |
+| 17 | 🔥 再分「突然湧入」與「平常就這樣」 | 2.2（scores-10.md） | 異常量事件研究（MacKinlay 1997；Campbell, Grossman & Wang 1993） | /api/history/next-day 把 🔥 拆成 surge（成員當沖比平均 ≥ 平常 2 倍）與 habitual；盤後報告 🔥 區多兩行。統計也採用條件相同、版本 ≥ 9 的舊結果（v10 只多欄位）。動到 linkage.py、store.py、api.py、report.js。11 天：87 組 🔥 中 85 組是平常就這樣（隔天收 +3.67%、開高走低 44%）；突然湧入只有 2 組 4 檔次，隔天全數開高走低、收 −0.63%（扣大盤 −1.42%）——方向符合「隔日好空」，但樣本太少 | `.venv/Scripts/python -m pytest -q tests/test_money_flow.py tests/test_finder.py`；`node --test tests/js/report.test.js` | ✅ pytest 296、node 135；API 確認 | ① 用 z 分數分類（20 天樣本太短）② 只採同版本結果（版本一升樣本就歸零） |
 
 ## 判斷不值得做
 - C2 群組外盤估計 / 1.7 / 要動 N 結果、卡片與報告，Blast 大，單檔版已在 K 走勢資訊欄
@@ -44,6 +45,7 @@
 - D2 今日資金網路圖 / 0.8 / 只改呈現方式，不幫判斷有無計畫
 - G2 隔日沖個股排行 / 0.5 / 使用者說的「這種」是指 🔥 組合，不是全部個股
 - H2 DTW 形狀相似度 / 1.3 / 不計入證據，只多一列資訊，改動 race.js 與 payload 成本高
+- N2 「高點錯開但走勢一樣」跨天出現次數 / 0.8 / 只有內部概念、沒有外部來源
 
 ## 需要你決定的事
 - [存疑] 證據清單其他門檻要不要放進「條件」——今晚實驗（methods/m5）顯示「同爆量」隨機出現率 40%、「籌碼／法人同向」51%，等權計票會高估它們；要不要調嚴或降權，請你決定
