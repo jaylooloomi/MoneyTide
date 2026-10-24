@@ -740,9 +740,10 @@ export async function showHistory() {
     renderCountyPanel();
     aiPanel = mountHistoryAiPanel($('#historyView'), () => st.date);
     aiPanel.load();
+    // K above J: the picked group's linkage right under B, the news-driven groups after it
+    linkPanel = mountLinkagePanel($('#historyView'), { onStock: openHistCard });
     newsPanel = mountNewsPanel($('#historyView'), { getDate: () => st.date, onPick: pickNewsTheme, onStock: openHistCard });
     newsPanel.load();
-    linkPanel = mountLinkagePanel($('#historyView'), { onStock: openHistCard });
     finderPanel = mountFinderPanel($('#historyTab2'), { // N on 分頁2 (it loads when its tab is shown)
       onStock: openHistCard,
       onResult: () => {
