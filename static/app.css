@@ -452,3 +452,7 @@ table.link-heat td.self { background: #3a3e48; }
 .fd-rel { font-size: 12px; margin-bottom: 4px; color: #e8d5a3; }
 .card-rel { font-size: 12px; margin: 6px 0; }
 .card-rel ul { margin: 2px 0 4px; padding-left: 18px; }
+.ev-box { border: 1px solid #ffd40044; border-radius: 6px; padding: 6px 8px; margin-bottom: 6px; background: #ffd40008; }
+.ev-h { font-weight: 600; margin-bottom: 2px; }
+.ev-list { list-style: none; margin: 0; padding: 0; }
+.ev-list li { padding: 1px 0; }

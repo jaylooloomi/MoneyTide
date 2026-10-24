@@ -5,6 +5,7 @@ import contextlib
 import json
 import logging
 import mimetypes
+import random
 from dataclasses import asdict
 from datetime import date, datetime, time
 from itertools import takewhile
@@ -22,6 +23,7 @@ from .ai import AIConfig
 from .config import STATIC_DIR, TAIPEI, USER_AGENT, AppConfig
 from .explain import explain_day
 from .history.linkage import (
+    pearson,
     INTRADAY_HIGH_R, INTRADAY_LOW_R, bucket_closes, daily_linkage, fmt_minute, pair_matrix, peak_minute_from_bars, peak_minute_from_ticks,
     align_bars, amplitude_pct, limit_down_pct, limit_up_pct, minute_bars, turnover_rate, peak_stats, tick_bars, with_close_bar, race_points, returns, locked_level, daily_k, index_k, top_members, verdict_r, verdict_timing,
 )
@@ -46,6 +48,7 @@ from .sources.margin import fetch_margin_day
 from .sources.moneydj import fetch_relations
 from .sources.company_address import fetch_company_names
 from .relations import NameIndex, RelationCollector, merge_edges, relation_edges, relation_groups
+from .history.evidence import bucket_of, chip_sync, excess_matrix, minute_evidence, percentile_of
 from .sources.sector_index import fetch_sector_day
 from .sources.company_address import fetch_county_groups
 from .sources.google_news import fetch_headlines
@@ -511,6 +514,7 @@ def create_app(
         return bars or None, ""
 
     YAHOO_CONCURRENCY = 6  # members whose bars are fetched at the same time
+    EVIDENCE_MINUTE_MAX = 12  # 1-minute evidence for the largest this many members (pairs grow fast)
     SESSION_MIN_POINTS = 15  # 5-minute returns one session needs for its own R (locked stretches leave fewer)
 
     async def linkage_payload(d: date, members: list[dict]) -> dict:
@@ -527,6 +531,7 @@ def create_app(
         coarse: set[str] = set()  # members whose peak time is only known to 5 minutes
         prev = {m["code"]: m.get("prev_close") for m in members}
         race: dict[str, list] = {c: [] for c in codes}  # the shown day minute by minute
+        minute: dict[str, list] = {}  # the shown day's 1-minute bars (for the 資金一致性 evidence)
 
         def note(err: str) -> None:
             if err and err not in notes:
@@ -565,6 +570,7 @@ def create_app(
                         note(err)
                         mb = align_bars(mb, m) if mb else mb
                         if mb:
+                            minute[c] = mb
                             peaks[c] = peak_minute_from_bars(mb)
                             race[c] = race_points([(x[0], x[1], x[2], x[3]) for x in mb], prev[c])
                         else:
@@ -573,6 +579,10 @@ def create_app(
             if yahoo_sessions:
                 await asyncio.gather(*(one(m) for m in members))
             benchmarks = await index_race(http, d)
+            index_closes: dict[str, dict[date, dict]] = {}  # market → session → bucket → close
+            for sym, (_, market) in INDEX_SYMBOLS.items():
+                got, err = await bars_for(http, sym, market, sessions)
+                index_closes[market] = {s: {int(x[0][:2]) * 12 + int(x[0][3:5]) // 5 - 108: x[3] for x in got.get(s, [])} for s in sessions}
         axis = list(range(0, 55))
         rows_by_session = {s: {r["code"]: r for r in rs} for s, rs in (await asyncio.to_thread(store.rows, sessions)).items()}
         series = []
@@ -584,6 +594,15 @@ def create_app(
                 r.extend(returns(closes, axis, locked_level(closes, rows_by_session.get(s, {}).get(c))))
             series.append(r)
         matrix, r_intraday = pair_matrix(series, min_points=20)
+        # 資金一致性: R once each stock's index (大盤 for 上市, 櫃買 for 上櫃) is taken out, and 1-minute evidence
+        index_series = {mk: [x for s in sessions for x in returns(index_closes.get(mk, {}).get(s, {}), axis)] for mk in index_closes}
+        excess = excess_matrix(series, [index_series.get(m["market"]) for m in members])
+        top = codes[:EVIDENCE_MINUTE_MAX]
+
+        def minute_pairs() -> dict:
+            return {f"{a},{b}": minute_evidence(minute.get(a), minute.get(b)) for i, a in enumerate(top) for b in top[i + 1:]}
+
+        minute_ev = await asyncio.to_thread(minute_pairs)
         # the same R per session (今日／昨日／前日), for the 🔗 交集: one session has 54 returns at most
         step = len(axis) - 1
         by_session = [
@@ -620,6 +639,7 @@ def create_app(
             "leader_lag_min": lag,
             "benchmarks": benchmarks,
             "daily_k": k5,
+            "evidence": {"excess": excess, "minute": minute_ev},
             "benchmark_k": {code: index_k5.get(market, []) for code, market in markets.items()},
             "verdict": {"daily": verdict_r(daily.get("r20")), "intraday": verdict_r(r_intraday, INTRADAY_HIGH_R, INTRADAY_LOW_R), "timing": verdict_timing(std)},
             "notes": notes,
@@ -913,6 +933,7 @@ def create_app(
         r = getattr(app.state, "relations", None)
         return r.status() if r else {"running": False, "stored": len(app.state.history.relation_fetched())}
 
+    BASELINE_STOCKS = 60  # cached stocks per 漲幅 bucket for the intraday baseline
     PAIR_DAYS = 20  # 同漲同跌 over this many trading days
     PAIR_FINDER_DAYS = 5  # N results of the latest this many days
 
@@ -933,6 +954,48 @@ def create_app(
             found = store.finder_any(store.trading_dates(up_to=d, limit=PAIR_FINDER_DAYS))
             news_dates = [x for x in store.news_dates_sorted(up_to=d, limit=3) if (d - x).days <= NEWS_THEME_DAYS]
             pairs = pair_extras(wanted, rows, groupings, pct, found, [store.news_day(x) for x in news_dates])
+            # 資金一致性: random pairs of the same day and 漲幅 bucket as the baseline, and chip sync
+            all_pct = {x: {r["code"]: r["change_pct"] for r in rs} for x, rs in store.change_rows(dates).items()}
+            stock_rows = [r for r in rows.values() if r.get("kind") == "stock"]
+            daily_series = {r["code"]: [all_pct[x].get(r["code"]) for x in dates] for r in stock_rows}
+            sessions = sorted(store.trading_dates(up_to=d, limit=3))
+            axis = list(range(0, 55))
+
+            def intraday_series(code: str) -> list | None:
+                got = store.yahoo_bars(code, sessions)
+                if len(got) < len(sessions):
+                    return None
+                return [x for s in sessions for x in returns({int(b[0][:2]) * 12 + int(b[0][3:5]) // 5 - 108: b[3] for b in got[s]}, axis)]
+
+            trust_days = store.trading_dates(up_to=d, limit=10)
+            trust = store.inst_trust(trust_days, wanted)
+            inst_today = store.inst_net([d], wanted).get(d, {})
+            margin_today = store.margin([d], wanted).get(d, {})
+            pools: dict[int, dict] = {}
+            for p in pairs:
+                a, b = p["a"], p["b"]
+                mean = [rows[c]["change_pct"] for c in (a, b) if c in rows and rows[c].get("change_pct") is not None]
+                bkt = bucket_of(sum(mean) / len(mean) if mean else None)
+                same = [r["code"] for r in stock_rows if bucket_of(r.get("change_pct")) == bkt]
+                da, db = daily_series.get(a), daily_series.get(b)
+                r_daily = pearson(*zip(*[(x, y) for x, y in zip(da, db) if x is not None and y is not None])) if da and db else None
+                p["baseline_daily"] = percentile_of(r_daily, {c: daily_series[c] for c in same}, {a, b}, f"{d}{a}{b}d") if r_daily is not None else None
+                if bkt not in pools:  # a few dozen cached stocks per bucket: no fetching for the baseline
+                    rnd = random.Random(f"{d}{bkt}")
+                    picked = rnd.sample(same, min(len(same), BASELINE_STOCKS * 3))
+                    pool = {}
+                    for c in picked:
+                        s_ = intraday_series(c)
+                        if s_ is not None:
+                            pool[c] = s_
+                        if len(pool) >= BASELINE_STOCKS:
+                            break
+                    pools[bkt] = pool
+                ia, ib = intraday_series(a), intraday_series(b)
+                pts = [(x, y) for x, y in zip(ia or [], ib or []) if x is not None and y is not None]
+                r_intra = pearson([x for x, _ in pts], [y for _, y in pts]) if len(pts) >= 20 else None
+                p["baseline_intraday"] = percentile_of(r_intra, pools[bkt], {a, b}, f"{d}{a}{b}i", min_points=20)
+                p["chips"] = chip_sync(a, b, trust, inst_today, margin_today)
             g = relation_graph()
             for p in pairs:
                 p["relations"] = [edge_view(e, g["names"]) for e in g["by_pair"].get(frozenset((p["a"], p["b"])), [])]

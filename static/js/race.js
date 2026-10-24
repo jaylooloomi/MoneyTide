@@ -8,6 +8,7 @@ import { PICK_COLORS, mountIntraday, nextPicks } from './intradaychart.js';
 import { colorFor, escapeHtml, fmtPct, limitTag } from './transform.js';
 import { k5CardHtml, k5Svg, k5Title } from './k5.js';
 import { relationsHtml } from './relations.js';
+import { evidenceHtml, evidenceItems } from './evidence.js';
 
 export const RACE_END = 270; // minutes after 09:00 → 13:30
 export const PEAK_END = 240; // the intraday high is taken over 09:00–13:00
@@ -166,6 +167,8 @@ export function pairFacts(d, frames, a, b, m) {
     lockA: A.lock, lockB: B.lock, firstLock: first(A.lock, B.lock),
     nowA: A.now, nowB: B.now, diff: A.now !== null && B.now !== null ? A.now - B.now : null,
     instA: member(a).inst_net ?? null, instB: member(b).inst_net ?? null,
+    // 資金一致性 from the payload: R after the index, and the 1-minute pair stats (either key order)
+    ev: { excess: cell(d.evidence?.excess), minute: d.evidence?.minute?.[`${a},${b}`] ?? d.evidence?.minute?.[`${b},${a}`] ?? null },
   };
 }
 
@@ -228,7 +231,7 @@ export function pairCardHtml(f, ext, name, color) {
       row('共同題材', ext.themes.length ? ext.themes.map((t) => `📰 ${escapeHtml(t)}`).join('、') : '<span class="muted">沒有</span>', '近 3 個新聞日，兩檔都被同一個題材的新聞點名') +
       row('🏢 持股關係', ext.relations?.length || ext.group ? relationsHtml(ext.relations, ext.group) : '<span class="muted">沒有（或還沒抓到這兩檔的轉投資／董監資料）</span>', '轉投資、法人董監（MoneyDJ／公開資訊觀測站），以及由持股 ≥ 20%（權益法）或派任董監串起來的集團');
   }
-  return `<table class="rt-pair">
+  return `${evidenceHtml(evidenceItems(f, ext, f.ev))}<table class="rt-pair">
     ${row('日相關', `R20 ${rTag(f.r20, 0.7, 0.3)}　R60 ${rTag(f.r60, 0.7, 0.3)}`, '近 20／60 個交易日日漲跌幅的相關係數')}
     ${row('分時相關', `R ${rTag(f.ri, 0.5, 0.2)} <small class="muted">近 3 日合計</small>${riDaysHtml(f.riDays)}`, '5 分 K 報酬的相關係數；鎖漲停的平線不計，單日少於 15 個點時顯示 —')}
     ${row('最高點', `${peak}${f.dayPeakGap === null ? '' : `<br><small class="muted">全天（09:00–13:00，N 用的）：</small>${n(f.a)} ${fmtClock(f.dayPeakA)}／${n(f.b)} ${fmtClock(f.dayPeakB)}，差 <b class="${f.dayPeakGap <= 10 ? 'up' : ''}">${f.dayPeakGap}</b> 分`}`, '第一行：到播放頭為止的最高點；第二行：整天（13:00 之前）的最高點，N 的「高點差」篩選用的是這個')}
@@ -256,12 +259,18 @@ export function pairTableHtml(list, extOf, name, color, open) {
         f.peakGap === null ? '—' : `${f.peakGap} 分`,
         ext ? (ext.groups.length ? escapeHtml(ext.groups.map((g) => g.group).join('、')) : '—') : '…',
         ext ? (ext.finder.length ? `🔁 ${new Set(ext.finder.map((h) => h.date)).size}` : '—') : '…',
+        (() => {
+          const items = evidenceItems(f, ext, f.ev);
+          const yes = items.filter((x) => x.ok === true).length;
+          const known = items.filter((x) => x.ok !== null).length;
+          return ext ? `<b class="${yes >= Math.max(1, known * 0.6) ? 'up' : ''}">${yes}</b>/${known}` : '…';
+        })(),
       ];
       const detail = key === open ? `<tr class="rt-pair-open"><td colspan="${cells.length}">${pairCardHtml(f, ext, name, color)}</td></tr>` : '';
       return `<tr data-pair="${escapeHtml(key)}" class="${key === open ? 'on' : ''}" style="cursor:pointer" title="點一下看這組的完整交集">${cells.map((c, k) => `<td${k === 0 || k === 6 ? ' class="l"' : ''}>${c}</td>`).join('')}</tr>${detail}`;
     })
     .join('');
-  return `<table class="grid rt-pairs-t"><thead><tr><th class="l">組合</th><th title="近 20 日日相關">R20</th><th>R60</th><th title="近 3 日 5 分 K">分時 R</th><th title="近 20 日同漲同跌天數">同漲跌</th><th title="日內最高點時間差（到播放頭）">高點差</th><th class="l">共同族群</th><th title="近 5 天 N 找到同一群的天數">N</th></tr></thead><tbody>${body}</tbody></table>`;
+  return `<table class="grid rt-pairs-t"><thead><tr><th class="l">組合</th><th title="近 20 日日相關">R20</th><th>R60</th><th title="近 3 日 5 分 K">分時 R</th><th title="近 20 日同漲同跌天數">同漲跌</th><th title="日內最高點時間差（到播放頭）">高點差</th><th class="l">共同族群</th><th title="近 5 天 N 找到同一群的天數">N</th><th title="資金一致性證據：支持的項數／有資料的項數">證據</th></tr></thead><tbody>${body}</tbody></table>`;
 }
 
 /** 「　法人 +1,234 張」 for a row's tooltip from 三大法人 net shares; '' when the day has none yet. */
