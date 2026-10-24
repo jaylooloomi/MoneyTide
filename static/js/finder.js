@@ -232,6 +232,10 @@ export function factorText(g) {
 
 const KINDS = ['已知族群', '已知族群的延伸', '跨族群新組合'];
 
+export const BIG_MIN = 3; // 「只看 3 檔以上」: more than a pair
+/** The 只看 3 檔以上 toggle: on → only groups of BIG_MIN members or more. */
+export const isBig = (g, on) => !on || g.members.length >= BIG_MIN;
+
 // the chips' tooltips: what each one keeps
 const GROUPING_TIPS = {
   官方產業: '證交所／櫃買中心公布的產業別',
@@ -310,9 +314,9 @@ export function filterHtml(d, current) {
  * and the thresholds used, so runs with different settings can be compared in Excel.
  * → [file name, header, rows] or null when nothing is shown.
  */
-export function csvExport(d, filter = 'all') {
+export function csvExport(d, filter = 'all', big = false) {
   if (!d?.groups?.length) return null;
-  const groups = d.groups.map((g, i) => [g, i + 1]).filter(([g]) => matchesFilter(g, filter, d.method));
+  const groups = d.groups.map((g, i) => [g, i + 1]).filter(([g]) => matchesFilter(g, filter, d.method) && isBig(g, big));
   if (!groups.length) return null;
   const p = d.params || {};
   const cond =
@@ -454,7 +458,7 @@ export function mountFinderPanel(container, { onStock, onResult }) {
   const sec = document.createElement('section');
   sec.id = 'hFinderPanel';
   sec.className = 'panel hN';
-  const pref = { method: 'known', params: { ...DEFAULTS }, filter: { known: 'all', new: 'all' }, expanded: false, byEvidence: false };
+  const pref = { method: 'known', params: { ...DEFAULTS }, filter: { known: 'all', new: 'all' }, expanded: false, byEvidence: false, big: false };
   try {
     const saved = JSON.parse(localStorage.getItem(PREF_KEY) || '{}');
     if (saved.method in METHODS) pref.method = saved.method;
@@ -466,6 +470,7 @@ export function mountFinderPanel(container, { onStock, onResult }) {
     Object.assign(pref.filter, saved.filter || {});
     pref.expanded = !!saved.expanded;
     pref.byEvidence = !!saved.byEvidence;
+    pref.big = !!saved.big;
   } catch {
     /* defaults */
   }
@@ -589,7 +594,7 @@ export function mountFinderPanel(container, { onStock, onResult }) {
   });
   sec.querySelector('#hFinderRun').addEventListener('click', () => load(true));
   sec.querySelector('#hFinderCsv').addEventListener('click', () => {
-    const out = csvExport(state.data, state.data ? shownFilter(state.data, pref.filter[state.data.method]) : 'all');
+    const out = csvExport(state.data, state.data ? shownFilter(state.data, pref.filter[state.data.method]) : 'all', pref.big);
     if (!out) return;
     const a = document.createElement('a');
     a.href = URL.createObjectURL(new Blob([toCsv(out[1], out[2])], { type: 'text/csv;charset=utf-8' }));
@@ -642,11 +647,13 @@ export function mountFinderPanel(container, { onStock, onResult }) {
     // the card keeps its index in data.groups (clicks look it up); 依證據 only changes the order shown
     const order = data.groups.map((g, i) => [g, i]);
     if (pref.byEvidence) order.sort((x, y) => evidenceRank(y[0]) - evidenceRank(x[0]) || x[1] - y[1]);
-    const cards = order.map(([g, i]) => (matchesFilter(g, f, data.method) ? cardHtml(g, i) : '')).join('');
+    const cards = order.map(([g, i]) => (matchesFilter(g, f, data.method) && isBig(g, pref.big) ? cardHtml(g, i) : '')).join('');
     const sortBtn = data.groups.some((g) => g.evidence)
       ? `<button type="button" class="icon wide fd-sort${pref.byEvidence ? ' on' : ''}" title="依資金一致性證據（支持項數）由多到少排">${pref.byEvidence ? '✓ ' : ''}依證據排序</button>`
       : '';
-    body.innerHTML = `<div class="fd-filter-row">${filterHtml(data, f)}${sortBtn}</div><div class="fd-cards">${cards}</div>
+    const nBig = data.groups.filter((g) => matchesFilter(g, f, data.method) && isBig(g, true)).length;
+    const bigBtn = `<button type="button" class="icon wide fd-big${pref.big ? ' on' : ''}" title="只顯示 ${BIG_MIN} 檔以上一起動的群組（目前的篩選下有 ${nBig} 組）：兩檔一起動比較容易是巧合，越多檔同步越像同一筆資金">${pref.big ? '✓ ' : ''}只看 ${BIG_MIN} 檔以上 <small>${nBig}</small></button>`;
+    body.innerHTML = `<div class="fd-filter-row">${filterHtml(data, f)}${sortBtn}${bigBtn}</div><div class="fd-cards">${cards}</div>
       <div class="fd-more-row"><button type="button" class="icon wide fd-more" hidden></button><span class="hint">點卡片看這群股票的連動動畫與走勢（出現在卡片區下方）</span></div>`;
     fitRows();
     closeDetail();
@@ -671,6 +678,13 @@ export function mountFinderPanel(container, { onStock, onResult }) {
     pref.expanded = !pref.expanded;
     save();
     fitRows();
+  }, true);
+  body.addEventListener('click', (e) => {
+    if (!e.target.closest('.fd-big') || !state.data) return;
+    e.stopPropagation();
+    pref.big = !pref.big;
+    save();
+    drawCards();
   }, true);
   body.addEventListener('click', (e) => {
     if (!e.target.closest('.fd-sort') || !state.data) return;
