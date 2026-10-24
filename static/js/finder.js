@@ -11,7 +11,10 @@ import { colorFor, escapeHtml, fmtPct, fmtTurnover, toCsv } from './transform.js
 
 export const METHODS = { known: '找法1 · 已知分類', new: '找法2 · 排行候選' };
 const KIND_COLOR = { 已知族群: '#2c4a6b', 已知族群的延伸: '#6b5a1e', 跨族群新組合: '#b8301a' };
-const GROUPINGS = { industry: '官方產業', custom: '自訂族群', concept: '概念股', chain: '細產業', news: '新聞族群' };
+const GROUPINGS = { industry: '官方產業', custom: '自訂族群', concept: '概念股', chain: '細產業', news: '新聞族群', group: '集團' };
+// on unless ticked otherwise: 集團 is offered, not on by default (the precomputed results use the server's
+// default groupings, and a new one in the list would be another cache key for every day)
+export const DEFAULT_GROUPINGS = ['industry', 'custom', 'concept', 'chain', 'news'];
 const SOURCES = { gain: '漲幅', turnover: '週轉率', share_z: '比重暴增', gap: '開盤跳空', vol_ratio: '量比' };
 // the label the server puts in g.pool for each ranking (finder.candidate_pool)
 const POOL_LABELS = { gain: '漲幅', turnover: '週轉率', share_z: '比重暴增', gap: '跳空', vol_ratio: '量比' };
@@ -457,7 +460,7 @@ const DEFAULTS = {
   daily_r: 0.8, daily_window: 20, new_daily_r: 0.8, new_daily_window: 10, pool_top: 50,
   intraday_basis: 'sector', intraday_r: 0.5, excess_r: 0.4, intraday_sessions: 3, peak_gap: 8, start_gap: '', require_burst: false, dense: 0.7, min_size: 2,
   vol_ratio_window: 5,
-  groupings: Object.keys(GROUPINGS), pool_sources: Object.keys(SOURCES),
+  groupings: DEFAULT_GROUPINGS, pool_sources: Object.keys(SOURCES),
 };
 
 export function mountFinderPanel(container, { onStock, onResult }) {

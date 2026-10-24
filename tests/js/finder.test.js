@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { PRESETS, BIG_MIN, condText, isBig, factorText, evidenceRank, rowsHeight, themeNewsHtml, cardHtml, digestText, shownFilter, finderMarkIndex, finderMarkTitle, csvExport, defaultGroupName, filterHtml, funnelText, presetOf, filterOptions, matchesFilter, progressView, queryOf, statsText } from '../../static/js/finder.js';
+import { PRESETS, BIG_MIN, DEFAULT_GROUPINGS, condText, isBig, factorText, evidenceRank, rowsHeight, themeNewsHtml, cardHtml, digestText, shownFilter, finderMarkIndex, finderMarkTitle, csvExport, defaultGroupName, filterHtml, funnelText, presetOf, filterOptions, matchesFilter, progressView, queryOf, statsText } from '../../static/js/finder.js';
 
 test('queryOf sends only the fields of the chosen method; blank 起漲差 means not required', () => {
   const p = { daily_r: 0.75, daily_window: 20, new_daily_r: 0.85, pool_top: 30, intraday_r: 0.5, peak_gap: 8, start_gap: '', require_burst: true, groupings: ['custom', 'news'], pool_sources: ['gain'] };
@@ -301,4 +301,9 @@ test('condText: the 條件 in a few words, for 盤後報告', () => {
   const p = { daily_r: 0.8, new_daily_r: 0.8, intraday_basis: 'sector', excess_r: 0.4, intraday_r: 0.5, peak_gap: 8, dense: 0.7 };
   assert.equal(condText(p), '日 R ≥ 0.8（找法2 0.8）、扣大盤＋類股後分時 R ≥ 0.4、高點差 ≤ 8 分、群內 0.7');
   assert.match(condText({ ...p, intraday_basis: 'raw' }), /、分時 R ≥ 0\.5、/);
+});
+
+test('集團 is offered to 找法1 but off by default (the precomputed results keep their key)', () => {
+  assert.deepEqual(DEFAULT_GROUPINGS, ['industry', 'custom', 'concept', 'chain', 'news']);
+  assert.match(queryOf('known', { groupings: [...DEFAULT_GROUPINGS, 'group'] }), /groupings=industry%2Ccustom%2Cconcept%2Cchain%2Cnews%2Cgroup/);
 });
