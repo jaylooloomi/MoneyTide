@@ -137,6 +137,12 @@ export function cardHtml(g, i) {
       : g.matches?.length
         ? `最接近 ${escapeHtml(g.matches[0].label)}：${escapeHtml(g.matches[0].group)}（${Math.round(g.matches[0].overlap * 100)}%）`
         : '對不到已知分類';
+  // the title is cut with … on narrow cards: the tooltip has it in full (and every close grouping)
+  const tip = g.sources?.length
+    ? title
+    : g.matches?.length
+      ? g.matches.map((x) => `最接近 ${escapeHtml(x.label)}：${escapeHtml(x.group)}（重疊 ${Math.round(x.overlap * 100)}%）`).join('\n')
+      : title;
   const outside = g.matches?.[0] && g.matches[0].overlap < 1 ? new Set(g.matches[0].outside) : new Set();
   const chips = g.members
     .map((m) => {
@@ -182,7 +188,7 @@ export function cardHtml(g, i) {
       : '';
   return `<div class="fd-card" data-i="${i}">
     <div class="fd-top"><span class="link-badge" style="background:${KIND_COLOR[g.kind] || '#3a3e48'}">${escapeHtml(g.kind)}</span>
-      <span class="fd-title">${title}</span>${seen}<span class="muted">${g.members.length} 檔</span>
+      <span class="fd-title" title="${tip}">${title}</span>${seen}<span class="muted">${g.members.length} 檔</span>
       <button type="button" class="icon fd-save" data-save="${i}" title="把這群股票存成自訂族群，之後在 B／C／K 追蹤">＋族群</button></div>
     <div class="fd-chips">${chips}</div>${money}${inst}${margin}
     <div class="fd-facts">${facts}</div>${themes}${news}

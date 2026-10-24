@@ -125,6 +125,124 @@ export function amplitudeSoFar(frame, m) {
   return hi === null || lo === null ? null : hi - lo;
 }
 
+// ---- 🔗 交集: what two picked stocks have in common ------------------------------------------------
+
+/** K's verdict wording for a correlation (daily 0.7 / 0.3, intraday 0.5 / 0.2). */
+export function verdictOf(r, high, low) {
+  if (r === null || r === undefined) return '資料不足';
+  return r > high ? '群體圍攻' : r < low ? '單兵作戰' : '中度連動';
+}
+
+/** One pair's figures from K's data at minute m: daily / intraday R, who peaked and locked first, the
+ *  change gap and 法人. a / b are codes; d is the linkage payload, frames its raceFrames. */
+export function pairFacts(d, frames, a, b, m) {
+  const idx = new Map(d.members.map((x, i) => [x.code, i]));
+  const i = idx.get(a);
+  const j = idx.get(b);
+  const cell = (mx) => (mx && i !== undefined && j !== undefined ? mx[i]?.[j] ?? null : null);
+  const at = (c) => {
+    const f = frames[c];
+    const lock = f?.lockedAt[m] ?? null;
+    return { now: f?.values[m] ?? null, peak: f ? peakSoFar(f, m) : null, lock };
+  };
+  const A = at(a);
+  const B = at(b);
+  const first = (x, y) => (x === null && y === null ? null : y === null || (x !== null && x < y) ? a : x === y ? '' : b);
+  const pa = A.peak?.m ?? null;
+  const pb = B.peak?.m ?? null;
+  const member = (c) => d.members[idx.get(c)] || {};
+  return {
+    a, b,
+    r20: cell(d.daily?.matrix20), r60: cell(d.daily?.matrix60), ri: cell(d.intraday?.matrix),
+    peakA: pa, peakB: pb, peakGap: pa !== null && pb !== null ? Math.abs(pa - pb) : null, firstPeak: first(pa, pb),
+    lockA: A.lock, lockB: B.lock, firstLock: first(A.lock, B.lock),
+    nowA: A.now, nowB: B.now, diff: A.now !== null && B.now !== null ? A.now - B.now : null,
+    instA: member(a).inst_net ?? null, instB: member(b).inst_net ?? null,
+  };
+}
+
+const rTag = (r, high, low) => {
+  const v = verdictOf(r, high, low);
+  const cls = v === '群體圍攻' ? 'up' : v === '單兵作戰' ? 'muted' : '';
+  return `<b class="${cls}">${r === null ? '—' : r.toFixed(2)}</b> <small class="${cls}">${v}</small>`;
+};
+const lots = (net) => (net === null ? '—' : `${net > 0 ? '+' : net < 0 ? '−' : ''}${Math.abs(Math.round(net / 1000)).toLocaleString()} 張`);
+
+/** Shared groups by kind, each label once and at most `max` names per kind (the rest counted). */
+export function sharedGroupsHtml(groups, max = 3) {
+  const by = new Map();
+  for (const g of groups) by.set(g.label, [...(by.get(g.label) || []), g.group]);
+  return [...by]
+    .map(([label, names]) => `${escapeHtml(label)}：${names.slice(0, max).map((n) => escapeHtml(n)).join('、')}${names.length > max ? ` <small class="muted">等 ${names.length} 個</small>` : ''}`)
+    .join('；');
+}
+
+/** The full 交集 card of one pair: `name(code)` and `color(code)` label the two; `ext` is the server's
+ *  /api/history/pairs entry (null while loading). */
+export function pairCardHtml(f, ext, name, color) {
+  const n = (c) => `<b style="color:${color(c)}">${escapeHtml(name(c))}</b>`;
+  const peak =
+    f.peakA === null || f.peakB === null
+      ? '—'
+      : f.firstPeak === ''
+        ? `同時 ${fmtClock(f.peakA)} 到最高點`
+        : `${n(f.firstPeak)} ${fmtClock(Math.min(f.peakA, f.peakB))} 先到，${n(f.firstPeak === f.a ? f.b : f.a)} 晚 <b>${f.peakGap}</b> 分 <small class="${f.peakGap <= 10 ? 'up' : f.peakGap >= 60 ? 'muted' : ''}">${f.peakGap <= 10 ? '高度同步' : f.peakGap >= 60 ? '時間錯落' : ''}</small>`;
+  const lockOne = (c, at) => (at === null ? `${n(c)} 未鎖` : `${n(c)} ${fmtClock(at)} 鎖`);
+  const lock = f.lockA === null && f.lockB === null ? '兩檔都沒鎖漲停' : `${lockOne(f.a, f.lockA)}；${lockOne(f.b, f.lockB)}`;
+  const strong =
+    f.diff === null ? '—' : `${n(f.a)} ${fmtPct(f.nowA)} vs ${n(f.b)} ${fmtPct(f.nowB)}（${n(f.diff >= 0 ? f.a : f.b)} 強 ${Math.abs(f.diff).toFixed(2)}%）`;
+  const instSame = f.instA !== null && f.instB !== null && f.instA * f.instB > 0;
+  const inst =
+    f.instA === null && f.instB === null
+      ? '當天法人還沒公布'
+      : `${n(f.a)} ${lots(f.instA)}／${n(f.b)} ${lots(f.instB)}${f.instA !== null && f.instB !== null ? (instSame ? '（同方向）' : '（方向相反）') : ''}`;
+  const row = (k, v, tip = '') => `<tr${tip ? ` title="${escapeHtml(tip)}"` : ''}><td class="muted">${k}</td><td>${v}</td></tr>`;
+  let more = '<tr><td colspan="2" class="hint">同漲同跌、共同族群、N 紀錄、共同題材載入中…</td></tr>';
+  if (ext) {
+    const sd = ext.same_dir;
+    const pct = sd.total ? Math.round((sd.same / sd.total) * 100) : null;
+    more =
+      row('同漲同跌', sd.total ? `<b>${sd.same}</b>／${sd.total} 天 <small class="${pct >= 75 ? 'up' : pct <= 50 ? 'muted' : ''}">${pct}%</small>` : '—', '近 20 個交易日兩檔同一天都漲或都跌的天數') +
+      row('共同族群', ext.groups.length ? sharedGroupsHtml(ext.groups) : '<span class="muted">沒有</span>', ext.groups.map((g) => `${g.label}：${g.group}`).join('\n')) +
+      row('N 找過', ext.finder.length ? `近 5 天 <b>${new Set(ext.finder.map((h) => h.date)).size}</b> 天：${ext.finder.map((h) => `${h.date.slice(5)}${h.method === 'new' ? '（找法2）' : ''}`).join('、')} 🔁` : '<span class="muted">近 5 天沒有</span>', '近 5 個交易日 N 存下的結果裡，這兩檔被找成同一群') +
+      row('共同題材', ext.themes.length ? ext.themes.map((t) => `📰 ${escapeHtml(t)}`).join('、') : '<span class="muted">沒有</span>', '近 3 個新聞日，兩檔都被同一個題材的新聞點名');
+  }
+  return `<table class="rt-pair">
+    ${row('日相關', `R20 ${rTag(f.r20, 0.7, 0.3)}　R60 ${rTag(f.r60, 0.7, 0.3)}`, '近 20／60 個交易日日漲跌幅的相關係數')}
+    ${row('分時相關', `R ${rTag(f.ri, 0.5, 0.2)} <small class="muted">近 3 日 5 分 K</small>`)}
+    ${row('最高點', peak, '到播放頭為止（13:00 之前）的日內最高點')}
+    ${row('鎖漲停', lock)}
+    ${row('當下強弱', strong)}
+    ${row('法人', inst)}
+    ${more}
+  </table>`;
+}
+
+/** Three or more picked: one row per pair, the most correlated (R20) first; `open` = the expanded pair key. */
+export function pairTableHtml(list, extOf, name, color, open) {
+  const sorted = [...list].sort((x, y) => (y.f.r20 ?? -2) - (x.f.r20 ?? -2));
+  const fmt = (r) => (r === null ? '—' : r.toFixed(2));
+  const body = sorted
+    .map(({ key, f }) => {
+      const ext = extOf(key);
+      const sd = ext?.same_dir;
+      const cells = [
+        `<b style="color:${color(f.a)}">${escapeHtml(name(f.a))}</b> × <b style="color:${color(f.b)}">${escapeHtml(name(f.b))}</b>`,
+        `<span class="${f.r20 > 0.7 ? 'up' : f.r20 < 0.3 ? 'muted' : ''}">${fmt(f.r20)}</span>`,
+        fmt(f.r60),
+        `<span class="${f.ri > 0.5 ? 'up' : f.ri < 0.2 ? 'muted' : ''}">${fmt(f.ri)}</span>`,
+        sd ? (sd.total ? `${sd.same}/${sd.total}` : '—') : '…',
+        f.peakGap === null ? '—' : `${f.peakGap} 分`,
+        ext ? (ext.groups.length ? escapeHtml(ext.groups.map((g) => g.group).join('、')) : '—') : '…',
+        ext ? (ext.finder.length ? `🔁 ${new Set(ext.finder.map((h) => h.date)).size}` : '—') : '…',
+      ];
+      const detail = key === open ? `<tr class="rt-pair-open"><td colspan="${cells.length}">${pairCardHtml(f, ext, name, color)}</td></tr>` : '';
+      return `<tr data-pair="${escapeHtml(key)}" class="${key === open ? 'on' : ''}" style="cursor:pointer" title="點一下看這組的完整交集">${cells.map((c, k) => `<td${k === 0 || k === 6 ? ' class="l"' : ''}>${c}</td>`).join('')}</tr>${detail}`;
+    })
+    .join('');
+  return `<table class="grid rt-pairs-t"><thead><tr><th class="l">組合</th><th title="近 20 日日相關">R20</th><th>R60</th><th title="近 3 日 5 分 K">分時 R</th><th title="近 20 日同漲同跌天數">同漲跌</th><th title="日內最高點時間差（到播放頭）">高點差</th><th class="l">共同族群</th><th title="近 5 天 N 找到同一群的天數">N</th></tr></thead><tbody>${body}</tbody></table>`;
+}
+
 /** 「　法人 +1,234 張」 for a row's tooltip from 三大法人 net shares; '' when the day has none yet. */
 export function instTip(net) {
   if (net == null) return '';
@@ -231,7 +349,7 @@ export function mountRace(box, d, { onStock } = {}) {
           })
           .join('')}
       </div>
-    </div></div><div class="race-side"></div></div>`;
+    </div><div class="rt-pairs" hidden></div></div><div class="race-side"></div></div>`;
   const chart = mountIntraday(box.querySelector('.race-side'), { date: d.date, onCard: onStock, benchmarks: benches });
   const rows = new Map([...box.querySelectorAll('.rt-row[data-code]')].map((el) => [el.dataset.code, el]));
   const benchRows = [...box.querySelectorAll('.rt-row.bench')].map((el) => [el, benchFrames[el.dataset.bench]]);
@@ -239,7 +357,50 @@ export function mountRace(box, d, { onStock } = {}) {
   const seek = box.querySelector('.race-seek');
   const head = box.querySelector('.rt-head');
   const playBtn = box.querySelector('[data-act="play"]');
-  const state = { m: RACE_END, timer: null, picked: [] };
+  const state = { m: RACE_END, timer: null, picked: [], pairOpen: null };
+  // 🔗 交集 of the picked stocks: K's own figures now, the server's extras (同漲同跌, groups, N, themes) when they arrive
+  const pairBox = box.querySelector('.rt-pairs');
+  const pairExt = new Map(); // "a,b" (picked order) → the server's pair entry
+  const pairAsked = new Set();
+  const nameOf = (c) => byCode.get(c)?.name || c;
+  const colorOf = (c) => PICK_COLORS[state.picked.indexOf(c) % PICK_COLORS.length];
+  function pairKeys() {
+    const out = [];
+    for (let i = 0; i < state.picked.length; i++) for (let j = i + 1; j < state.picked.length; j++) out.push([state.picked[i], state.picked[j]]);
+    return out;
+  }
+  function askPairs() {
+    const key = state.picked.join(',');
+    if (state.picked.length < 2 || pairAsked.has(key)) return;
+    pairAsked.add(key);
+    fetch(`/api/history/pairs?date=${encodeURIComponent(d.date)}&codes=${encodeURIComponent(key)}`, { cache: 'no-store' })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((res) => {
+        for (const p of res?.pairs || []) {
+          pairExt.set(`${p.a},${p.b}`, p);
+          pairExt.set(`${p.b},${p.a}`, p);
+        }
+        drawPairs();
+      })
+      .catch(() => {});
+  }
+  function drawPairs() {
+    pairBox.hidden = state.picked.length < 2;
+    if (pairBox.hidden) return;
+    const list = pairKeys().map(([a, b]) => ({ key: `${a},${b}`, f: pairFacts(d, frames, a, b, state.m) }));
+    const head = `<div class="rt-pairs-h">🔗 交集 <small class="muted">${list.length === 1 ? '兩檔之間的關係（跟著播放頭）' : `${list.length} 組，日相關高的在上；點一列看完整內容`}</small></div>`;
+    pairBox.innerHTML =
+      head +
+      (list.length === 1
+        ? pairCardHtml(list[0].f, pairExt.get(list[0].key) || null, nameOf, colorOf)
+        : pairTableHtml(list, (k) => pairExt.get(k) || null, nameOf, colorOf, state.pairOpen));
+  }
+  pairBox.addEventListener('click', (e) => {
+    const tr = e.target.closest('tr[data-pair]');
+    if (!tr) return;
+    state.pairOpen = state.pairOpen === tr.dataset.pair ? null : tr.dataset.pair;
+    drawPairs();
+  });
   // a plain click shows one stock; Ctrl / ⌘ / Shift + click adds more to compare (up to MAX_PICKS)
   function pick(code, additive = false) {
     state.picked = nextPicks(state.picked, code, additive);
@@ -249,6 +410,8 @@ export function mountRace(box, d, { onStock } = {}) {
       el.style.outlineColor = i >= 0 && state.picked.length > 1 ? `${PICK_COLORS[i % PICK_COLORS.length]}aa` : '';
     }
     chart.show(state.picked.map((c) => ({ code: c, name: byCode.get(c)?.name }))).then(() => chart.sync(state.m));
+    askPairs();
+    drawPairs();
   }
 
   function show(m) {
@@ -257,6 +420,7 @@ export function mountRace(box, d, { onStock } = {}) {
     seek.value = String(m);
     head.style.left = `${pctX(m)}%`;
     chart.sync(m);
+    if (state.picked.length > 1) drawPairs(); // 最高點／鎖漲停／強弱 follow the playhead
     for (const [el, f] of benchRows) paint(el, f, m);
     raceOrder(codes, frames, m).forEach((c, i) => {
       const el = rows.get(c);

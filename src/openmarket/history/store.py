@@ -654,6 +654,18 @@ class HistoryStore:
                 (day.isoformat(), method, params, json.dumps(result, ensure_ascii=False), datetime.now().astimezone().isoformat()),
             )
 
+    def finder_any(self, days: list[date]) -> list[tuple[str, str, dict]]:
+        """Every stored N result on `days`, whatever its thresholds: (date, method, result)."""
+        import json
+
+        if not days:
+            return []
+        with self._conn() as c:
+            rows = c.execute(
+                f"SELECT date, method, result FROM finder_result WHERE date IN ({', '.join('?' for _ in days)})", [d.isoformat() for d in days]
+            ).fetchall()
+        return [(r["date"], r["method"], json.loads(r["result"])) for r in rows]
+
     def finder(self, day: date, method: str, params: str) -> dict | None:
         import json
 

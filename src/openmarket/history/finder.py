@@ -628,14 +628,7 @@ def news_themes(groups: list[dict], news_days: list[dict], dates: list[str] | No
     """「為什麼在動」: the news keywords (of the stored news days, {term: {codes: {code: n}}}) that named
     each member, most mentions first. Adds member `themes` (top THEMES_PER_STOCK) and group `themes`
     [{term, count}] (how many members a keyword named, top THEMES_PER_GROUP) to copies of the groups."""
-    by_code: dict[str, dict[str, int]] = {}
-    for day in news_days:
-        for term, info in day.items():
-            if not THEME_TERM.match(term):  # headline-parsing leftovers such as '音量🔊'
-                continue
-            for code, n in (info.get("codes") or {}).items():
-                by_code.setdefault(code, {})
-                by_code[code][term] = by_code[code].get(term, 0) + n
+    by_code = themes_by_code(news_days)
     out = []
     for g in groups:
         members = []
@@ -649,6 +642,59 @@ def news_themes(groups: list[dict], news_days: list[dict], dates: list[str] | No
         names = [m["name"] for m in g["members"] if m.get("name")]
         themes = [{"term": t, "count": n, "titles": theme_titles(t, news_days, dates, names)} for t, n in top]
         out.append({**g, "members": members, "themes": themes})
+    return out
+
+
+def themes_by_code(news_days: list[dict]) -> dict[str, dict[str, int]]:
+    """{code: {term: mentions}} over the stored news days (headline leftovers such as '音量🔊' dropped)."""
+    by_code: dict[str, dict[str, int]] = {}
+    for day in news_days:
+        for term, info in day.items():
+            if not THEME_TERM.match(term):
+                continue
+            for code, n in (info.get("codes") or {}).items():
+                by_code.setdefault(code, {})
+                by_code[code][term] = by_code[code].get(term, 0) + n
+    return by_code
+
+
+def pair_extras(codes: list[str], rows_by_code: Mapping[str, dict], groupings: Mapping[str, Callable],
+                pct_by_day: Mapping[date, Mapping[str, float]], found: list[tuple[str, str, dict]],
+                news_days: list[dict]) -> list[dict]:
+    """「交集」of every pair of `codes` beyond what K already has: on how many of the days in
+    `pct_by_day` both moved the same way (both up or both down), the groups they share, the days N
+    put them in one group (`found`: (date, method, stored result)), and the news themes naming both."""
+    themes = themes_by_code(news_days)
+    groups_of = {c: {(g, name) for g, fn in groupings.items() for name in (fn(rows_by_code[c]) if c in rows_by_code else [])} for c in codes}
+    in_n: dict[frozenset, list[dict]] = {}
+    for day, method, res in found:
+        for grp in res.get("groups", []):
+            members = {m["code"] for m in grp.get("members", [])}
+            for i, a in enumerate(codes):
+                for b in codes[i + 1:]:
+                    if a in members and b in members:
+                        hits = in_n.setdefault(frozenset((a, b)), [])
+                        if not any(h["date"] == day and h["method"] == method for h in hits):
+                            hits.append({"date": day, "method": method})
+    out = []
+    for i, a in enumerate(codes):
+        for b in codes[i + 1:]:
+            same = total = 0
+            for pct in pct_by_day.values():
+                x, y = pct.get(a), pct.get(b)
+                if x is None or y is None:
+                    continue
+                total += 1
+                same += (x > 0 and y > 0) or (x < 0 and y < 0)
+            shared = sorted(groups_of[a] & groups_of[b], key=lambda gn: (list(groupings).index(gn[0]), gn[1]))
+            common = set(themes.get(a, {})) & set(themes.get(b, {}))
+            out.append({
+                "a": a, "b": b,
+                "same_dir": {"same": same, "total": total},
+                "groups": [{"label": GROUPING_LABELS.get(g, g), "group": name} for g, name in shared],
+                "finder": sorted(in_n.get(frozenset((a, b)), []), key=lambda h: h["date"], reverse=True),
+                "themes": sorted(common, key=lambda t: -(themes[a][t] + themes[b][t]))[:5],
+            })
     return out
 
 

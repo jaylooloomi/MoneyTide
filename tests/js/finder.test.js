@@ -141,6 +141,8 @@ test('filter chips: 找法1 by source grouping (a group can count twice), 找法
   assert.equal(pooled.groups.filter((g) => matchesFilter(g, '@src:turnover', 'new')).length, 1);
   assert.ok(!filterOptions(pooled).some((o) => o.key === '@src:vol_ratio')); // not used in that search: no chip
   assert.match(csvExport({ ...pooled, date: '2026-10-22', groups: pooled.groups.map((g) => ({ ...g, members: [{ code: '1', name: '甲' }] })) }, '@src:gap')[0], /_開盤跳空\.csv$/);
+  const tipCard = cardHtml({ ...G, sources: [], matches: [{ label: '官方產業', group: '電子零組件業', overlap: 0.5, outside: [] }, { label: '概念股', group: '被動元件', overlap: 0.4, outside: [] }] }, 1);
+  assert.match(tipCard, /<span class="fd-title" title="最接近 官方產業：電子零組件業（重疊 50%）\n最接近 概念股：被動元件（重疊 40%）">/);
   const html = filterHtml(fresh, '跨族群新組合');
   assert.match(html, /data-filter="跨族群新組合" class="on"/);
   assert.match(html, /data-filter="已知族群的延伸" disabled/);

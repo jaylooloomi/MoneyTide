@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { RACE_END, amplitudeSoFar, fmtClock, instTip, isLimitUp, leadOf, pathPoints, peakSoFar, raceDomain, raceFrames, raceOrder } from '../../static/js/race.js';
+import { sharedGroupsHtml, pairCardHtml, pairFacts, pairTableHtml, verdictOf, RACE_END, amplitudeSoFar, fmtClock, instTip, isLimitUp, leadOf, pathPoints, peakSoFar, raceDomain, raceFrames, raceOrder } from '../../static/js/race.js';
 
 test('raceFrames forward-fills closes, remembers when a value was reached, keeps highs per minute', () => {
   const f = raceFrames({ A: [[0, 1, 2], [5, 10, 10], [6, 10, 10], [30, 9, 9.5]] }, ['A', 'B']);
@@ -86,4 +86,45 @@ test('instTip: 三大法人 net shares as 張 for a K row tooltip', () => {
   assert.equal(instTip(0), '　法人 0 張');
   assert.equal(instTip(null), '');
   assert.equal(instTip(undefined), '');
+});
+
+test('pairFacts / pairCardHtml / pairTableHtml: 交集 of two picked stocks at the playhead', () => {
+  const d = {
+    members: [{ code: 'A', name: '甲', inst_net: 2_000_000 }, { code: 'B', name: '乙', inst_net: -500_000 }, { code: 'C', name: '丙', inst_net: null }],
+    daily: { matrix20: [[1, 0.82, 0.1], [0.82, 1, 0.2], [0.1, 0.2, 1]], matrix60: [[1, 0.65, 0], [0.65, 1, 0], [0, 0, 1]] },
+    intraday: { matrix: [[1, 0.71, 0.1], [0.71, 1, 0.3], [0.1, 0.3, 1]] },
+  };
+  const frames = raceFrames({ A: [[0, 1, 1], [50, 9.9, 9.9], [55, 10, 10]], B: [[0, 2, 2], [45, 8, 8.6], [60, 8.6, 8.6]], C: [[0, -1, -1]] }, ['A', 'B', 'C'], { A: 10, B: 10, C: 10 });
+  const f = pairFacts(d, frames, 'A', 'B', 270);
+  assert.deepEqual([f.r20, f.r60, f.ri], [0.82, 0.65, 0.71]);
+  assert.deepEqual([f.peakA, f.peakB, f.peakGap, f.firstPeak], [55, 45, 10, 'B']);
+  assert.deepEqual([f.lockA, f.lockB, f.firstLock], [55, null, 'A']);
+  assert.ok(Math.abs(f.diff - 1.4) < 1e-9);
+  const early = pairFacts(d, frames, 'A', 'B', 50); // the playhead before A's lock and peak
+  assert.equal(early.lockA, null);
+  assert.equal(early.peakA, 50);
+  const name = (c) => ({ A: '甲', B: '乙', C: '丙' })[c];
+  const color = () => '#fff';
+  const html = pairCardHtml(f, { same_dir: { same: 16, total: 20 }, groups: [{ label: '自訂族群', group: '記憶體' }], finder: [{ date: '2026-10-22', method: 'known' }], themes: ['PCB'] }, name, color);
+  assert.match(html, /R20 <b class="up">0\.82<\/b> <small class="up">群體圍攻<\/small>/);
+  assert.match(html, /乙<\/b> 09:45 先到，<b[^>]*>甲<\/b> 晚 <b>10<\/b> 分 <small class="up">高度同步/);
+  assert.match(html, /甲<\/b> 09:55 鎖；<b[^>]*>乙<\/b> 未鎖/);
+  assert.match(html, /\+2,000 張／<b[^>]*>乙<\/b> −500 張（方向相反）/);
+  assert.match(html, /<b>16<\/b>／20 天 <small class="up">80%/);
+  assert.match(html, /自訂族群：記憶體/);
+  assert.match(html, /近 5 天 <b>1<\/b> 天：10-22 🔁/);
+  assert.match(html, /📰 PCB/);
+  assert.match(pairCardHtml(f, null, name, color), /載入中/);
+  assert.equal(verdictOf(0.25, 0.7, 0.3), '單兵作戰');
+  // three picked: a row per pair, highest R20 first, one expanded
+  const list = [['A', 'B'], ['A', 'C'], ['B', 'C']].map(([a, b]) => ({ key: `${a},${b}`, f: pairFacts(d, frames, a, b, 270) }));
+  const t = pairTableHtml(list, () => null, name, color, 'B,C');
+  assert.deepEqual([...t.matchAll(/data-pair="([^"]+)"/g)].map((m) => m[1]), ['A,B', 'B,C', 'A,C']);
+  assert.match(t, /class="rt-pair-open"/);
+});
+
+test('sharedGroupsHtml: each kind once, at most three names, the rest counted', () => {
+  const gs = [{ label: '官方產業', group: '半導體業' }, ...['a', 'b', 'c', 'd', 'e'].map((x) => ({ label: '細產業', group: x }))];
+  assert.equal(sharedGroupsHtml(gs), '官方產業：半導體業；細產業：a、b、c <small class="muted">等 5 個</small>');
+  assert.equal(sharedGroupsHtml([{ label: '自訂族群', group: '<x>' }]), '自訂族群：&lt;x&gt;');
 });

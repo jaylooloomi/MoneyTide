@@ -565,3 +565,23 @@ def test_pool_ranks_gap_and_volume_ratio(tmp_path):
     p = FinderParams(pool_top=1, new_min_volume_lots=0, pool_sources=("gap", "vol_ratio"))
     assert candidate_pool(rows, {}, p, vr) == {"B": ["跳空"], "A": ["量比"]}
     assert candidate_pool(rows, {}, p) == {"B": ["跳空"]}  # no 量比 given: that ranking is empty
+
+
+def test_pair_extras_same_direction_groups_finder_and_themes():
+    from openmarket.history.finder import pair_extras
+
+    rows = {"A": {"industry": "半導體業", "code": "A"}, "B": {"industry": "半導體業", "code": "B"}, "C": {"industry": "航運業", "code": "C"}}
+    groupings = {"industry": lambda r: [r["industry"]], "custom": lambda r: ["記憶體"] if r["code"] in ("A", "B") else []}
+    pct = {date(2026, 3, 2): {"A": 1, "B": 2, "C": -1}, date(2026, 3, 3): {"A": -1, "B": -3, "C": -1}, date(2026, 3, 4): {"A": 1, "B": -1, "C": 0}, date(2026, 3, 5): {"A": 2}}
+    found = [("2026-03-04", "known", {"groups": [{"members": [{"code": "A"}, {"code": "B"}]}]}),
+             ("2026-03-03", "new", {"groups": [{"members": [{"code": "A"}, {"code": "B"}, {"code": "C"}]}]}),
+             ("2026-03-04", "known", {"groups": [{"members": [{"code": "B"}, {"code": "A"}]}]})]  # the same day twice: once
+    news = [{"PCB": {"codes": {"A": 2, "B": 1}}, "航運": {"codes": {"C": 1}}, "AI": {"codes": {"A": 1, "B": 1}}}]
+    ab, ac, bc = pair_extras(["A", "B", "C"], rows, groupings, pct, found, news)
+    assert (ab["a"], ab["b"]) == ("A", "B")
+    assert ab["same_dir"] == {"same": 2, "total": 3}  # 3/5: B has no row; 3/4: opposite
+    assert ab["groups"] == [{"label": "官方產業", "group": "半導體業"}, {"label": "自訂族群", "group": "記憶體"}]
+    assert ab["finder"] == [{"date": "2026-03-04", "method": "known"}, {"date": "2026-03-03", "method": "new"}]
+    assert ab["themes"] == ["PCB", "AI"]  # more mentions first
+    assert ac["same_dir"] == {"same": 1, "total": 3} and ac["groups"] == [] and ac["themes"] == []  # a 0% day is neither up nor down
+    assert ac["finder"] == [{"date": "2026-03-03", "method": "new"}]

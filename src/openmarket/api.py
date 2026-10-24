@@ -25,7 +25,7 @@ from .history.linkage import (
     INTRADAY_HIGH_R, INTRADAY_LOW_R, bucket_closes, daily_linkage, fmt_minute, pair_matrix, peak_minute_from_bars, peak_minute_from_ticks,
     align_bars, amplitude_pct, limit_down_pct, limit_up_pct, minute_bars, turnover_rate, peak_stats, tick_bars, with_close_bar, race_points, returns, locked_level, top_members, verdict_r, verdict_timing,
 )
-from .history.finder import INST_STREAK_DAYS, FinderParams, inst_streak, inst_summary, margin_changes, margin_summary, persistence, run_search
+from .history.finder import INST_STREAK_DAYS, FinderParams, inst_streak, inst_summary, margin_changes, margin_summary, pair_extras, persistence, run_search
 from .history.finder import news_themes as finder_news_themes  # api.py has its own news_themes route
 from .intraday import IntradayRecorder
 from .sources.yahoo_intraday import INDEX_SYMBOLS, ONE_MINUTE_DAYS, fetch_bars, fetch_day_1m, fetch_span_1m
@@ -821,6 +821,29 @@ def create_app(
             raise HTTPException(404, "至少要 2 檔有資料的股票")
         rows.sort(key=lambda r: -(r.get("market_cap") or 0))
         return await linkage_payload(d, rows)
+
+    PAIR_DAYS = 20  # 同漲同跌 over this many trading days
+    PAIR_FINDER_DAYS = 5  # N results of the latest this many days
+
+    @app.get("/api/history/pairs")
+    async def history_pairs(codes: str, day: str = Query(..., alias="date")) -> dict:
+        """K's 🔗 交集 of the picked stocks, pair by pair: 同漲同跌, shared groups, N sightings, shared news themes."""
+        d = _day(day)
+        store = app.state.history
+        wanted = list(dict.fromkeys(c for c in codes.split(",") if c))[:10]
+        if len(wanted) < 2:
+            raise HTTPException(422, "至少要 2 檔")
+
+        def build() -> list[dict]:
+            rows = {r["code"]: r for r in store.day_rows(d)}
+            groupings, _ = finder_groupings(("industry", "custom", "concept", "chain"), d)
+            dates = sorted(store.trading_dates(up_to=d, limit=PAIR_DAYS))
+            pct = {x: {r["code"]: r["change_pct"] for r in rs if r["code"] in wanted} for x, rs in store.change_rows(dates).items()}
+            found = store.finder_any(store.trading_dates(up_to=d, limit=PAIR_FINDER_DAYS))
+            news_dates = [x for x in store.news_dates_sorted(up_to=d, limit=3) if (d - x).days <= NEWS_THEME_DAYS]
+            return pair_extras(wanted, rows, groupings, pct, found, [store.news_day(x) for x in news_dates])
+
+        return {"date": d.isoformat(), "days": PAIR_DAYS, "pairs": await asyncio.to_thread(build)}
 
     @app.get("/api/history/intraday")
     async def stock_intraday(code: str, day: str = Query(..., alias="date")) -> dict:

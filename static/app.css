@@ -419,3 +419,12 @@ table.link-heat td.self { background: #3a3e48; }
 .fd-more-row { display: flex; align-items: center; gap: 10px; margin: 6px 0 0; }
 .fd-more-row .hint { margin: 0; }
 .fd-more { width: auto; white-space: nowrap; }
+.rt-pairs { margin-top: 8px; border: 1px solid var(--line, #2a2e37); border-radius: 6px; padding: 6px 8px; font-size: 12px; }
+.rt-pairs-h { font-weight: 600; margin-bottom: 4px; }
+.rt-pair { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
+.rt-pair td { padding: 3px 6px; border-bottom: 1px solid #23262e; vertical-align: top; }
+.rt-pair td:first-child { width: 6em; white-space: nowrap; }
+.rt-pairs-t td, .rt-pairs-t th { font-size: 12px; }
+.rt-pairs-t tr.on td { background: #ffffff0d; }
+.rt-pair-open > td { padding: 4px 0 8px !important; }
+.ic-align { margin-left: 6px; }
