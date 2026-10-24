@@ -82,3 +82,14 @@ def test_group_branches_common_buyers_and_majority():
     assert g["have"] == 3
     assert group_branches(["A", "Z"], data) is None  # one member without 分點 data
     assert group_branches(["A", "B"], {**data, "B": {"error": "x"}}) is None
+
+
+
+def test_concentration_top15_net_over_volume():
+    from openmarket.history.evidence import concentration
+
+    data = {"buy": [{"name": "甲", "net": 300}, {"name": "乙", "net": 200}], "sell": [{"name": "丙", "net": -100}]}
+    assert concentration(data, 2_000_000) == 20.0  # (300 + 200 − 100) 張 ÷ 2,000 張
+    assert concentration(data, 2_000_000, top=1) == 10.0  # (300 − 100) ÷ 2,000
+    assert concentration({"buy": [], "sell": []}, 1e6) is None  # an empty page: no data, not 0%
+    assert concentration(None, 1e6) is None and concentration({"error": "x"}, 1e6) is None and concentration(data, 0) is None

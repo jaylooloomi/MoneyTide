@@ -839,13 +839,17 @@ export function cardRelationsHtml(r) {
   return parts.join('');
 }
 
-/** The card's 🏦 block: top 5 買超 / 賣超 分點 of the day (HiStock), 張. */
+export const CONC_TIP = '籌碼集中度＝（前 15 大買超分點的買超 − 前 15 大賣超分點的賣超）÷ 當日成交量。正數＝大買家吃下的比大賣家倒出的多，籌碼往少數人集中；常見的看法是 > 10% 偏集中、< −10% 偏分散';
+
+/** The card's 🏦 block: top 5 買超 / 賣超 分點 of the day (HiStock), 張, and its 籌碼集中度. */
 export function cardBranchesHtml(b) {
   if (!b) return '';
   if (b.error) return `<span class="muted">🏦 ${escapeHtml(b.error)}</span>`;
   const list = (rows, sign) =>
     rows.slice(0, 5).map((r) => `<li>${escapeHtml(r.name)} <span class="${sign > 0 ? 'up' : 'down'}">${sign > 0 ? '+' : ''}${Math.round(r.net).toLocaleString()}</span>${r.avg ? ` <small class="muted">@${r.avg}</small>` : ''}</li>`).join('');
-  return `<div class="muted">🏦 分點（HiStock）買超前 5／賣超前 5，張</div><div class="card-br-cols"><ol>${list(b.buy || [], 1)}</ol><ol>${list(b.sell || [], -1)}</ol></div>`;
+  const c = b.concentration;
+  const conc = c == null ? '' : `　<span class="${c > 0 ? 'up' : c < 0 ? 'down' : ''}" title="${escapeHtml(CONC_TIP)}">籌碼集中度 ${c > 0 ? '+' : ''}${c.toFixed(1)}%</span>`;
+  return `<div class="muted">🏦 分點（HiStock）買超前 5／賣超前 5，張${conc}</div><div class="card-br-cols"><ol>${list(b.buy || [], 1)}</ol><ol>${list(b.sell || [], -1)}</ol></div>`;
 }
 
 async function loadCardBranches(code, date) {

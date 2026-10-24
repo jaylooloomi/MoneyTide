@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mergeGroups, motiveOf, reportText, trackHtml, trackRows, watchOf } from '../../static/js/report.js';
+import { concHtml, mergeGroups, motiveOf, reportText, trackHtml, trackRows, watchOf } from '../../static/js/report.js';
 import { groupEvidenceItems } from '../../static/js/evidence.js';
 
 const m = (code, name = code) => ({ code, name, change_pct: 5 });
@@ -67,4 +67,11 @@ test('reportText: the copy-paste version', () => {
   assert.match(text, /1\. 華通、TPK-KY（證據 3\/3）/);
   assert.match(text, /題材輪動：同題材：PCB/);
   assert.match(text, /明天觀察：是否再一起動/);
+});
+
+test('concHtml: each member with 分點 stored, signed; nothing without', () => {
+  const g = { members: [{ code: '1', name: '甲' }, { code: '2', name: '乙' }], concentration: { 1: 12.3, 2: -4 } };
+  assert.match(concHtml(g), /籌碼集中度<\/span> 甲 <span class="up">\+12\.3%<\/span>、乙 <span class="down">-4\.0%<\/span>/);
+  assert.equal(concHtml({ members: [] }), '');
+  assert.equal(concHtml({ members: [], concentration: null }), '');
 });

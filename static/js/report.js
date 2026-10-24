@@ -101,6 +101,15 @@ export function reportText(date, index, list, rows) {
 
 // ---- HTML ---------------------------------------------------------------------------------------
 
+/** 籌碼集中度 of the members with 分點 stored (the after-close snapshot), one line; '' without any. */
+export function concHtml(g) {
+  const c = g.concentration;
+  if (!c || !Object.keys(c).length) return '';
+  const name = (code) => g.members.find((m) => m.code === code)?.name || code;
+  const cells = Object.entries(c).map(([code, v]) => `${escapeHtml(name(code))} <span class="${v > 0 ? 'up' : v < 0 ? 'down' : ''}">${v > 0 ? '+' : ''}${v.toFixed(1)}%</span>`);
+  return `<div class="rp-line" title="籌碼集中度＝（前 15 大買超分點買超 − 前 15 大賣超分點賣超）÷ 成交量；正數＝籌碼往大買家集中"><span class="muted">籌碼集中度</span> ${cells.join('、')}</div>`;
+}
+
 function groupHtml(x, i, row) {
   const items = groupEvidenceItems(x.g);
   const chips = items
@@ -114,7 +123,7 @@ function groupHtml(x, i, row) {
   return `<div class="rp-group">
     <div class="rp-gh"><span class="rp-n">${i + 1}</span>${members}<span class="rp-ev${x.strong ? ' strong' : ''}" title="資金一致性證據：有資料的項目中 ✓ 的數量">${x.strong ? '證據強 ' : '證據 '}${x.ev.yes}/${x.ev.known}</span>
       <span class="muted rp-src">${x.method === 'new' ? '找法2' : '找法1'}</span></div>
-    <div class="rp-line"><span class="muted">動機判讀</span> ${motive}</div>
+    <div class="rp-line"><span class="muted">動機判讀</span> ${motive}</div>${concHtml(x.g)}
     <div class="rp-line rp-chips">${chips || '<span class="muted">沒有證據資料</span>'}</div>
     <div class="rp-line"><span class="muted">明天觀察</span> ${escapeHtml(watchOf(x.g, row?.streak || 0).join('；'))}</div>
   </div>`;

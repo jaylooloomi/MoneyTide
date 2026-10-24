@@ -171,6 +171,16 @@ def shared_buyers(a: Mapping | None, b: Mapping | None) -> dict | None:
     return {"shared": shared, "strong": any(x["a_rank"] <= BRANCH_TOP and x["b_rank"] <= BRANCH_TOP for x in shared)}
 
 
+def concentration(data: Mapping | None, volume_shares: float | None, top: int = 15) -> float | None:
+    """籌碼集中度 % = (前 15 大買超分點的買超 + 前 15 大賣超分點的賣超(負)) ÷ 當日成交張數 × 100, as the
+    Taiwan 籌碼 sites define it: > 0 the biggest buyers took more than the biggest sellers gave. None
+    without 分點 or volume."""
+    if not data or "error" in data or not volume_shares or not (data.get("buy") or data.get("sell")):
+        return None  # an empty page (HiStock had no rows that day) is no data, not 0%
+    net = sum(r.get("net", 0) for r in data.get("buy", [])[:top]) + sum(r.get("net", 0) for r in data.get("sell", [])[:top])
+    return round(net / (volume_shares / 1000) * 100, 1)
+
+
 def group_branches(members: list[str], data: Mapping[str, Mapping], top: int = 15) -> dict | None:
     """分點 of a group from the stored days: {common: [{name, ranks: {code: rank}, nets: {code: 張}}] (branches
     among the top `top` 買超 of 2+ members, most members first), ok (most pairs share a top-5 buyer),
