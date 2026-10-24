@@ -33,6 +33,8 @@
 | 12 | 昨天的組合今天表現 | 4.2（scores-07.md） | MacKinlay (1997) 單一事件異常報酬；盤後日報的「昨日強勢股追蹤」 | 跨天追蹤表加「今天漲跌」欄：昨天就有的組合，成員今天平均漲跌（括號＝扣大盤）。只動 report.js、app.css。10/22：晶技＋台嘉碩 −5.78%（−3.97%）、百容＋晟鈦 −4.69%（疑似出貨） | `node --test tests/js/report.test.js` | ✅ node 129；瀏覽器確認追蹤表 | ① 新開一張「昨日追蹤」表（與跨天追蹤重複）② 用開盤到收盤（隔日沖才需要，已在 🔥 區） |
 | — | 效能修正：當沖比只讀成員成交量 | — | — | 加分項 09 的「平常當沖比」讓每次讀 N 結果都載入 21 天全部日資料，盤後報告同時 10 個請求要 47～54 秒；改用 store.volumes 只查成員成交量，10 個並發 3.5 秒。動到 store.py、linkage.py（e0b451b） | `.venv/Scripts/python -m pytest -q` | ✅ pytest 292 | — |
 | 13 | 互相關峰值落點（誰先動） | 2.7（scores-07.md） | Bacry et al. (2015) lead-lag；本專案 research/m2（N 組合 77% 峰值在 0 分） | minute_evidence 多回傳 peak_lag（−5～+5 分）；K 🔗 交集「同分鐘」說明加「峰值在同一分鐘（像同時下單）」或「峰值錯開 k 分：X 先動」；配對順序反過來時自動翻正負。只顯示，✓ 判定不變。動到 evidence.py、evidence.js、race.js。10/22 華經＋驊宏資：峰值 0 分 | `.venv/Scripts/python -m pytest -q tests/test_evidence.py`；`node --test tests/js/race.test.js tests/js/evidence.test.js` | ✅ pytest 293、node 131；API 確認 | ① 改用峰值落點判定「同分鐘」（改判定）② 標出群組的領頭股（實驗顯示同一對隔天領頭股不固定，會誤導） |
+| 14 | 高點差門檻依分 K 解析度說清楚 | 3.0（scores-08.md） | 本專案 research/exp1（5 分 K 下 ≤ 8 與 ≤ 5 結果相同） | 「條件」高點差說明、5 分 K 卡片提示、agent-brief.md 各補一句：5 分 K 的日子高點時間只落在 5 的倍數，≤ 8 實際等於 ≤ 5。動到 finder.js、agent-brief.md | `node --test tests/js/finder.test.js` | ✅ node 132 | ① 依解析度自動換算門檻（改判定）② 隱藏 5 分 K 日子的高點差欄（資訊變少） |
+| 15 | 交接文件補上研究結論 | 3.0（scores-08.md） | 本專案兩個研究分支的 REPORT.md | docs/study.md 每節末加「實驗結果」，指向 night-shift/study-* 與 night-shift/methods-* | — | 文件 | ① 把 REPORT.md 整份搬進主分支（研究分支各自保留比較清楚） |
 
 ## 判斷不值得做
 - C2 群組外盤估計 / 1.7 / 要動 N 結果、卡片與報告，Blast 大，單檔版已在 K 走勢資訊欄
