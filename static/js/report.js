@@ -7,7 +7,6 @@ import { evidenceCount, groupEvidenceItems, isStrong } from './evidence.js';
 
 export const GONE_SHOWN = 12; // 消失 rows listed before 「其餘 N 組」
 export const TRACK_DAYS = 5; // the 跨天追蹤 columns: the report day and the 4 trading days before it
-const SHOW_MAX = 8; // groups written out in full; the rest under 其餘
 
 const keyOf = (g) => g.members.map((m) => m.code).sort().join(',');
 const namesOf = (g) => g.members.map((m) => m.name).join('、');
@@ -87,7 +86,7 @@ export function reportText(date, index, list, rows) {
   const lines = [`${date} 盤後報告`];
   if (index.length) lines.push(index.map((b) => `${b.name} ${fmtPct(b.change_pct)}`).join('　'));
   lines.push(`找到 ${list.length} 組，證據強 ${list.filter((x) => x.strong).length} 組，連續出現 ${rows.filter((r) => r.streak >= 1 && r.cells.at(-1) != null).length} 組`);
-  list.slice(0, SHOW_MAX).forEach((x, i) => {
+  list.forEach((x, i) => {
     const items = groupEvidenceItems(x.g);
     const row = rows.find((r) => r.key === x.key);
     lines.push('', `${i + 1}. ${namesOf(x.g)}（證據 ${x.ev.yes}/${x.ev.known}${x.strong ? '・證據強' : ''}）`);
@@ -209,8 +208,7 @@ export function mountReportPanel(container, { onStock }) {
     body.innerHTML = `<div class="rp-metrics">${metric('找到群組', list.length)}${metric('證據強', strong)}${metric('連續出現', going)}${metric('大盤／櫃買', bench.map((b) => `<span class="${b.change_pct > 0 ? 'up' : 'down'}">${fmtPct(b.change_pct)}</span>`).join(' / ') || '—')}</div>
       <div class="rp-cols"><div class="rp-left">
         <h3 class="rp-h">${escapeHtml(date)} 找到的群組</h3>
-        ${list.length ? list.slice(0, SHOW_MAX).map((x, k) => groupHtml(x, k, rows.find((r) => r.key === x.key))).join('') : '<p class="hint">這一天沒有找到群組（或 N 還沒算完，稍後再開）。</p>'}
-        ${list.length > SHOW_MAX ? `<p class="muted">其餘 ${list.length - SHOW_MAX} 組在分頁2 的 N 看得到。</p>` : ''}
+        ${list.length ? list.map((x, k) => groupHtml(x, k, rows.find((r) => r.key === x.key))).join('') : '<p class="hint">這一天沒有找到群組（或 N 還沒算完，稍後再開）。</p>'}
       </div><div class="rp-right">
         <h3 class="rp-h">跨天追蹤 <small class="muted">格子＝那天的證據 ✓ 數；— 那天沒有這組；… 還沒計算</small></h3>
         ${progress ? `<p class="hint rp-progress">${escapeHtml(progress)}</p>` : ''}
