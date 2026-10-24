@@ -721,6 +721,12 @@ def create_app(
         got = await asyncio.gather(*(one(code, name, market) for code, (name, market) in INDEX_SYMBOLS.items()))
         return [x for x in got if x is not None]
 
+    @app.get("/api/history/index-race")
+    async def index_race_day(day: str = Query(..., alias="date")) -> dict:
+        """大盤／櫃買 of one day, for K's chart when a 5 日 K candle picks another day."""
+        async with httpx.AsyncClient(timeout=20, headers={"User-Agent": USER_AGENT}, follow_redirects=True) as http:
+            return {"date": day, "benchmarks": await index_race(http, _day(day))}
+
     def _day(day: str) -> date:
         try:
             return date.fromisoformat(day)

@@ -419,9 +419,20 @@ export const COMPARE_LAYOUTS = { overlay: '疊圖', stack: '上下' };
 /** The chart panel inside `el`: show([{code, name}]) draws one stock, or several (疊圖 on one % axis /
  *  上下 one full chart each, switchable); sync(m) redraws up to minute m. load(code, name) = one stock. */
 export function mountIntraday(el, { date, onCard, onDate, benchmarks = [] }) {
-  // viewDate: the day drawn (a 5 日 K candle can pick another); 大盤／櫃買 exist for `date` only
+  // viewDate: the day drawn (a 5 日 K candle can pick another); 大盤／櫃買 of another day are fetched once
   let viewDate = date;
-  const benches = () => (viewDate === date ? benchmarks : []);
+  const benchByDay = new Map([[date, benchmarks]]);
+  const benches = () => benchByDay.get(viewDate) || [];
+  async function loadBenches(d) {
+    if (benchByDay.has(d)) return;
+    try {
+      const r = await fetch(`/api/history/index-race?date=${encodeURIComponent(d)}`, { cache: 'no-store' });
+      const j = r.ok ? await r.json() : null;
+      benchByDay.set(d, (j?.benchmarks || []).filter((b) => b.points?.length));
+    } catch {
+      benchByDay.set(d, []); // the stocks are drawn without them
+    }
+  }
   el.innerHTML = `<div class="ic-head"><span class="ic-title"></span><span class="muted ic-note"></span>
       <div class="seg ic-align"${benchmarks.length ? '' : ' hidden'} title="大盤／櫃買虛線：開盤對齊＝從開盤一起出發（比開盤後的強弱）；昨收＝各自相對昨收的漲跌">${Object.entries(BENCH_ALIGNS).map(([k, label]) => `<button type="button" data-align="${k}">${label}</button>`).join('')}</div>
       <div class="seg ic-layout" hidden>${Object.entries(COMPARE_LAYOUTS).map(([k, label]) => `<button type="button" data-layout="${k}">${label}</button>`).join('')}</div>
@@ -559,8 +570,11 @@ export function mountIntraday(el, { date, onCard, onDate, benchmarks = [] }) {
   }
 
   /** Draw the shown stocks on another day (a 5 日 K candle); `date` again goes back. */
-  function setDate(d) {
+  async function setDate(d) {
     viewDate = d || date;
+    const want = viewDate;
+    await loadBenches(want);
+    if (want !== viewDate) return; // another candle clicked meanwhile
     return show(state.items.map(({ code, name }) => ({ code, name })));
   }
 
@@ -580,10 +594,9 @@ export function mountIntraday(el, { date, onCard, onDate, benchmarks = [] }) {
     const d = state.items[0].data;
     const step = `${state.items.some((x) => x.data.step_min === 5) ? '5 分 K' : '1 分 K'}${state.items.some((x) => x.data.source === 'recorded') ? '（自錄，無成交量）' : ''}`;
     const benchIn = (colors) =>
-      viewDate !== date
-        ? '；大盤／櫃買虛線只有 ' + escapeHtml(date.slice(5)) + ' 那天的資料'
-        : benchmarks.length ? `；虛線＝${benchmarks.map((b, i) => `<span style="color:${colors[i % colors.length]}">${escapeHtml(b.name)}</span>`).join('／')}` : '';
+      benches().length ? `；虛線＝${benches().map((b, i) => `<span style="color:${colors[i % colors.length]}">${escapeHtml(b.name)}</span>`).join('／')}` : '';
     const bench = benchIn(state.items.length >= 2 && layout === 'overlay' ? COMPARE_BENCH_COLORS : BENCH_COLORS);
+    alignSeg.hidden = !benches().length; // 開盤對齊／昨收 only means something with the index lines
     note.innerHTML =
       state.items.length >= 2 && layout === 'overlay'
         ? `${step}；${state.items.length} 檔都換算成相對各自昨收的 %，可直接比強弱；● 各自的日內最高點${bench}；Ctrl／⌘＋點 K 的列可再加或取消（最多 ${MAX_PICKS} 檔）`
