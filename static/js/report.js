@@ -127,7 +127,7 @@ export function hotNextDay(dates, per, quotesByDay) {
 }
 
 /** 🔥 隔日沖警示: today's 🔥 groups (risk, not evidence) and how such groups did the next day. */
-export function hotHtml(list, stats) {
+export function hotHtml(list, stats, wide = null) {
   const hot = list.filter((x) => x.g.daytrade?.hot);
   const p = (v) => (v == null ? '—' : `<span class="${v > 0 ? 'up' : v < 0 ? 'down' : ''}">${fmtPct(v)}</span>`);
   const rows = hot
@@ -143,9 +143,15 @@ export function hotHtml(list, stats) {
   const s = stats
     ? `<p class="rp-line">前幾天的 🔥 組合（${stats.groups} 組、${stats.stocks} 檔次）隔天：開盤 ${p(stats.gap)}、收盤 ${p(stats.close)}、盤中（收盤 − 開盤）${p(stats.intraday)}，開高走低（收盤低於開盤）<b>${stats.fadeShare == null ? '—' : `${stats.fadeShare.toFixed(0)}%`}</b>。樣本少，只是統計觀察，不是交易建議。</p>`
     : '<p class="rp-line muted">前幾天沒有 🔥 組合可比對隔天表現。</p>';
+  // every stored day under the same 條件: 🔥 against the rest, the bigger sample
+  const w = wide?.stats;
+  const line = (label, x) => `${label} ${x.groups} 組／${x.stocks} 檔次：開盤 ${p(x.gap)}、收盤 ${p(x.close)}（扣大盤 ${p(x.excess)}）、開高走低 <b>${x.fade == null ? '—' : `${x.fade.toFixed(0)}%`}</b>、收黑 ${x.down == null ? '—' : `${x.down.toFixed(0)}%`}`;
+  const all = w && (w.hot.stocks || w.rest.stocks)
+    ? `<p class="rp-line">所有已存的日子（${wide.days} 天，${escapeHtml(wide.first || '')}～${escapeHtml(wide.last || '')}）隔天：<br>${line('🔥', w.hot)}<br>${line('其他', w.rest)}</p>`
+    : '';
   return `<div class="rp-hot" title="有當沖資料的成員平均當沖比 ≥ 50%：隔日沖短線熱錢，隔天常開高走低；這是風險警示，不算在資金證據裡">
     <h3 class="rp-h">🔥 隔日沖警示 <small class="muted">${hot.length} 組；隔天常開高走低</small></h3>
-    ${hot.length ? `<ul class="rp-hot-list">${rows}</ul>` : '<p class="rp-line muted">今天沒有 🔥 組合。</p>'}${s}</div>`;
+    ${hot.length ? `<ul class="rp-hot-list">${rows}</ul>` : '<p class="rp-line muted">今天沒有 🔥 組合。</p>'}${s}${all}</div>`;
 }
 
 /** The report as plain text (複製成文字: for notes or a chat). */
@@ -267,6 +273,16 @@ export function mountReportPanel(container, { onStock, query, condText }) {
     };
     let index;
     let per;
+    // 隔天表現 over every stored day under these 條件 (🔥 against the rest), fetched alongside
+    state.wide = null;
+    fetch(`/api/history/next-day?${new URLSearchParams(query ? query('known') : {})}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((w) => {
+        if (t !== state.ticket || !w) return;
+        state.wide = w;
+        if (state.last) draw(...state.last);
+      })
+      .catch(() => {});
     try {
       // the report day may compute; the days before only if stored (the rest is worked out below)
       [index, ...per] = await Promise.all([
@@ -356,7 +372,7 @@ export function mountReportPanel(container, { onStock, query, condText }) {
     // 摘要 across the top; the day's groups (A1) on the left, 跨天追蹤 (A3) on the right
     body.innerHTML = `<div class="rp-metrics">${metric('找到群組', list.length)}${metric('證據強', strong)}${metric('連續出現', going)}${metric('大盤／櫃買', bench.map((b) => `<span class="${b.change_pct > 0 ? 'up' : 'down'}">${fmtPct(b.change_pct)}</span>`).join(' / ') || '—')}</div>
       <div class="rp-cols"><div class="rp-left">
-        ${hotHtml(list, hotStats)}
+        ${hotHtml(list, hotStats, state.wide)}
         <h3 class="rp-h">${escapeHtml(date)} 找到的群組</h3>
         ${list.length ? list.map((x, k) => groupHtml(x, k, rows.find((r) => r.key === x.key))).join('') : '<p class="hint">這一天沒有找到群組（或 N 還沒算完，稍後再開）。</p>'}
       </div><div class="rp-right">

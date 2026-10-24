@@ -118,3 +118,13 @@ test('hotNextDay: the 🔥 groups of each day, their members the day after', () 
   assert.match(html, /開高走低（收盤低於開盤）<b>50%<\/b>/);
   assert.match(reportText('2026-08-03', [], per[0], trackRows([per[0]]), s), /🔥 隔日沖警示（1 組[\s\S]*開高走低 50%（2 檔次）/);
 });
+
+test('hotHtml: the stored days’ next day, 🔥 against the rest', () => {
+  const wide = { days: 12, first: '2026-07-29', last: '2026-10-22', stats: {
+    hot: { groups: 30, stocks: 70, gap: 2.1, close: -0.5, excess: -0.8, intraday: -2.4, fade: 64, down: 55 },
+    rest: { groups: 80, stocks: 170, gap: 0.6, close: 0.3, excess: 0.1, intraday: -0.2, fade: 48, down: 45 } } };
+  const html = hotHtml([], null, wide);
+  assert.match(html, /所有已存的日子（12 天，2026-07-29～2026-10-22）/);
+  assert.match(html, /🔥 30 組／70 檔次：開盤 <span class="up">\+2\.10%<\/span>、收盤 <span class="down">-0\.50%<\/span>（扣大盤 <span class="down">-0\.80%<\/span>）、開高走低 <b>64%<\/b>、收黑 55%/);
+  assert.match(html, /其他 80 組／170 檔次/);
+});

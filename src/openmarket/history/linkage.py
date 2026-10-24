@@ -419,6 +419,46 @@ def daytrade_group(vals: Mapping[str, float | None], before: Mapping[str, list[f
     return {"by_code": known, "avg": avg, "hot": avg is not None and avg >= DAYTRADE_HOT, "base": base}
 
 
+def next_day_stats(results: list[tuple[date, list[list[str]]]], hot_of, rows_on, next_of, index_pct) -> dict:
+    """隔天表現 of N's groups, 🔥 apart from the rest: results [(day, [member codes per group])], hot_of(day,
+    codes) → 🔥?, rows_on(day) → {code: row}, next_of(day) → the next trading day or None, index_pct(day)
+    → 大盤 % or None. Per class: {groups, stocks, days, gap, close, excess, intraday, fade, down} — means in %,
+    fade = the share closing below the open, down = the share closing below 昨收; excess = close − 大盤."""
+    acc = {k: {"groups": 0, "days": set(), "gap": [], "close": [], "excess": [], "intraday": []} for k in ("hot", "rest")}
+    for day, groups in results:
+        nd = next_of(day)
+        if nd is None:
+            continue
+        nxt = rows_on(nd)
+        idx = index_pct(nd)
+        for codes in groups:
+            a = acc["hot" if hot_of(day, codes) else "rest"]
+            got = False
+            for c in codes:
+                r = nxt.get(c)
+                if not r or r.get("change_pct") is None:
+                    continue
+                got = True
+                a["close"].append(r["change_pct"])
+                if idx is not None:
+                    a["excess"].append(r["change_pct"] - idx)
+                if r.get("open") and r.get("prev_close"):
+                    a["gap"].append((r["open"] / r["prev_close"] - 1) * 100)
+                if r.get("open") and r.get("close"):
+                    a["intraday"].append((r["close"] / r["open"] - 1) * 100)
+            if got:
+                a["groups"] += 1
+                a["days"].add(day)
+    mean = lambda xs: round(sum(xs) / len(xs), 2) if xs else None  # noqa: E731
+    out = {}
+    for k, a in acc.items():
+        out[k] = {"groups": a["groups"], "days": len(a["days"]), "stocks": len(a["close"]), "gap": mean(a["gap"]), "close": mean(a["close"]),
+                  "excess": mean(a["excess"]), "intraday": mean(a["intraday"]),
+                  "fade": round(sum(1 for x in a["intraday"] if x < 0) / len(a["intraday"]) * 100, 1) if a["intraday"] else None,
+                  "down": round(sum(1 for x in a["close"] if x < 0) / len(a["close"]) * 100, 1) if a["close"] else None}
+    return out
+
+
 def daytrade_ratios(store: HistoryStore, days: list[date], codes: list[str]) -> dict[str, dict[date, float]]:
     """{code: {day: 當沖比 %}} (上市 and 上櫃 alike)."""
     dt = store.daytrade(days, codes)

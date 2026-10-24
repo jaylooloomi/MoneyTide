@@ -871,6 +871,14 @@ class HistoryStore:
             ).fetchall()
         return [(r["date"], r["method"], json.loads(r["result"])) for r in rows]
 
+    def finder_days(self, method: str, params: str) -> list[tuple[date, dict]]:
+        """Every day with an N result stored under exactly these thresholds, oldest first."""
+        import json
+
+        with self._conn() as c:
+            rows = c.execute("SELECT date, result FROM finder_result WHERE method = ? AND params = ? ORDER BY date", (method, params)).fetchall()
+        return [(date.fromisoformat(r["date"]), json.loads(r["result"])) for r in rows]
+
     def finder(self, day: date, method: str, params: str) -> dict | None:
         import json
 

@@ -311,3 +311,17 @@ def test_daytrade_group_average_as_shown():
     assert daytrade_group({"1": None}) == {"by_code": {}, "avg": None, "hot": False, "base": {}}
     usual = daytrade_group({"1": 62.0, "2": 40.0}, {"1": [30.0, 32.0], "2": [], "3": [10.0]})
     assert usual["base"] == {"1": 31.0}  # "2" has no history, "3" no data today
+
+
+
+def test_next_day_stats_hot_apart_from_the_rest():
+    from openmarket.history.linkage import next_day_stats
+
+    d1, d2 = date(2026, 8, 3), date(2026, 8, 4)
+    rows = {d2: {"1": {"change_pct": -2.0, "open": 105, "close": 98, "prev_close": 100}, "2": {"change_pct": 4.0, "open": 101, "close": 104, "prev_close": 100},
+                 "3": {"change_pct": 1.0, "open": 100, "close": 101, "prev_close": 100}}}
+    out = next_day_stats([(d1, [["1", "2"], ["3"]])], lambda d, cs: "1" in cs, lambda d: rows.get(d, {}), {d1: d2}.get, lambda d: 1.0)
+    assert out["hot"] == {"groups": 1, "days": 1, "stocks": 2, "gap": 3.0, "close": 1.0, "excess": 0.0,
+                          "intraday": round(((98 / 105 - 1) * 100 + (104 / 101 - 1) * 100) / 2, 2), "fade": 50.0, "down": 50.0}
+    assert out["rest"]["stocks"] == 1 and out["rest"]["fade"] == 0.0
+    assert next_day_stats([(d2, [["1"]])], lambda d, cs: True, lambda d: {}, {}.get, lambda d: None)["hot"]["stocks"] == 0  # no next day

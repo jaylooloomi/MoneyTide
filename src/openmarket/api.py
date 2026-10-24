@@ -25,7 +25,7 @@ from .explain import explain_day
 from .history.linkage import (
     pearson,
     INTRADAY_HIGH_R, INTRADAY_LOW_R, bucket_closes, daily_linkage, fmt_minute, pair_matrix, peak_minute_from_bars, peak_minute_from_ticks,
-    align_bars, amplitude_pct, limit_down_pct, limit_up_pct, minute_bars, turnover_rate, peak_stats, tick_bars, with_close_bar, race_points, returns, locked_level, daily_k, index_k, daytrade_ratios, daytrade_group, DAYTRADE_BASE_DAYS, DAYTRADE_HOT, top_members, verdict_r, verdict_timing,
+    align_bars, amplitude_pct, limit_down_pct, limit_up_pct, minute_bars, turnover_rate, peak_stats, tick_bars, with_close_bar, race_points, returns, locked_level, daily_k, index_k, daytrade_ratios, daytrade_group, next_day_stats, DAYTRADE_BASE_DAYS, DAYTRADE_HOT, top_members, verdict_r, verdict_timing,
 )
 from .history.finder import INST_STREAK_DAYS, INTRADAY_BASES, FinderParams, laggards, inst_streak, inst_summary, margin_changes, margin_summary, pair_extras, persistence, run_search
 from .history.finder import news_themes as finder_news_themes  # api.py has its own news_themes route
@@ -752,6 +752,41 @@ def create_app(
         return {"date": d.isoformat(), "quotes": {c: {"change_pct": r.get("change_pct"), "vol_ratio": round(vr[c], 2) if c in vr else None,
                                                       "gap_pct": pct(r.get("open"), r.get("prev_close")), "intraday_pct": pct(r.get("close"), r.get("open"))}
                                                   for c, r in rows.items()}}
+
+    @app.get("/api/history/next-day")
+    def history_next_day(request: Request) -> dict:
+        """隔天表現 of the N groups on every day stored under the given 條件 (both methods, one entry per
+        member set a day), 🔥 隔日沖 apart from the rest: does the hot money's next day really fade?"""
+        store = app.state.history
+        p = finder_params(request.query_params)
+        days_all = sorted(store.trading_dates(limit=400))
+        nxt = {d: days_all[i + 1] for i, d in enumerate(days_all[:-1])}
+        per_day: dict[date, set] = {}
+        for method in ("known", "new"):
+            groupings, _ = finder_groupings(p.groupings, days_all[-1]) if days_all else ({}, [])
+            key = p.key() + "|" + ",".join(sorted(groupings))
+            for d, res in store.finder_days(method, key):
+                per_day.setdefault(d, set()).update(tuple(sorted(m["code"] for m in g["members"])) for g in res.get("groups", []))
+        results = sorted((d, [list(g) for g in gs]) for d, gs in per_day.items())
+        codes = sorted({c for _, gs in results for g in gs for c in g})
+        ratios = daytrade_ratios(store, [d for d, _ in results], codes)
+        index = store.index_rows()
+
+        def index_pct(d: date) -> float | None:
+            row = index.get(d.isoformat(), {}).get("上市")
+            if not row or row.get("change") is None or not row.get("close"):
+                return None
+            return row["change"] / (row["close"] - row["change"]) * 100
+
+        rows_cache: dict[date, dict] = {}
+
+        def rows_on(d: date) -> dict:
+            if d not in rows_cache:
+                rows_cache[d] = {r["code"]: r for r in store.day_rows(d)}
+            return rows_cache[d]
+
+        stats = next_day_stats(results, lambda d, cs: daytrade_group({c: ratios.get(c, {}).get(d) for c in cs})["hot"], rows_on, nxt.get, index_pct)
+        return {"days": len(results), "first": results[0][0].isoformat() if results else None, "last": results[-1][0].isoformat() if results else None, "stats": stats}
 
     @app.get("/api/history/index-race")
     async def index_race_day(day: str = Query(..., alias="date")) -> dict:
