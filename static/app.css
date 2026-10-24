@@ -415,3 +415,7 @@ table.link-heat td.self { background: #3a3e48; }
 #historyView.tab-off { display: none !important; }
 .hist-tab2 { flex: 1; min-height: 0; overflow: auto; padding: 8px; }
 #hTabs { margin-right: 6px; }
+.fd-cards.fd-clip { overflow-y: auto; padding-right: 4px; }
+.fd-more-row { display: flex; align-items: center; gap: 10px; margin: 6px 0 0; }
+.fd-more-row .hint { margin: 0; }
+.fd-more { width: auto; white-space: nowrap; }

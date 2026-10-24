@@ -11,6 +11,8 @@ export const METHODS = { known: '找法1 · 已知分類', new: '找法2 · 排�
 const KIND_COLOR = { 已知族群: '#2c4a6b', 已知族群的延伸: '#6b5a1e', 跨族群新組合: '#b8301a' };
 const GROUPINGS = { industry: '官方產業', custom: '自訂族群', concept: '概念股', chain: '細產業', news: '新聞族群' };
 const SOURCES = { gain: '漲幅', turnover: '週轉率', share_z: '比重暴增', gap: '開盤跳空', vol_ratio: '量比' };
+// the label the server puts in g.pool for each ranking (finder.candidate_pool)
+const POOL_LABELS = { gain: '漲幅', turnover: '週轉率', share_z: '比重暴增', gap: '跳空', vol_ratio: '量比' };
 
 /** Tunable fields: [key, label, kind, method ('' = both), help]. Defaults come from the server. */
 export const FIELDS = [
@@ -121,6 +123,13 @@ export function themeNewsHtml(theme) {
   return `<div class="fd-theme-h"><b>📰 ${escapeHtml(theme.term)}</b> <small class="muted">近 3 個新聞日的標題（先列有點名這組股票的）</small></div>${items ? `<ol>${items}</ol>` : '<p class="hint">沒有存下這個題材的標題。</p>'}`;
 }
 
+/** The card grid's height for `rows` rows, from the cards' offsetTop values (any order): up to just
+ *  above the first card of row rows + 1, minus the grid gap; null when there are no more rows. */
+export function rowsHeight(tops, rows = 2, gap = 10) {
+  const starts = [...new Set(tops.map((t) => Math.round(t)))].sort((a, b) => a - b);
+  return starts.length > rows ? starts[rows] - starts[0] - gap : null;
+}
+
 export function cardHtml(g, i) {
   const title =
     g.sources?.length
@@ -191,6 +200,11 @@ export function filterOptions(d) {
   const opts = [{ key: 'all', label: '全部', n: groups.length }];
   if (d?.method === 'new') {
     for (const k of KINDS) opts.push({ key: k, label: k === '已知族群的延伸' ? '延伸' : k, n: groups.filter((g) => g.kind === k).length });
+    // by the ranking the members came in from (a group counts when any member did)
+    const used = d.params?.pool_sources?.length ? d.params.pool_sources : Object.keys(SOURCES);
+    for (const k of Object.keys(SOURCES).filter((x) => used.includes(x))) {
+      opts.push({ key: `@src:${k}`, label: `📈 ${SOURCES[k]}`, n: groups.filter((g) => matchesFilter(g, `@src:${k}`, 'new')).length });
+    }
   } else {
     for (const label of d?.groupings || []) opts.push({ key: label, label, n: groups.filter((g) => g.sources?.some((s) => s.label === label)).length });
   }
@@ -210,6 +224,7 @@ export function shownFilter(d, saved) {
 
 export function matchesFilter(g, key, method) {
   if (!key || key === 'all') return true;
+  if (key.startsWith('@src:')) return Object.values(g.pool || {}).some((from) => from.includes(POOL_LABELS[key.slice(5)]));
   if (key === '@inst+') return g.inst?.lots > 0;
   if (key === '@inst-') return g.inst?.lots < 0;
   return method === 'new' ? g.kind === key : !!g.sources?.some((s) => s.label === key);
@@ -255,7 +270,7 @@ export function csvExport(d, filter = 'all') {
       g.margin_streak ? `連${g.margin_streak.side === 'buy' ? '增' : '減'}${g.margin_streak.days}` : '', `${cond} 分時R≥${p.intraday_r} 高點差≤${p.peak_gap}分`,
     ]);
   });
-  const label = Object.fromEntries(INST_FILTERS)[filter]?.replace('🏦 ', '') || filter; // no internal '@inst+' in file names
+  const label = Object.fromEntries(INST_FILTERS)[filter]?.replace('🏦 ', '') || (filter?.startsWith('@src:') ? SOURCES[filter.slice(5)] : filter); // no internal '@…' keys in file names
   const tag = filter && filter !== 'all' ? `_${label}` : '';
   return [`資金連動搜尋_${d.method === 'new' ? '找法2' : '找法1'}_${d.date}${tag}.csv`, header, rows];
 }
@@ -370,7 +385,7 @@ export function mountFinderPanel(container, { onStock, onResult }) {
   const sec = document.createElement('section');
   sec.id = 'hFinderPanel';
   sec.className = 'panel hN';
-  const pref = { method: 'known', params: { ...DEFAULTS }, filter: { known: 'all', new: 'all' } };
+  const pref = { method: 'known', params: { ...DEFAULTS }, filter: { known: 'all', new: 'all' }, expanded: false };
   try {
     const saved = JSON.parse(localStorage.getItem(PREF_KEY) || '{}');
     if (saved.method in METHODS) pref.method = saved.method;
@@ -380,6 +395,7 @@ export function mountFinderPanel(container, { onStock, onResult }) {
       pref.params.pool_sources = [...new Set([...saved.params.pool_sources, 'gap', 'vol_ratio'])];
     }
     Object.assign(pref.filter, saved.filter || {});
+    pref.expanded = !!saved.expanded;
   } catch {
     /* defaults */
   }
@@ -551,9 +567,32 @@ export function mountFinderPanel(container, { onStock, onResult }) {
     }
     const f = shownFilter(data, pref.filter[data.method]);
     const cards = data.groups.map((g, i) => (matchesFilter(g, f, data.method) ? cardHtml(g, i) : '')).join('');
-    body.innerHTML = `${filterHtml(data, f)}<div class="fd-cards">${cards}</div><p class="hint" style="margin:6px 0 0">點卡片看這群股票的連動動畫與走勢</p>`;
+    body.innerHTML = `${filterHtml(data, f)}<div class="fd-cards">${cards}</div>
+      <div class="fd-more-row"><button type="button" class="icon wide fd-more" hidden></button><span class="hint">點卡片看這群股票的連動動畫與走勢（出現在卡片區下方）</span></div>`;
+    fitRows();
     closeDetail();
   }
+  // 卡片區最多兩排高，其他在區內捲動（「展開全部」可切換）；寬度改變時重新量
+  function fitRows() {
+    const grid = body.querySelector('.fd-cards');
+    const btn = body.querySelector('.fd-more');
+    if (!grid || !btn) return;
+    grid.style.maxHeight = '';
+    const cards = [...grid.querySelectorAll('.fd-card')];
+    const h = rowsHeight(cards.map((c) => c.offsetTop), 2, parseFloat(getComputedStyle(grid).rowGap) || 10);
+    btn.hidden = h === null;
+    grid.classList.toggle('fd-clip', h !== null && !pref.expanded);
+    if (h !== null && !pref.expanded) grid.style.maxHeight = `${h}px`;
+    btn.textContent = pref.expanded ? '收合成兩排 ▴' : `展開全部 ${cards.length} 張 ▾`;
+  }
+  new ResizeObserver(() => fitRows()).observe(body);
+  body.addEventListener('click', (e) => {
+    if (!e.target.closest('.fd-more')) return;
+    e.stopPropagation();
+    pref.expanded = !pref.expanded;
+    save();
+    fitRows();
+  }, true);
   body.addEventListener('click', (e) => {
     const b = e.target.closest('button[data-filter]');
     if (!b || !state.data) return;
@@ -614,6 +653,7 @@ export function mountFinderPanel(container, { onStock, onResult }) {
     closeDetail();
     if (wasOn) return;
     card.classList.add('on');
+    card.scrollIntoView({ block: 'nearest' }); // inside the two-row grid
     const t = state.detailTicket;
     detail.hidden = false;
     detail.innerHTML = '<p class="hint">載入連動資料…</p>';
@@ -629,6 +669,7 @@ export function mountFinderPanel(container, { onStock, onResult }) {
       const inst = card.querySelector('.fd-inst')?.outerHTML || ''; // 🏦 who is buying, under the title
       detail.innerHTML = `<div class="panel-h"><b>${escapeHtml(g.members.map((m) => m.name).join('、'))}</b>${seen}${themes ? `<span class="fd-themes">${escapeHtml(themes)}</span>` : ''}<button type="button" class="icon" data-act="close" aria-label="關閉" style="margin-left:auto">✕</button></div>${inst}<div class="fd-detail-body"></div>`;
       state.stopRace = renderBody(detail.querySelector('.fd-detail-body'), d, '20', onStock, '點一列看那檔的分時走勢');
+      detail.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); // right under the card grid
     } catch (err) {
       if (t === state.detailTicket) detail.innerHTML = `<p class="hint">${escapeHtml(err.message)}</p>`;
     }

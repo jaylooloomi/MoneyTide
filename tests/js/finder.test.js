@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { PRESETS, themeNewsHtml, cardHtml, digestText, shownFilter, finderMarkIndex, finderMarkTitle, csvExport, defaultGroupName, filterHtml, funnelText, presetOf, filterOptions, matchesFilter, progressView, queryOf, statsText } from '../../static/js/finder.js';
+import { PRESETS, rowsHeight, themeNewsHtml, cardHtml, digestText, shownFilter, finderMarkIndex, finderMarkTitle, csvExport, defaultGroupName, filterHtml, funnelText, presetOf, filterOptions, matchesFilter, progressView, queryOf, statsText } from '../../static/js/finder.js';
 
 test('queryOf sends only the fields of the chosen method; blank 起漲差 means not required', () => {
   const p = { daily_r: 0.75, daily_window: 20, new_daily_r: 0.85, pool_top: 30, intraday_r: 0.5, peak_gap: 8, start_gap: '', require_burst: true, groupings: ['custom', 'news'], pool_sources: ['gain'] };
@@ -123,7 +123,7 @@ test('filter chips: 找法1 by source grouping (a group can count twice), 找法
   assert.equal(known.groups.filter((g) => matchesFilter(g, '細產業', 'known')).length, 1);
   assert.equal(known.groups.filter((g) => matchesFilter(g, 'all', 'known')).length, 3);
   const fresh = { method: 'new', groups: [{ kind: '跨族群新組合' }, { kind: '已知族群' }, { kind: '跨族群新組合' }] };
-  assert.deepEqual(filterOptions(fresh).map((o) => [o.label, o.n]), [['全部', 3], ['已知族群', 1], ['延伸', 0], ['跨族群新組合', 2]]);
+  assert.deepEqual(filterOptions(fresh).slice(0, 4).map((o) => [o.label, o.n]), [['全部', 3], ['已知族群', 1], ['延伸', 0], ['跨族群新組合', 2]]);
   // 🏦 法人買超／賣超: offered once 法人 is attached, for either method, without recomputing
   const withInst = { ...known, groups: known.groups.map((g, k) => ({ ...g, inst: { lots: [500, -20, 0][k] } })) };
   assert.deepEqual(filterOptions(withInst).slice(-2).map((o) => [o.key, o.label, o.n]), [['@inst+', '🏦 法人買超', 1], ['@inst-', '🏦 法人賣超', 1]]);
@@ -132,6 +132,15 @@ test('filter chips: 找法1 by source grouping (a group can count twice), 找法
   assert.equal(shownFilter(withInst, '@inst-'), '@inst-');
   assert.equal(shownFilter(known, '@inst-'), 'all'); // the day has no 法人: back to 全部
   assert.equal(csvExport({ ...withInst, date: '2026-10-22', groups: withInst.groups.map((g) => ({ ...g, members: [{ code: '1', name: '甲' }] })) }, '@inst+')[2].length, 1);
+  // 找法2: chips by the ranking the members came in from
+  const pooled = { method: 'new', params: { pool_sources: ['gain', 'turnover', 'gap'] }, groups: [
+    { kind: '跨族群新組合', pool: { 1: ['漲幅', '跳空'], 2: ['週轉率'] } },
+    { kind: '已知族群', pool: { 3: ['跳空'] } },
+  ] };
+  assert.deepEqual(filterOptions(pooled).slice(-3).map((o) => [o.key, o.label, o.n]), [['@src:gain', '📈 漲幅', 1], ['@src:turnover', '📈 週轉率', 1], ['@src:gap', '📈 開盤跳空', 2]]);
+  assert.equal(pooled.groups.filter((g) => matchesFilter(g, '@src:turnover', 'new')).length, 1);
+  assert.ok(!filterOptions(pooled).some((o) => o.key === '@src:vol_ratio')); // not used in that search: no chip
+  assert.match(csvExport({ ...pooled, date: '2026-10-22', groups: pooled.groups.map((g) => ({ ...g, members: [{ code: '1', name: '甲' }] })) }, '@src:gap')[0], /_開盤跳空\.csv$/);
   const html = filterHtml(fresh, '跨族群新組合');
   assert.match(html, /data-filter="跨族群新組合" class="on"/);
   assert.match(html, /data-filter="已知族群的延伸" disabled/);
@@ -238,4 +247,12 @@ test('themeNewsHtml: the headlines behind a 題材, links only for http(s), name
   assert.doesNotMatch(html, /javascript:/); // a non-http url is shown as plain text
   assert.match(themeNewsHtml({ term: 'X', titles: [] }), /沒有存下這個題材的標題/);
   assert.equal(themeNewsHtml(undefined), '');
+});
+
+test('rowsHeight: two rows of cards, from their tops; null when everything fits', () => {
+  assert.equal(rowsHeight([0, 0, 0, 280, 280, 280, 540, 540]), 530); // row 3 starts at 540, minus the 10px gap
+  assert.equal(rowsHeight([540, 0, 280, 0]), 530); // any order
+  assert.equal(rowsHeight([0, 0, 280]), null); // two rows only: no limit
+  assert.equal(rowsHeight([]), null);
+  assert.equal(rowsHeight([0, 300, 610, 900], 3, 8), 892);
 });
