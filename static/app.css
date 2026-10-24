@@ -391,6 +391,7 @@ table.link-heat td.self { background: #3a3e48; }
 .fd-seen.new { background: #2c4a6b; }
 .fd-themes { font-size: 12px; margin-top: 4px; color: #ffcf7a; }
 .fd-detail .panel-h .fd-themes { margin-top: 0; }
+.fd-detail > .fd-inst { padding: 6px 10px 0; margin-bottom: 0; } /* the card's 🏦 line under the title: the panel's padding, clear of its bottom line */
 .fd-digest { color: #ffd400; border-color: #6b5a1e; margin-right: 8px; white-space: nowrap; }
 .fd-inst { font-size: 12px; margin-bottom: 4px; color: #cfd3dc; }
 .cm-drill-h { display: flex; align-items: center; gap: 6px; padding: 4px 2px 6px; position: sticky; top: 0; background: var(--panel); z-index: 1; }
