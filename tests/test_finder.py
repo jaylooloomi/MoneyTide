@@ -541,3 +541,27 @@ def test_theme_titles_put_the_headlines_naming_a_member_first():
     assert [t["title"] for t in titles] == ["PCB族群紅綠互見 律勝連飆", "律勝再攻 PCB族群", "PCB族群走高 欣興領軍"]  # naming 律勝 first, no repeats
     assert titles[0]["names"] == ["律勝"] and titles[0]["date"] == "2026-10-21" and titles[1]["date"] == "2026-10-20"
     assert titles[2]["names"] == [] and titles[2]["url"] == "https://a/1"
+
+
+def test_pool_ranks_gap_and_volume_ratio(tmp_path):
+    from datetime import datetime
+
+    from openmarket.history.finder import gap_pct, volume_ratio
+    from openmarket.history.store import HistoryStore
+
+    assert gap_pct({"open": 105, "prev_close": 100}) == pytest.approx(5.0) and gap_pct({"open": None, "prev_close": 100}) is None
+    s = HistoryStore(tmp_path / "h.sqlite")
+    days = [date(2026, 3, 2), date(2026, 3, 3), date(2026, 3, 4)]
+    vols = {"A": (1000, 3000, 8000), "B": (5000, 5000, 5000), "C": (0, 0, 2000)}  # C: no trading before → no ratio
+    for i, d in enumerate(days):
+        s.save_day(d, [{"code": c, "name": c, "market": "上市", "industry": "X", "kind": "stock", "close": 10.0, "prev_close": 10.0,
+                        "change": 0, "change_pct": 0, "volume_shares": v[i]} for c, v in vols.items()], datetime(d.year, d.month, d.day, 15))
+    vr = volume_ratio(s, days[-1], 2)
+    assert vr == {"A": pytest.approx(8000 / 2000), "B": pytest.approx(1.0)}
+    rows = [
+        {"code": "A", "kind": "stock", "change_pct": 1, "close": 10, "market_cap": 1, "volume_shares": 8000, "open": 10.1, "prev_close": 10},
+        {"code": "B", "kind": "stock", "change_pct": 2, "close": 10, "market_cap": 1, "volume_shares": 5000, "open": 10.6, "prev_close": 10},
+    ]
+    p = FinderParams(pool_top=1, new_min_volume_lots=0, pool_sources=("gap", "vol_ratio"))
+    assert candidate_pool(rows, {}, p, vr) == {"B": ["跳空"], "A": ["量比"]}
+    assert candidate_pool(rows, {}, p) == {"B": ["跳空"]}  # no 量比 given: that ranking is empty

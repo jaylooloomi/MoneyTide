@@ -55,8 +55,9 @@ class FinderParams:
     min_size: int = 2
     pool_top: int = 50  # 找法2: top N of each ranking
     new_min_volume_lots: float = 300  # 找法2: the pool only takes stocks that traded at least this many 張
-    pool_sources: tuple[str, ...] = ("gain", "turnover", "share_z")
+    pool_sources: tuple[str, ...] = ("gain", "turnover", "share_z", "gap", "vol_ratio")
     share_window: int = 20  # days behind the 成交比重暴增 z-score
+    vol_ratio_window: int = 5  # 量比: today's volume against the average of this many days before
     groupings: tuple[str, ...] = ("industry", "custom", "concept", "chain", "news")
     max_fetch: int = 400  # at most this many stocks get intraday bars (largest candidate sets first)
 
@@ -228,9 +229,37 @@ def share_z(store: HistoryStore, day: date, window: int) -> dict[str, float]:
     return out
 
 
-def candidate_pool(rows: list[dict], z: Mapping[str, float], p: FinderParams) -> dict[str, list[str]]:
-    """找法2: top `pool_top` common stocks of each ranking → {code: [sources]}; stocks under
-    `new_min_volume_lots` 張 are left out first (two thin stocks moving together are no pool of money)."""
+def volume_ratio(store: HistoryStore, day: date, window: int) -> dict[str, float]:
+    """量比: each stock's volume on `day` ÷ its average volume over the `window` trading days before
+    (days it did not trade are left out of the average; no history → no ratio)."""
+    dates = sorted(store.trading_dates(up_to=day, limit=window + 1))
+    if len(dates) < 2 or dates[-1] != day:
+        return {}
+    rows = store.rows(dates)
+    before: dict[str, list[float]] = {}
+    for d in dates[:-1]:
+        for r in rows[d]:
+            if r.get("kind") == "stock" and (r.get("volume_shares") or 0) > 0:
+                before.setdefault(r["code"], []).append(r["volume_shares"])
+    out = {}
+    for r in rows[day]:
+        hist = before.get(r["code"])
+        if r.get("kind") == "stock" and hist and r.get("volume_shares") is not None:
+            out[r["code"]] = r["volume_shares"] / (sum(hist) / len(hist))
+    return out
+
+
+def gap_pct(r: Mapping) -> float | None:
+    """開盤跳空: (開盤 − 昨收) ÷ 昨收, in %."""
+    o, prev = r.get("open"), r.get("prev_close")
+    return (o / prev - 1) * 100 if o and prev else None
+
+
+def candidate_pool(rows: list[dict], z: Mapping[str, float], p: FinderParams, vr: Mapping[str, float] | None = None) -> dict[str, list[str]]:
+    """找法2: top `pool_top` common stocks of each ranking (漲幅, 週轉率, 比重暴增, 開盤跳空, 量比) →
+    {code: [sources]}; stocks under `new_min_volume_lots` 張 are left out first (two thin stocks
+    moving together are no pool of money). `vr`: the 量比 of each stock (volume_ratio)."""
+    vr = vr or {}
     stocks = [
         r for r in rows
         if r.get("kind") == "stock" and r.get("change_pct") is not None
@@ -240,6 +269,8 @@ def candidate_pool(rows: list[dict], z: Mapping[str, float], p: FinderParams) ->
         "gain": ("漲幅", lambda r: r.get("change_pct")),
         "turnover": ("週轉率", turnover_rate),
         "share_z": ("比重暴增", lambda r: z.get(r["code"])),
+        "gap": ("跳空", gap_pct),
+        "vol_ratio": ("量比", lambda r: vr.get(r["code"])),
     }
     pool: dict[str, list[str]] = {}
     for src in p.pool_sources:
@@ -679,7 +710,8 @@ async def run_search(
         pool_size = None
     else:
         z = await off(share_z, store, day, p.share_window)
-        pool = candidate_pool(rows, z, p)
+        vr = await off(volume_ratio, store, day, p.vol_ratio_window) if "vol_ratio" in p.pool_sources else {}
+        pool = candidate_pool(rows, z, p, vr)
         series = await off(daily_series, store, day, p.new_daily_window)
         edges = await off(daily_edges, list(pool), series, p.new_daily_r)
         cands = [

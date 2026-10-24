@@ -10,7 +10,7 @@ import { colorFor, escapeHtml, fmtPct, fmtTurnover, toCsv } from './transform.js
 export const METHODS = { known: '找法1 · 已知分類', new: '找法2 · 排行候選' };
 const KIND_COLOR = { 已知族群: '#2c4a6b', 已知族群的延伸: '#6b5a1e', 跨族群新組合: '#b8301a' };
 const GROUPINGS = { industry: '官方產業', custom: '自訂族群', concept: '概念股', chain: '細產業', news: '新聞族群' };
-const SOURCES = { gain: '漲幅', turnover: '週轉率', share_z: '比重暴增' };
+const SOURCES = { gain: '漲幅', turnover: '週轉率', share_z: '比重暴增', gap: '開盤跳空', vol_ratio: '量比' };
 
 /** Tunable fields: [key, label, kind, method ('' = both), help]. Defaults come from the server. */
 export const FIELDS = [
@@ -20,7 +20,8 @@ export const FIELDS = [
   ['daily_window', '日相關天數', 'int', 'known', ''],
   ['new_daily_r', '日相關 ≥', 'num', 'new', '新組合的歷史短，用較短的窗口'],
   ['new_daily_window', '日相關天數', 'int', 'new', ''],
-  ['pool_top', '各排行取前', 'int', 'new', '漲幅、週轉率、比重暴增各取前 N 名'],
+  ['pool_top', '各排行取前', 'int', 'new', '漲幅、週轉率、比重暴增、開盤跳空、量比各取前 N 名'],
+  ['vol_ratio_window', '量比天數', 'int', 'new', '量比＝今天成交量 ÷ 前 N 個交易日的平均量'],
   ['new_min_volume_lots', '成交量 ≥（張）', 'int', 'new', '候選池只收當天成交量至少這麼多張的股票（1 張＝1,000 股）'],
   ['intraday_r', '分時相關 ≥', 'num', '', '最近幾個交易日 5 分 K 報酬；鎖漲停的平線不計'],
   ['intraday_sessions', '分時天數', 'int', '', ''],
@@ -361,6 +362,7 @@ const DEFAULTS = {
   new_min_volume_lots: 300,
   daily_r: 0.8, daily_window: 20, new_daily_r: 0.8, new_daily_window: 10, pool_top: 50,
   intraday_r: 0.5, intraday_sessions: 3, peak_gap: 8, start_gap: '', require_burst: false, dense: 0.7, min_size: 2,
+  vol_ratio_window: 5,
   groupings: Object.keys(GROUPINGS), pool_sources: Object.keys(SOURCES),
 };
 
@@ -373,13 +375,17 @@ export function mountFinderPanel(container, { onStock, onResult }) {
     const saved = JSON.parse(localStorage.getItem(PREF_KEY) || '{}');
     if (saved.method in METHODS) pref.method = saved.method;
     Object.assign(pref.params, saved.params || {});
+    // saved before 開盤跳空／量比 existed: turn the two new rankings on once (later choices are kept)
+    if ((saved.v || 1) < 2 && Array.isArray(saved.params?.pool_sources)) {
+      pref.params.pool_sources = [...new Set([...saved.params.pool_sources, 'gap', 'vol_ratio'])];
+    }
     Object.assign(pref.filter, saved.filter || {});
   } catch {
     /* defaults */
   }
   const save = () => {
     try {
-      localStorage.setItem(PREF_KEY, JSON.stringify(pref));
+      localStorage.setItem(PREF_KEY, JSON.stringify({ ...pref, v: 2 }));
     } catch {
       /* ignore */
     }
