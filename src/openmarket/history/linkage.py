@@ -330,3 +330,45 @@ def fmt_minute(m: int | None) -> str | None:
     if m is None:
         return None
     return f"{9 + m // 60:02d}:{m % 60:02d}"
+
+
+K5_DAYS = 5  # K's 5 日 K: candles shown per stock
+K5_VR_DAYS = 5  # 量比 against the average volume of this many days before each candle
+
+
+def daily_k(store: HistoryStore, day: date, codes: list[str], days: int = K5_DAYS, vr_days: int = K5_VR_DAYS) -> dict[str, list[dict]]:
+    """The last `days` trading days up to `day` for each code, oldest first: {date, open, high, low, close,
+    pct, lots (張), limit (closed at limit-up), vr (量比 vs the vr_days before; None without history),
+    inst (三大法人 張; None when not published)}."""
+    dates = sorted(store.trading_dates(up_to=day, limit=days + vr_days))
+    rows = store.rows(dates)
+    wanted = set(codes)
+    by_code: dict[str, dict[date, dict]] = {c: {} for c in codes}
+    for d in dates:
+        for r in rows[d]:
+            if r["code"] in wanted:
+                by_code[r["code"]][d] = r
+    shown = dates[-days:]
+    inst = store.inst_net(shown, codes)
+    out: dict[str, list[dict]] = {}
+    for c in codes:
+        series = []
+        for d in shown:
+            r = by_code[c].get(d)
+            if not r or r.get("close") is None:
+                continue
+            before = [x["volume_shares"] for x in (by_code[c].get(p) for p in dates[: dates.index(d)][-vr_days:]) if x and x.get("volume_shares")]
+            vol = r.get("volume_shares")
+            limit = limit_up_price(r.get("prev_close"))
+            net = inst.get(d, {}).get(c)
+            series.append({
+                "date": d.isoformat(),
+                "open": r.get("open"), "high": r.get("high"), "low": r.get("low"), "close": r["close"],
+                "pct": r.get("change_pct"),
+                "lots": round(vol / 1000) if vol is not None else None,
+                "limit": bool(limit and r["close"] >= limit - 0.001),
+                "vr": round(vol / (sum(before) / len(before)), 2) if vol is not None and before else None,
+                "inst": round(net / 1000) if net is not None else None,
+            })
+        out[c] = series
+    return out

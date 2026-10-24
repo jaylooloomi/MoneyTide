@@ -299,7 +299,7 @@ table.link-matrix td, table.link-matrix th { padding: 2px 4px; font-size: 11px; 
 /* A header: 加權 / 櫃買 change of the shown day */
 .idx-chg { margin-left: 12px; font-size: 12px; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .rt { max-width: 1100px; }
-.rt-axis { position: relative; height: 13px; margin: 0 278px 2px 122px; color: var(--muted); font-size: 10px; }
+.rt-axis { position: relative; height: 13px; margin: 0 348px 2px 122px; color: var(--muted); font-size: 10px; }
 .rt-axis span { position: absolute; transform: translateX(-50%); white-space: nowrap; }
 .rt-axis span:first-child { transform: none; }
 .rt-axis span:last-child { transform: translateX(-100%); }
@@ -434,3 +434,9 @@ table.link-heat td.self { background: #3a3e48; }
 .rot-info-t { border-collapse: collapse; width: 100%; }
 .rot-info-t td { padding: 3px 6px; vertical-align: top; border-bottom: 1px solid #ffffff10; }
 .rot-info-t td:first-child { white-space: nowrap; width: 6em; }
+.rt-k5 { width: 64px; flex: none; display: flex; align-items: center; }
+.race-mid { flex: 0 0 280px; border: 1px solid var(--line, #2a2e37); border-radius: 6px; padding: 6px 8px; align-self: stretch; overflow-y: auto; }
+.race-mid:empty { display: none; }
+.k5-title { font-weight: 600; font-size: 12px; margin-bottom: 4px; }
+.k5-card { margin-bottom: 8px; }
+.k5-h { display: flex; gap: 6px; align-items: baseline; font-size: 12px; flex-wrap: wrap; }

@@ -6,6 +6,7 @@
 
 import { PICK_COLORS, mountIntraday, nextPicks } from './intradaychart.js';
 import { colorFor, escapeHtml, fmtPct, limitTag } from './transform.js';
+import { k5CardHtml, k5Svg, k5Title } from './k5.js';
 
 export const RACE_END = 270; // minutes after 09:00 → 13:30
 export const PEAK_END = 240; // the intraday high is taken over 09:00–13:00
@@ -150,6 +151,9 @@ export function pairFacts(d, frames, a, b, m) {
   const first = (x, y) => (x === null && y === null ? null : y === null || (x !== null && x < y) ? a : x === y ? '' : b);
   const pa = A.peak?.m ?? null;
   const pb = B.peak?.m ?? null;
+  // the whole 09:00–13:00 window, whatever the playhead (N's 高點差 uses this one)
+  const da = frames[a] ? peakSoFar(frames[a], RACE_END)?.m ?? null : null;
+  const db = frames[b] ? peakSoFar(frames[b], RACE_END)?.m ?? null : null;
   const member = (c) => d.members[idx.get(c)] || {};
   return {
     a, b,
@@ -157,6 +161,7 @@ export function pairFacts(d, frames, a, b, m) {
     // each session's R, the shown day first (今日, 昨日, 前日)
     riDays: [...(d.intraday?.by_session || [])].reverse().map((s) => ({ date: s.date, r: cell(s.matrix) })),
     peakA: pa, peakB: pb, peakGap: pa !== null && pb !== null ? Math.abs(pa - pb) : null, firstPeak: first(pa, pb),
+    dayPeakA: da, dayPeakB: db, dayPeakGap: da !== null && db !== null ? Math.abs(da - db) : null,
     lockA: A.lock, lockB: B.lock, firstLock: first(A.lock, B.lock),
     nowA: A.now, nowB: B.now, diff: A.now !== null && B.now !== null ? A.now - B.now : null,
     instA: member(a).inst_net ?? null, instB: member(b).inst_net ?? null,
@@ -224,7 +229,7 @@ export function pairCardHtml(f, ext, name, color) {
   return `<table class="rt-pair">
     ${row('日相關', `R20 ${rTag(f.r20, 0.7, 0.3)}　R60 ${rTag(f.r60, 0.7, 0.3)}`, '近 20／60 個交易日日漲跌幅的相關係數')}
     ${row('分時相關', `R ${rTag(f.ri, 0.5, 0.2)} <small class="muted">近 3 日合計</small>${riDaysHtml(f.riDays)}`, '5 分 K 報酬的相關係數；鎖漲停的平線不計，單日少於 15 個點時顯示 —')}
-    ${row('最高點', peak, '到播放頭為止（13:00 之前）的日內最高點')}
+    ${row('最高點', `${peak}${f.dayPeakGap === null ? '' : `<br><small class="muted">全天（09:00–13:00，N 用的）：</small>${n(f.a)} ${fmtClock(f.dayPeakA)}／${n(f.b)} ${fmtClock(f.dayPeakB)}，差 <b class="${f.dayPeakGap <= 10 ? 'up' : ''}">${f.dayPeakGap}</b> 分`}`, '第一行：到播放頭為止的最高點；第二行：整天（13:00 之前）的最高點，N 的「高點差」篩選用的是這個')}
     ${row('鎖漲停', lock)}
     ${row('當下強弱', strong)}
     ${row('法人', inst)}
@@ -345,7 +350,7 @@ export function mountRace(box, d, { onStock } = {}) {
                 <svg viewBox="0 0 ${RACE_END} ${ROW_H}" preserveAspectRatio="none"><line class="rt-zero" x1="0" x2="${RACE_END}" y1="${y(0)}" y2="${y(0)}"/><polyline class="rt-path"/></svg>
                 <span class="rt-dot"></span>
               </span>
-              <span class="rt-now"></span><span class="rt-amp"></span><span class="rt-peak"></span></div>`,
+              <span class="rt-now"></span><span class="rt-amp"></span><span class="rt-peak"></span><span class="rt-k5"></span></div>`,
           )
           .join('')}
         ${codes
@@ -359,11 +364,12 @@ export function mountRace(box, d, { onStock } = {}) {
                 <svg viewBox="0 0 ${RACE_END} ${ROW_H}" preserveAspectRatio="none"><line class="rt-zero" x1="0" x2="${RACE_END}" y1="${y(0)}" y2="${y(0)}"/><polyline class="rt-path"/></svg>
                 <span class="rt-dot"></span>
               </span>
-              <span class="rt-now"></span><span class="rt-amp" title="振幅＝（到目前為止的最高 − 最低）÷ 昨收"></span><span class="rt-peak"></span></div>`;
+              <span class="rt-now"></span><span class="rt-amp" title="振幅＝（到目前為止的最高 − 最低）÷ 昨收"></span><span class="rt-peak"></span>
+              <span class="rt-k5" title="${escapeHtml(k5Title(d.daily_k?.[c]))}">${k5Svg(d.daily_k?.[c], 64, 30)}</span></div>`;
           })
           .join('')}
       </div>
-    </div><div class="rt-pairs" hidden></div></div><div class="race-side"></div></div>`;
+    </div><div class="rt-pairs" hidden></div></div><div class="race-mid" title="選中股票的最近 5 個交易日：K 線、漲跌、🔒 漲停、量（×＝量比）、法人張數"></div><div class="race-side"></div></div>`;
   const chart = mountIntraday(box.querySelector('.race-side'), { date: d.date, onCard: onStock, benchmarks: benches });
   const rows = new Map([...box.querySelectorAll('.rt-row[data-code]')].map((el) => [el.dataset.code, el]));
   const benchRows = [...box.querySelectorAll('.rt-row.bench')].map((el) => [el, benchFrames[el.dataset.bench]]);
@@ -409,6 +415,14 @@ export function mountRace(box, d, { onStock } = {}) {
         ? pairCardHtml(list[0].f, pairExt.get(list[0].key) || null, nameOf, colorOf)
         : pairTableHtml(list, (k) => pairExt.get(k) || null, nameOf, colorOf, state.pairOpen));
   }
+  // 5 日 K of the picked stocks, between the timeline and the intraday chart
+  const midBox = box.querySelector('.race-mid');
+  function drawK5() {
+    const many = state.picked.length > 1;
+    midBox.innerHTML = `<div class="k5-title">5 日 K</div>${state.picked
+      .map((c) => k5CardHtml(byCode.get(c)?.name || c, c, many ? colorOf(c) : '#e6e6e6', d.daily_k?.[c] || []))
+      .join('')}`;
+  }
   pairBox.addEventListener('click', (e) => {
     const tr = e.target.closest('tr[data-pair]');
     if (!tr) return;
@@ -424,6 +438,7 @@ export function mountRace(box, d, { onStock } = {}) {
       el.style.outlineColor = i >= 0 && state.picked.length > 1 ? `${PICK_COLORS[i % PICK_COLORS.length]}aa` : '';
     }
     chart.show(state.picked.map((c) => ({ code: c, name: byCode.get(c)?.name }))).then(() => chart.sync(state.m));
+    drawK5();
     askPairs();
     drawPairs();
   }

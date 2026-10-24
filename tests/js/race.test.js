@@ -106,11 +106,14 @@ test('pairFacts / pairCardHtml / pairTableHtml: 交集 of two picked stocks at t
   assert.deepEqual([f.r20, f.r60, f.ri], [0.82, 0.65, 0.71]);
   assert.deepEqual(f.riDays, [{ date: '2026-10-22', r: 0.72 }, { date: '2026-10-21', r: 0.58 }, { date: '2026-10-20', r: null }]); // newest first
   assert.deepEqual([f.peakA, f.peakB, f.peakGap, f.firstPeak], [55, 45, 10, 'B']);
+  assert.deepEqual([f.dayPeakA, f.dayPeakB, f.dayPeakGap], [55, 45, 10]);
   assert.deepEqual([f.lockA, f.lockB, f.firstLock], [55, null, 'A']);
   assert.ok(Math.abs(f.diff - 1.4) < 1e-9);
   const early = pairFacts(d, frames, 'A', 'B', 50); // the playhead before A's lock and peak
   assert.equal(early.lockA, null);
   assert.equal(early.peakA, 50);
+  assert.equal(early.dayPeakA, 55); // the full-day peak does not follow the playhead
+  assert.match(pairCardHtml(early, null, (c) => c, () => '#fff'), /全天（09:00–13:00，N 用的）：<\/small><b[^>]*>A<\/b> 09:55／<b[^>]*>B<\/b> 09:45，差 <b class="up">10<\/b> 分/);
   const name = (c) => ({ A: '甲', B: '乙', C: '丙' })[c];
   const color = () => '#fff';
   const html = pairCardHtml(f, { same_dir: { same: 16, total: 20 }, groups: [{ label: '自訂族群', group: '記憶體' }], finder: [{ date: '2026-10-22', method: 'known' }], themes: ['PCB'] }, name, color);

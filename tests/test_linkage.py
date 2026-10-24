@@ -264,3 +264,29 @@ def test_limit_up_price_is_the_tick_price_not_one_rebuilt_from_the_rounded_pct()
         if locked_level({0: 1.0}, {"prev_close": prev, "high": limit_up_price(prev)}) is None:
             bad += 1
     assert bad == 0
+
+
+def test_daily_k_last_days_with_volume_ratio_limit_and_inst(tmp_path):
+    from datetime import datetime
+
+    from openmarket.history.linkage import daily_k
+    from openmarket.history.store import HistoryStore
+    from openmarket.sources.institutional import InstRow
+
+    s = HistoryStore(tmp_path / "h.sqlite")
+    days = [date(2026, 3, d) for d in (2, 3, 4, 5)]
+    closes = [100.0, 110.0, 105.0, 106.0]  # 3/3 closes at the limit-up 110
+    vols = [1000_000, 4000_000, 2000_000, 1500_000]
+    for i, d in enumerate(days):
+        prev = closes[i - 1] if i else 100.0
+        s.save_day(d, [{"code": "A", "name": "a", "market": "上市", "industry": "X", "kind": "stock", "open": prev, "high": max(prev, closes[i]),
+                        "low": min(prev, closes[i]), "close": closes[i], "prev_close": prev, "change": closes[i] - prev,
+                        "change_pct": (closes[i] / prev - 1) * 100, "volume_shares": vols[i]}], datetime(d.year, d.month, d.day, 15))
+    s.save_inst_day(days[-1], [InstRow("A", 0, 0, 0, 2_500_400)], datetime(2026, 3, 5, 17))
+    k = daily_k(s, days[-1], ["A", "Z"], days=3, vr_days=2)["A"]
+    assert [x["date"] for x in k] == ["2026-03-03", "2026-03-04", "2026-03-05"]  # oldest first
+    assert k[0]["limit"] is True and k[1]["limit"] is False
+    assert k[0]["vr"] == 4.0  # 4,000 張 against the 1,000 before (only one day of history)
+    assert k[2]["vr"] == round(1500_000 / ((4000_000 + 2000_000) / 2), 2)
+    assert k[2]["lots"] == 1500 and k[2]["inst"] == 2500 and k[1]["inst"] is None
+    assert daily_k(s, days[-1], ["Z"])["Z"] == []
