@@ -94,11 +94,71 @@ export function goneReading(members, quotes) {
   return dumped * 2 >= q.length ? '疑似出貨' : '不再同步';
 }
 
+/**
+ * The 🔥 groups' next day: for each day of the window but the last, its 🔥 groups' members on the day
+ * after (quotesByDay[next date]). → {groups, stocks, gap, close, intraday, fadeShare} (means in %, the
+ * share of members that closed below their open), or null without any sample.
+ */
+export function hotNextDay(dates, per, quotesByDay) {
+  const gaps = [];
+  const closes = [];
+  const intra = [];
+  let groups = 0;
+  for (let k = 0; k < dates.length - 1; k++) {
+    const q = quotesByDay[dates[k + 1]];
+    if (!q) continue;
+    for (const x of per[k] || []) {
+      if (!x.g.daytrade?.hot) continue;
+      let any = false;
+      for (const m of x.g.members) {
+        const v = q[m.code];
+        if (!v || v.change_pct == null) continue;
+        any = true;
+        closes.push(v.change_pct);
+        if (v.gap_pct != null) gaps.push(v.gap_pct);
+        if (v.intraday_pct != null) intra.push(v.intraday_pct);
+      }
+      if (any) groups++;
+    }
+  }
+  if (!closes.length) return null;
+  const mean = (xs) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null);
+  return { groups, stocks: closes.length, gap: mean(gaps), close: mean(closes), intraday: mean(intra), fadeShare: intra.length ? (intra.filter((v) => v < 0).length / intra.length) * 100 : null };
+}
+
+/** 🔥 隔日沖警示: today's 🔥 groups (risk, not evidence) and how such groups did the next day. */
+export function hotHtml(list, stats) {
+  const hot = list.filter((x) => x.g.daytrade?.hot);
+  const p = (v) => (v == null ? '—' : `<span class="${v > 0 ? 'up' : v < 0 ? 'down' : ''}">${fmtPct(v)}</span>`);
+  const rows = hot
+    .map((x) => {
+      const dt = x.g.daytrade;
+      const cells = Object.entries(dt.by_code).map(([c, v]) => {
+        const base = dt.base?.[c];
+        return `${escapeHtml(x.g.members.find((m) => m.code === c)?.name || c)} ${v.toFixed(1)}%${base != null ? `<small class="muted">（平常 ${base.toFixed(0)}%）</small>` : ''}`;
+      });
+      return `<li>${escapeHtml(namesOf(x.g))}：平均 <b>${dt.avg.toFixed(1)}%</b>　${cells.join('、')}</li>`;
+    })
+    .join('');
+  const s = stats
+    ? `<p class="rp-line">前幾天的 🔥 組合（${stats.groups} 組、${stats.stocks} 檔次）隔天：開盤 ${p(stats.gap)}、收盤 ${p(stats.close)}、盤中（收盤 − 開盤）${p(stats.intraday)}，開高走低（收盤低於開盤）<b>${stats.fadeShare == null ? '—' : `${stats.fadeShare.toFixed(0)}%`}</b>。樣本少，只是統計觀察，不是交易建議。</p>`
+    : '<p class="rp-line muted">前幾天沒有 🔥 組合可比對隔天表現。</p>';
+  return `<div class="rp-hot" title="有當沖資料的成員平均當沖比 ≥ 50%：隔日沖短線熱錢，隔天常開高走低；這是風險警示，不算在資金證據裡">
+    <h3 class="rp-h">🔥 隔日沖警示 <small class="muted">${hot.length} 組；隔天常開高走低</small></h3>
+    ${hot.length ? `<ul class="rp-hot-list">${rows}</ul>` : '<p class="rp-line muted">今天沒有 🔥 組合。</p>'}${s}</div>`;
+}
+
 /** The report as plain text (複製成文字: for notes or a chat). */
-export function reportText(date, index, list, rows) {
+export function reportText(date, index, list, rows, hotStats = null) {
   const lines = [`${date} 盤後報告`];
   if (index.length) lines.push(index.map((b) => `${b.name} ${fmtPct(b.change_pct)}`).join('　'));
   lines.push(`找到 ${list.length} 組，證據強 ${list.filter((x) => x.strong).length} 組，連續出現 ${rows.filter((r) => r.streak >= 1 && r.cells.at(-1) != null).length} 組`);
+  const hot = list.filter((x) => x.g.daytrade?.hot);
+  if (hot.length) {
+    lines.push('', `🔥 隔日沖警示（${hot.length} 組，隔天常開高走低）：`);
+    for (const x of hot) lines.push(`   ${namesOf(x.g)}：平均當沖比 ${x.g.daytrade.avg.toFixed(1)}%`);
+    if (hotStats) lines.push(`   前幾天的 🔥 組合隔天：開盤 ${fmtPct(hotStats.gap)}、收盤 ${fmtPct(hotStats.close)}、開高走低 ${hotStats.fadeShare == null ? '—' : `${hotStats.fadeShare.toFixed(0)}%`}（${hotStats.stocks} 檔次）`);
+  }
   list.forEach((x, i) => {
     const items = groupEvidenceItems(x.g);
     const row = rows.find((r) => r.key === x.key);
@@ -231,6 +291,8 @@ export function mountReportPanel(container, { onStock, query, condText }) {
       }
       if (t !== state.ticket) return;
     }
+    await loadNextQuotes(t, dates, per);
+    if (t !== state.ticket) return;
     draw(date, dates, per, bench, '');
     // the days before that N never computed (only the latest 5 are, after the close): one at a time, the
     // nearest first, the table filled in as each one lands; a new date stops it
@@ -244,7 +306,30 @@ export function mountReportPanel(container, { onStock, query, condText }) {
       }
       if (t !== state.ticket) return;
     }
-    if (missing.length) draw(date, dates, per, bench, '');
+    if (missing.length) {
+      await loadNextQuotes(t, dates, per); // the days worked out may have 🔥 groups of their own
+      if (t !== state.ticket) return;
+      draw(date, dates, per, bench, '');
+    }
+  }
+
+  // the members of each day's 🔥 groups on the trading day after (for hotNextDay)
+  async function loadNextQuotes(t, dates, per) {
+    const want = {};
+    dates.slice(0, -1).forEach((d, k) => {
+      const codes = (per[k] || []).filter((x) => x.g.daytrade?.hot).flatMap((x) => x.g.members.map((m) => m.code));
+      if (codes.length) want[dates[k + 1]] = [...new Set(codes)];
+    });
+    state.nextQuotes = state.nextQuotes || {};
+    for (const [d, codes] of Object.entries(want)) {
+      try {
+        const r = await fetch(`/api/history/quotes?date=${encodeURIComponent(d)}&codes=${encodeURIComponent(codes.join(','))}`);
+        state.nextQuotes[d] = { ...(state.nextQuotes[d] || {}), ...(r.ok ? (await r.json()).quotes : {}) };
+      } catch {
+        /* that day stays without a sample */
+      }
+      if (t !== state.ticket) return;
+    }
   }
 
   function draw(date, dates, per, bench, progress) {
@@ -263,13 +348,15 @@ export function mountReportPanel(container, { onStock, query, condText }) {
     const more = gone.length > GONE_SHOWN
       ? `<button type="button" class="icon wide rp-gone">${state.allGone ? '收起消失的組合' : `其餘 ${gone.length - GONE_SHOWN} 組消失的組合`}</button>`
       : '';
-    state.text = reportText(date, bench, list, rows);
+    const hotStats = hotNextDay(dates, per, state.nextQuotes || {});
+    state.text = reportText(date, bench, list, rows, hotStats);
     const strong = list.filter((x) => x.strong).length;
     const going = rows.filter((r) => r.streak >= 1 && r.cells.at(-1) != null).length;
     const metric = (label, value) => `<div class="rp-metric"><small>${label}</small><b>${value}</b></div>`;
     // 摘要 across the top; the day's groups (A1) on the left, 跨天追蹤 (A3) on the right
     body.innerHTML = `<div class="rp-metrics">${metric('找到群組', list.length)}${metric('證據強', strong)}${metric('連續出現', going)}${metric('大盤／櫃買', bench.map((b) => `<span class="${b.change_pct > 0 ? 'up' : 'down'}">${fmtPct(b.change_pct)}</span>`).join(' / ') || '—')}</div>
       <div class="rp-cols"><div class="rp-left">
+        ${hotHtml(list, hotStats)}
         <h3 class="rp-h">${escapeHtml(date)} 找到的群組</h3>
         ${list.length ? list.map((x, k) => groupHtml(x, k, rows.find((r) => r.key === x.key))).join('') : '<p class="hint">這一天沒有找到群組（或 N 還沒算完，稍後再開）。</p>'}
       </div><div class="rp-right">

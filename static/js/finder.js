@@ -293,6 +293,8 @@ export function filterOptions(d) {
   }
   const related = groups.filter((g) => matchesFilter(g, '@rel', d.method)).length;
   if (related) opts.push({ key: '@rel', label: '🏢 有持股關係', n: related, tip: '成員之間有轉投資（權益法持股 ≥ 20%）、董監席位，或屬於同一個集團（MoneyDJ）' });
+  const hot = groups.filter((g) => g.daytrade?.hot).length;
+  if (hot) opts.push({ key: '@dt', label: '🔥 隔日沖', n: hot, tip: '有當沖資料的成員平均當沖比 ≥ 50%：隔日沖短線熱錢，隔天常開高走低（風險警示，不算資金證據）；盤後報告有這類組合過去幾天的隔天表現' });
   if (groups.some((g) => g.evidence)) opts.push({ key: '@ev', label: '🧾 證據強', n: groups.filter((g) => matchesFilter(g, '@ev', d.method)).length, tip: EVIDENCE_TIP });
   return opts;
 }
@@ -312,6 +314,7 @@ export function matchesFilter(g, key, method) {
   if (key.startsWith('@src:')) return Object.values(g.pool || {}).some((from) => from.includes(POOL_LABELS[key.slice(5)]));
   if (key === '@rel') return !!(g.relations?.length || g.rel_group);
   if (key === '@ev') return isStrong(evidenceCount(groupEvidenceItems(g)));
+  if (key === '@dt') return !!g.daytrade?.hot;
   if (key === '@inst+') return g.inst?.lots > 0;
   if (key === '@inst-') return g.inst?.lots < 0;
   return method === 'new' ? g.kind === key : !!g.sources?.some((s) => s.label === key);

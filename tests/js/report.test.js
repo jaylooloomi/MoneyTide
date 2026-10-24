@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { concHtml, goneReading, laggardsHtml, mergeGroups, motiveOf, reportText, trackHtml, trackRows, watchOf } from '../../static/js/report.js';
+import { concHtml, goneReading, hotHtml, hotNextDay, laggardsHtml, mergeGroups, motiveOf, reportText, trackHtml, trackRows, watchOf } from '../../static/js/report.js';
 import { groupEvidenceItems } from '../../static/js/evidence.js';
 
 const m = (code, name = code) => ({ code, name, change_pct: 5 });
@@ -102,4 +102,19 @@ test('reportText carries 籌碼集中度, 補漲候選 and 疑似出貨 too', ()
   assert.match(text, /籌碼集中度：甲 \+17\.5%/);
   assert.match(text, /同族群未跟上（細產業：被動元件）：丙 \+0\.50%/);
   assert.match(text, /消失・疑似出貨：戊、己/);
+});
+
+test('hotNextDay: the 🔥 groups of each day, their members the day after', () => {
+  const hot = grp(['1', '2'], {}, { daytrade: { by_code: { 1: 60, 2: 55 }, avg: 57.5, hot: true, base: {} } });
+  const cold = grp(['3', '4'], {}, { daytrade: { by_code: {}, avg: null, hot: false } });
+  const per = [mergeGroups({ groups: [hot, cold] }, null), mergeGroups({ groups: [cold] }, null), []];
+  const q = { '2026-08-04': { 1: { change_pct: -3, gap_pct: 2, intraday_pct: -5 }, 2: { change_pct: 1, gap_pct: 1, intraday_pct: 0.5 }, 3: { change_pct: 9 } } };
+  const s = hotNextDay(['2026-08-03', '2026-08-04', '2026-08-05'], per, q);
+  assert.deepEqual({ ...s }, { groups: 1, stocks: 2, gap: 1.5, close: -1, intraday: -2.25, fadeShare: 50 }); // cold's "3" is not counted
+  assert.equal(hotNextDay(['a', 'b'], [[], []], {}), null);
+  const html = hotHtml(per[0], s);
+  assert.match(html, /🔥 隔日沖警示 <small class="muted">1 組/);
+  assert.match(html, /平均 <b>57\.5%<\/b>/);
+  assert.match(html, /開高走低（收盤低於開盤）<b>50%<\/b>/);
+  assert.match(reportText('2026-08-03', [], per[0], trackRows([per[0]]), s), /🔥 隔日沖警示（1 組[\s\S]*開高走低 50%（2 檔次）/);
 });

@@ -297,7 +297,8 @@ def test_quotes_api_change_and_volume_ratio(tmp_path):
     app = create_app(AppConfig(data_dir=tmp_path), start_polling=False, start_history=False, start_concepts=False, history_store=s)
     with TestClient(app, base_url="http://127.0.0.1") as client:
         q = client.get("/api/history/quotes", params={"date": "2026-10-21", "codes": "1,9"}).json()["quotes"]
-    assert q == {"1": {"change_pct": pytest.approx(-4.7619, abs=1e-3), "vol_ratio": 3.0}}  # 3M ÷ the 1M average; "9" unknown
+    assert q == {"1": {"change_pct": pytest.approx(-4.7619, abs=1e-3), "vol_ratio": 3.0,  # 3M ÷ the 1M average; "9" unknown
+                       "gap_pct": 0.0, "intraday_pct": -4.76}}  # opened at 昨收 10.5, closed 10
 
 
 

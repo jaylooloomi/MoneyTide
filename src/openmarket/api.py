@@ -739,7 +739,8 @@ def create_app(
 
     @app.get("/api/history/quotes")
     def history_quotes(codes: str, day: str = Query(..., alias="date")) -> dict:
-        """漲跌幅 and 量比 (÷ the 5 days before) of a few stocks on one day: 盤後報告's 出貨 check."""
+        """漲跌幅, 量比 (÷ the 5 days before), 開盤跳空 (open vs 昨收) and 盤中 (close vs open) of a few stocks
+        on one day: 盤後報告's 出貨 check and the 🔥 groups' next day."""
         from .history.finder import volume_ratio
 
         d = _day(day)
@@ -747,7 +748,10 @@ def create_app(
         wanted = set(c for c in codes.split(",") if c)
         vr = volume_ratio(store, d, 5)
         rows = {r["code"]: r for r in store.day_rows(d) if r["code"] in wanted}
-        return {"date": d.isoformat(), "quotes": {c: {"change_pct": r.get("change_pct"), "vol_ratio": round(vr[c], 2) if c in vr else None} for c, r in rows.items()}}
+        pct = lambda a, b: round((a / b - 1) * 100, 2) if a and b else None  # noqa: E731
+        return {"date": d.isoformat(), "quotes": {c: {"change_pct": r.get("change_pct"), "vol_ratio": round(vr[c], 2) if c in vr else None,
+                                                      "gap_pct": pct(r.get("open"), r.get("prev_close")), "intraday_pct": pct(r.get("close"), r.get("open"))}
+                                                  for c, r in rows.items()}}
 
     @app.get("/api/history/index-race")
     async def index_race_day(day: str = Query(..., alias="date")) -> dict:

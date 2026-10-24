@@ -313,3 +313,13 @@ test('the 🔥 line shows each member’s usual 當沖比, marked when today is 
   const html = cardHtml({ ...G2, daytrade: { by_code: { 1: 62, 2: 45 }, avg: 53.5, hot: true, base: { 1: 30, 2: 40 } } }, 0);
   assert.match(html, /甲 62\.0%<small class="up">（平常 30%）<\/small>、乙 45\.0%<small class="muted">（平常 40%）<\/small>/);
 });
+
+test('🔥 隔日沖 chip: the groups whose members average ≥ 50% 當沖比', () => {
+  const g = (hot) => ({ members: [{ code: '1', name: '甲' }], sources: [], matches: [], kind: '已知族群', daytrade: { by_code: {}, avg: hot ? 60 : 20, hot } });
+  const d = { method: 'known', groupings: [], groups: [g(true), g(false)] };
+  const chip = filterOptions(d).find((o) => o.key === '@dt');
+  assert.equal(chip.n, 1);
+  assert.match(chip.tip, /隔天常開高走低/);
+  assert.ok(matchesFilter(d.groups[0], '@dt', 'known') && !matchesFilter(d.groups[1], '@dt', 'known'));
+  assert.ok(!filterOptions({ ...d, groups: [g(false)] }).some((o) => o.key === '@dt')); // none: no chip
+});
