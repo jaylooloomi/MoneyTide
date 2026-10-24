@@ -176,7 +176,7 @@ table.rot td.name { position: sticky; left: 0; background: var(--panel); text-al
 table.rot td.sel { outline: 1px solid #fff; }
 table.rot tr.bench td { position: sticky; z-index: 1; }
 table.rot tr.bench td.name { z-index: 2; color: #ffd400; font-weight: 600; }
-table.rot tr.bench:nth-child(2) td { box-shadow: 0 3px 0 -1px #ffd40066; } /* line under the benchmarks */
+table.rot tr.bench:not(:has(+ tr.bench)) td { box-shadow: 0 3px 0 -1px #ffd40066; } /* line under the last benchmark row */
 .movers { padding: 8px 10px; display: flex; flex-direction: column; gap: 10px; max-height: 420px; overflow: auto; } /* D scrolls inside */
 .mgroup b { color: #fff; }
 .mgroup .count { color: var(--muted); margin-left: 6px; }
@@ -410,7 +410,6 @@ table.link-heat td.self { background: #3a3e48; }
 .ic-body.col { flex-direction: column; }
 .ic-body.col .ic-chart { flex: none; width: 100%; }
 .ic-side.below { width: 100%; overflow-x: auto; }
-#hRotation tr.bench.sector td.name, .rot tr.bench.sector td.name { color: #9fd3ff; }
 /* 歷史 tabs: 分頁1 is the panel grid (#historyView), 分頁2 its own area; the toolbar above is shared */
 #historyView.tab-off { display: none !important; }
 .hist-tab2 { flex: 1; min-height: 0; overflow: auto; padding: 8px; }
