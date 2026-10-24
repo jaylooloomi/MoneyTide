@@ -23,7 +23,7 @@ from .config import STATIC_DIR, TAIPEI, USER_AGENT, AppConfig
 from .explain import explain_day
 from .history.linkage import (
     INTRADAY_HIGH_R, INTRADAY_LOW_R, bucket_closes, daily_linkage, fmt_minute, pair_matrix, peak_minute_from_bars, peak_minute_from_ticks,
-    align_bars, amplitude_pct, limit_down_pct, limit_up_pct, minute_bars, turnover_rate, peak_stats, tick_bars, with_close_bar, race_points, returns, locked_level, daily_k, top_members, verdict_r, verdict_timing,
+    align_bars, amplitude_pct, limit_down_pct, limit_up_pct, minute_bars, turnover_rate, peak_stats, tick_bars, with_close_bar, race_points, returns, locked_level, daily_k, index_k, top_members, verdict_r, verdict_timing,
 )
 from .history.finder import INST_STREAK_DAYS, FinderParams, inst_streak, inst_summary, margin_changes, margin_summary, pair_extras, persistence, run_search
 from .history.finder import news_themes as finder_news_themes  # api.py has its own news_themes route
@@ -547,6 +547,8 @@ def create_app(
         std, lag = peak_stats(peak_list)
         inst = (await asyncio.to_thread(store.inst_net, [d])).get(d, {})  # 三大法人 net shares (posted after the close)
         k5 = await asyncio.to_thread(daily_k, store, d, codes)  # the 5 日 K beside the timeline
+        markets = {code: market for code, (_, market) in INDEX_SYMBOLS.items()}
+        index_k5 = await asyncio.to_thread(index_k, store, d, list(markets.values()))
         return {
             "date": d.isoformat(),
             "members": [
@@ -567,6 +569,7 @@ def create_app(
             "leader_lag_min": lag,
             "benchmarks": benchmarks,
             "daily_k": k5,
+            "benchmark_k": {code: index_k5.get(market, []) for code, market in markets.items()},
             "verdict": {"daily": verdict_r(daily.get("r20")), "intraday": verdict_r(r_intraday, INTRADAY_HIGH_R, INTRADAY_LOW_R), "timing": verdict_timing(std)},
             "notes": notes,
         }

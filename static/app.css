@@ -299,7 +299,7 @@ table.link-matrix td, table.link-matrix th { padding: 2px 4px; font-size: 11px; 
 /* A header: 加權 / 櫃買 change of the shown day */
 .idx-chg { margin-left: 12px; font-size: 12px; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .rt { max-width: 1100px; }
-.rt-axis { position: relative; height: 13px; margin: 0 348px 2px 122px; color: var(--muted); font-size: 10px; }
+.rt-axis { position: relative; height: 13px; margin: 0 216px 2px 122px; color: var(--muted); font-size: 10px; }
 .rt-axis span { position: absolute; transform: translateX(-50%); white-space: nowrap; }
 .rt-axis span:first-child { transform: none; }
 .rt-axis span:last-child { transform: translateX(-100%); }
@@ -325,7 +325,8 @@ table.link-matrix td, table.link-matrix th { padding: 2px 4px; font-size: 11px; 
 
 /* K · the picked member's session beside the animation */
 .race-wrap { display: flex; gap: 14px; align-items: flex-start; flex-wrap: wrap; }
-.race-main { flex: 1 1 620px; min-width: 0; max-width: 1100px; }
+.race-main { flex: 1 1 700px; min-width: 700px; max-width: 1100px; } /* the track keeps ≥ 360px: the 5 日 K column wraps first */
+@media (max-width: 760px) { .race-main { min-width: 0; } }
 .race-side { flex: 1 1 520px; min-width: 360px; max-width: 760px; border: 1px solid var(--line, #2a2e37); border-radius: 6px; padding: 6px 8px; }
 .rt-row.on { background: #ffffff0d; outline: 1px solid #ffd40066; border-radius: 3px; }
 .ic-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 4px; }
@@ -441,3 +442,10 @@ table.link-heat td.self { background: #3a3e48; }
 .k5-card { margin-bottom: 8px; }
 .k5-h { display: flex; gap: 6px; align-items: baseline; font-size: 12px; flex-wrap: wrap; }
 .ic-other-day { color: #ffd400; }
+/* the row's figures in two lines: 漲幅 (+漲停) above, 振幅 and the high's time below */
+.rt-stat { width: 140px; flex: none; display: flex; flex-direction: column; align-items: flex-end; line-height: 1.15; }
+.rt-stat .rt-now { width: auto; font-size: 13px; }
+.rt-sub { font-size: 10px; white-space: nowrap; }
+.rt-sub .rt-amp, .rt-sub .rt-peak { width: auto; font-size: 10px; }
+.rt-sub .rt-peak { margin-left: 6px; }
+.rt-axis.tight .t1300 { display: none; }

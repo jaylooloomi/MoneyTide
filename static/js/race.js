@@ -339,7 +339,7 @@ export function mountRace(box, d, { onStock } = {}) {
       <small class="muted">${step}；● ＝到目前為止的最高點；👑 龍頭＝市值最大；${LEAD_ICON} 領漲＝當下排第一${lead ? `（收盤領漲：${escapeHtml(byCode.get(lead.code)?.name || lead.code)}，${fmtClock(lead.from)} 起一路領先）` : ''}；先鎖漲停的排前面；點一列看右邊的走勢圖，Ctrl／⌘＋點可再加好幾檔一起比較</small>
     </div>
     <div class="rt">
-      <div class="rt-axis">${TICKS.map(([label, m]) => `<span style="left:${pctX(m)}%">${label}</span>`).join('')}</div>
+      <div class="rt-axis">${TICKS.map(([label, m]) => `<span style="left:${pctX(m)}%"${label === '13:00' ? ' class="t1300"' : ''}>${label}</span>`).join('')}</div>
       <div class="rt-board" style="height:${codes.length * ROW_H + top}px">
         <div class="rt-layer"><span class="rt-after" style="left:${pctX(PEAK_END)}%" title="13:00 之後不計入日內最高點"></span><span class="rt-head" title="拖動黃線選時間"><span class="rt-knob"></span></span></div>
         ${benches
@@ -350,7 +350,8 @@ export function mountRace(box, d, { onStock } = {}) {
                 <svg viewBox="0 0 ${RACE_END} ${ROW_H}" preserveAspectRatio="none"><line class="rt-zero" x1="0" x2="${RACE_END}" y1="${y(0)}" y2="${y(0)}"/><polyline class="rt-path"/></svg>
                 <span class="rt-dot"></span>
               </span>
-              <span class="rt-now"></span><span class="rt-amp"></span><span class="rt-peak"></span><span class="rt-k5"></span></div>`,
+              <span class="rt-stat"><span class="rt-now"></span><span class="rt-sub"><span class="rt-amp"></span><span class="rt-peak"></span></span></span>
+              <span class="rt-k5" title="${escapeHtml(k5Title(d.benchmark_k?.[b.code]))}">${k5Svg(d.benchmark_k?.[b.code], 64, 30)}</span></div>`,
           )
           .join('')}
         ${codes
@@ -364,12 +365,17 @@ export function mountRace(box, d, { onStock } = {}) {
                 <svg viewBox="0 0 ${RACE_END} ${ROW_H}" preserveAspectRatio="none"><line class="rt-zero" x1="0" x2="${RACE_END}" y1="${y(0)}" y2="${y(0)}"/><polyline class="rt-path"/></svg>
                 <span class="rt-dot"></span>
               </span>
-              <span class="rt-now"></span><span class="rt-amp" title="振幅＝（到目前為止的最高 − 最低）÷ 昨收"></span><span class="rt-peak"></span>
+              <span class="rt-stat"><span class="rt-now"></span><span class="rt-sub"><span class="rt-amp" title="振幅＝（到目前為止的最高 − 最低）÷ 昨收"></span><span class="rt-peak"></span></span></span>
               <span class="rt-k5" title="${escapeHtml(k5Title(d.daily_k?.[c]))}">${k5Svg(d.daily_k?.[c], 64, 30)}</span></div>`;
           })
           .join('')}
       </div>
     </div><div class="rt-pairs" hidden></div></div><div class="race-mid"></div><div class="race-side"></div></div>`;
+  // a narrow track has no room for both 13:00 and 13:30: keep the dashed 13:00 line, drop its label
+  const axis = box.querySelector('.rt-axis');
+  const fitAxis = () => axis.classList.toggle('tight', axis.clientWidth < 450);
+  new ResizeObserver(fitAxis).observe(axis);
+  fitAxis();
   const chart = mountIntraday(box.querySelector('.race-side'), {
     date: d.date,
     onCard: onStock,
@@ -497,9 +503,11 @@ export function mountRace(box, d, { onStock } = {}) {
       const tag = f.lockedAt[m] !== null ? '漲停' : limitTag(v) === '跌停' ? '跌停' : '';
       el.querySelector('.rt-now').innerHTML =
         v === null ? '<span class="muted">未成交</span>' : `<b class="${v > 0 ? 'up' : v < 0 ? 'down' : ''}">${fmtPct(v)}</b>${tag ? ` <b class="race-tag">${tag}</b>` : ''}`;
-      el.querySelector('.rt-peak').textContent = peak ? `高點 ${fmtClock(peak.m)} ${fmtPct(peak.v)}` : '';
+      const pk = el.querySelector('.rt-peak');
+      pk.textContent = peak ? `高 ${fmtClock(peak.m)}` : '';
+      pk.title = peak ? `日內最高點（到目前為止，13:00 之前）${fmtClock(peak.m)} ${fmtPct(peak.v)}` : '';
       const amp = amplitudeSoFar(f, m);
-      el.querySelector('.rt-amp').textContent = amp === null ? '' : `振幅 ${amp.toFixed(2)}%`;
+      el.querySelector('.rt-amp').textContent = amp === null ? '' : `振幅 ${amp.toFixed(1)}%`;
     }
   }
 

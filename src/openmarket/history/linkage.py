@@ -375,3 +375,26 @@ def daily_k(store: HistoryStore, day: date, codes: list[str], days: int = K5_DAY
             })
         out[c] = series
     return out
+
+
+def index_k(store: HistoryStore, day: date, markets: list[str], days: int = K5_DAYS, after: int = K5_AFTER) -> dict[str, list[dict]]:
+    """daily_k's shape for the 大盤／櫃買 rows, from the official index days: {market: [{date, open, high,
+    low, close, pct, after, …}]} (no volume, 法人 or limit-up for an index)."""
+    index = store.index_rows()
+    later = sorted(x for x in store.trading_dates() if x > day)[:after]
+    shown = sorted(store.trading_dates(up_to=day, limit=days)) + later
+    out: dict[str, list[dict]] = {}
+    for m in markets:
+        series = []
+        for d in shown:
+            r = index.get(d.isoformat(), {}).get(m)
+            if not r or r.get("close") is None or r.get("high") is None or r.get("low") is None:
+                continue
+            prev = r["close"] - (r.get("change") or 0)
+            series.append({
+                "date": d.isoformat(), "open": r.get("open"), "high": r["high"], "low": r["low"], "close": r["close"],
+                "pct": (r["change"] / prev * 100) if r.get("change") is not None and prev else None,
+                "lots": None, "limit": False, "vr": None, "inst": None, "after": d > day,
+            })
+        out[m] = series
+    return out

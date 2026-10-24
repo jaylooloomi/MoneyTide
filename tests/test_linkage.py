@@ -292,3 +292,15 @@ def test_daily_k_last_days_with_volume_ratio_limit_and_inst(tmp_path):
     assert k[2]["vr"] == round(1500_000 / ((4000_000 + 2000_000) / 2), 2)
     assert k[2]["lots"] == 1500 and k[2]["inst"] == 2500 and k[1]["inst"] is None
     assert daily_k(s, days[-1], ["Z"])["Z"] == []
+
+
+def test_index_k_from_the_official_index_days(store):
+    from types import SimpleNamespace
+
+    from openmarket.history.linkage import index_k
+
+    ix = SimpleNamespace(date=date(2026, 10, 21), open=100, high=103, low=99, close=102, change=2, turnover_yuan=1)
+    store.save_index_month("上市", "2026-10", [ix], datetime(2026, 10, 22, tzinfo=TAIPEI))
+    k = index_k(store, date(2026, 10, 21), ["上市", "上櫃"])
+    assert [(x["date"], x["close"], x["after"]) for x in k["上市"]] == [("2026-10-21", 102, False)]
+    assert k["上市"][0]["pct"] == pytest.approx(2.0) and k["上櫃"] == []
