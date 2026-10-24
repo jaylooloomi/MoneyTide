@@ -1053,16 +1053,18 @@ def create_app(
         res = await task
         return {**await asyncio.to_thread(with_history, res), "cached": False, "missing_groupings": missing}
 
-    FINDER_PRECOMPUTE_DAYS = 5  # the latest stored days kept ready, newest first
+    FINDER_PRECOMPUTE_DAYS = 5  # the 🔁 window (不只一天): the latest days a group is looked up in
+    FINDER_PRECOMPUTE_KEEP = 20  # the days computed after the close: 盤後報告's next-day statistics and 跨天追蹤
+    # read stored results only, so a longer run keeps their sample (a cached day costs nothing)
     FINDER_PRECOMPUTE_PAUSE = 5  # seconds between two real runs, so the app stays responsive
 
     async def finder_precompute() -> None:
         """After the close, keep both searches with the default thresholds ready for the latest
-        FINDER_PRECOMPUTE_DAYS days (a stored day returns at once; only missing ones are computed)."""
+        FINDER_PRECOMPUTE_KEEP days (a stored day returns at once; only missing ones are computed)."""
         await asyncio.sleep(180)  # let the start-up collectors settle first
         while True:
             try:
-                for day in app.state.history.trading_dates(limit=FINDER_PRECOMPUTE_DAYS):
+                for day in app.state.history.trading_dates(limit=FINDER_PRECOMPUTE_KEEP):
                     _, missing = finder_groupings(FinderParams().groupings, day)
                     if missing:  # concept / chain groups not loaded yet: try again next round
                         break
