@@ -400,3 +400,13 @@ table.link-heat td.self { background: #3a3e48; }
 .ic-name { cursor: pointer; }
 .ic-layout { margin-left: 6px; }
 .ic-sub { font-size: 12px; font-weight: 600; margin: 2px 0 -2px; }
+.fd-theme { cursor: pointer; text-decoration: underline dotted; text-underline-offset: 3px; }
+.fd-theme:hover, .fd-theme.on { color: #ffd400; }
+.fd-theme-news { font-size: 12px; margin: 2px 0 6px; padding: 6px 8px; background: #ffffff08; border-radius: 4px; cursor: default; }
+.fd-theme-news ol { margin: 4px 0 0; padding-left: 20px; }
+.fd-theme-news li { margin: 2px 0; }
+.fd-theme-news a { color: #9fd3ff; }
+.fd-named { font-size: 11px; padding: 0 4px; border-radius: 3px; background: #ffd40026; color: #ffd400; }
+.ic-body.col { flex-direction: column; }
+.ic-body.col .ic-chart { flex: none; width: 100%; }
+.ic-side.below { width: 100%; overflow-x: auto; }

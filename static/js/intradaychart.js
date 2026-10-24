@@ -216,10 +216,13 @@ export function buildIntradayOption(data, m, benches = []) {
   };
 }
 
-export const PICK_COLORS = ['#ffd400', '#3de0ff']; // 1st / 2nd picked stock (the K rows' outlines match)
+// the picked stocks in order (the K rows' outlines match); more than this many cycle the colours
+export const PICK_COLORS = ['#ffd400', '#3de0ff', '#ff6bd6', '#7dff8a', '#ff9f43', '#b18cff', '#ffffff', '#4dabf7', '#ff6b6b', '#c0eb75'];
+export const MAX_PICKS = 10;
+const pickColor = (i) => PICK_COLORS[i % PICK_COLORS.length];
 const COMPARE_BENCH_COLORS = ['#9aa0aa', '#c39bd3']; // 大盤／櫃買 in a comparison: away from the two stocks' yellow / cyan
 
-/** Two stocks on one % axis (each against its own previous close), volume below, 大盤／櫃買 dashed;
+/** Several stocks on one % axis (each against its own previous close), volume below, 大盤／櫃買 dashed;
  *  everything up to minute m, the axis range from the whole day so it does not jump while playing. */
 export function buildCompareOption(items, m, benches = []) {
   const pctOf = (d, p) => (p / d.prev_close - 1) * 100;
@@ -255,23 +258,24 @@ export function buildCompareOption(items, m, benches = []) {
       yAxisIndex: 0,
       data: data.bars.filter((b) => b[0] <= m).map((b) => [b[0], pctOf(data, b[4])]),
       showSymbol: false,
-      lineStyle: { color: PICK_COLORS[i], width: 1.6 },
-      itemStyle: { color: PICK_COLORS[i] },
+      lineStyle: { color: pickColor(i), width: items.length > 4 ? 1.3 : 1.6 },
+      itemStyle: { color: pickColor(i) },
       markLine: i === 0 ? { symbol: 'none', silent: true, data: [{ yAxis: 0, lineStyle: { color: '#8a8f9c', type: 'dashed' }, label: { show: false } }, head] } : undefined,
       markPoint: s?.peak
-        ? { symbol: 'circle', symbolSize: 9, itemStyle: { color: PICK_COLORS[i], borderColor: '#fff' }, label: { show: false }, data: [{ coord: [s.peak.m, pctOf(data, s.peak.price)] }] }
+        ? { symbol: 'circle', symbolSize: 8, itemStyle: { color: pickColor(i), borderColor: '#fff' }, label: { show: false }, data: [{ coord: [s.peak.m, pctOf(data, s.peak.price)] }] }
         : undefined,
     };
   });
+  const slot = (step === 5 ? 4 : 0.9) / items.length; // each stock's share of one bar's width
   const volumes = items.map(({ data, name }, i) => ({
     name: `${name} 量`,
     type: 'bar',
     xAxisIndex: 1,
     yAxisIndex: 1,
-    barWidth: step === 5 ? 2 : 0.8,
-    // side by side: the second stock's bars sit a little to the right of the first one's
-    data: data.bars.filter((b) => b[0] <= m).map((b) => [b[0] + i * (step === 5 ? 2 : 0.45), b[5] ?? 0]),
-    itemStyle: { color: PICK_COLORS[i], opacity: 0.75 },
+    barWidth: Math.max(0.5, slot * 0.9),
+    // side by side: each stock's bars sit a little to the right of the previous one's
+    data: data.bars.filter((b) => b[0] <= m).map((b) => [b[0] + i * slot, b[5] ?? 0]),
+    itemStyle: { color: pickColor(i), opacity: 0.75 },
     markLine: i === 0 ? { symbol: 'none', silent: true, data: [head] } : undefined,
   }));
   const benchLines = benches.map((b, i) => ({
@@ -304,7 +308,7 @@ export function buildCompareOption(items, m, benches = []) {
         const stocks = items
           .map(({ data, name }, i) => {
             const b = [...data.bars].reverse().find((x) => x[0] <= at);
-            return b ? `<span style="color:${PICK_COLORS[i]}">●</span> ${escapeHtml(name)} ${b[4]}（${fmtPct(pctOf(data, b[4]))}）` : '';
+            return b ? `<span style="color:${pickColor(i)}">●</span> ${escapeHtml(name)} ${b[4]}（${fmtPct(pctOf(data, b[4]))}）` : '';
           })
           .filter(Boolean);
         const idx = benches
@@ -323,7 +327,7 @@ export function buildCompareOption(items, m, benches = []) {
   };
 }
 
-/** The info column for two stocks: the same figures side by side, as of the playhead minute. */
+/** The info table for several stocks: the same figures side by side, as of the playhead minute. */
 export function compareInfoHtml(items, m) {
   const stats = items.map(({ data }) => statsAt(data, m));
   const cls = (v) => (v > 0 ? 'up' : v < 0 ? 'down' : '');
@@ -335,7 +339,7 @@ export function compareInfoHtml(items, m) {
   const row = (k, f) => `<tr><td class="muted">${k}</td>${items.map((_, i) => `<td>${cell(i, f)}</td>`).join('')}</tr>`;
   const lockOf = (d, s) => (d.limit_up_pct == null || s.firstLock === null ? '—' : `<span class="${s.locked ? 'up' : ''}">${fmtClock(s.firstLock)}${s.locked ? '' : '（開）'}</span>`);
   return `<table class="ic-info cmp">
-    <tr><td></td>${items.map(({ name }, i) => `<td><b style="color:${PICK_COLORS[i]}">${escapeHtml(name)}</b></td>`).join('')}</tr>
+    <tr><td></td>${items.map(({ name }, i) => `<td><b style="color:${pickColor(i)}">${escapeHtml(name)}</b></td>`).join('')}</tr>
     ${row(m >= END ? '收盤' : '現價', (d, s) => `<span class="${cls(s.change)}">${p(d, s.last)}</span>`)}
     ${row('漲幅', (d, s) => `<span class="${cls(s.change)}">${fmtPct(s.pct)}</span>`)}
     ${row('最高', (d, s) => p(d, s.high))}
@@ -348,12 +352,12 @@ export function compareInfoHtml(items, m) {
   </table>`;
 }
 
-/** The K rows picked for the chart: a plain click shows just that stock, Ctrl/⌘/Shift adds a second
- *  one (a third replaces the older), clicking a picked stock with the modifier drops it. */
+/** The K rows picked for the chart: a plain click shows just that stock, Ctrl/⌘/Shift adds one more
+ *  (up to MAX_PICKS; past that the oldest goes), clicking a picked stock with the modifier drops it. */
 export function nextPicks(picked, code, additive) {
   if (!additive) return [code];
   if (picked.includes(code)) return picked.length > 1 ? picked.filter((c) => c !== code) : picked;
-  return [...picked, code].slice(-2);
+  return [...picked, code].slice(-MAX_PICKS);
 }
 
 /** The info column: figures as of the playhead minute. */
@@ -390,8 +394,8 @@ export function infoHtml(data, s, m) {
 const LAYOUT_KEY = 'openmarket.intraday.compare';
 export const COMPARE_LAYOUTS = { overlay: '疊圖', stack: '上下' };
 
-/** The chart panel inside `el`: show([{code, name}]) draws one stock, or two (疊圖 on one % axis /
- *  上下 two full charts, switchable); sync(m) redraws up to minute m. load(code, name) = one stock. */
+/** The chart panel inside `el`: show([{code, name}]) draws one stock, or several (疊圖 on one % axis /
+ *  上下 one full chart each, switchable); sync(m) redraws up to minute m. load(code, name) = one stock. */
 export function mountIntraday(el, { date, onCard, benchmarks = [] }) {
   el.innerHTML = `<div class="ic-head"><span class="ic-title"></span><span class="muted ic-note"></span>
       <div class="seg ic-layout" hidden>${Object.entries(COMPARE_LAYOUTS).map(([k, label]) => `<button type="button" data-layout="${k}">${label}</button>`).join('')}</div>
@@ -428,14 +432,16 @@ export function mountIntraday(el, { date, onCard, benchmarks = [] }) {
   });
 
   function slotsFor(n) {
-    const shape = `${n}|${n === 2 ? layout : ''}`;
+    const many = n >= 2;
+    const shape = `${n}|${many ? layout : ''}`;
     if (shape === state.shape) return state.slots;
     for (const s of state.slots) s.chart?.dispose();
-    const count = n === 2 && layout === 'stack' ? 2 : 1;
-    const wide = n === 2 && layout === 'overlay';
+    const count = many && layout === 'stack' ? n : 1;
+    // 疊圖: two stocks keep the info column beside the chart; more go into a full-width table below
+    const side = !many || layout === 'stack' ? 'ic-side' : n === 2 ? 'ic-side wide' : 'ic-side below';
     bodies.innerHTML = Array.from(
       { length: count },
-      (_, i) => `${count === 2 ? `<div class="ic-sub" style="color:${PICK_COLORS[i]}"></div>` : ''}<div class="ic-body"><div class="ic-chart${count === 2 ? ' half' : ''}"></div><div class="ic-side${wide ? ' wide' : ''}"></div></div>`,
+      (_, i) => `${count > 1 ? `<div class="ic-sub" style="color:${pickColor(i)}"></div>` : ''}<div class="ic-body${side.includes('below') ? ' col' : ''}"><div class="ic-chart${count > 1 ? ' half' : ''}"></div><div class="${side}"></div></div>`,
     ).join('');
     const subs = [...bodies.querySelectorAll('.ic-sub')];
     state.slots = [...bodies.querySelectorAll('.ic-body')].map((b, i) => ({ chartEl: b.querySelector('.ic-chart'), side: b.querySelector('.ic-side'), sub: subs[i] || null, chart: null }));
@@ -464,9 +470,10 @@ export function mountIntraday(el, { date, onCard, benchmarks = [] }) {
     const items = state.items.filter((x) => x.data);
     if (!items.length || items.length < state.items.length) return;
     layoutSeg.hidden = items.length < 2;
+    for (const [i, b] of [...title.querySelectorAll('[data-card]')].entries()) b.style.color = items.length > 1 ? pickColor(i) : '';
     for (const b of layoutSeg.querySelectorAll('[data-layout]')) b.classList.toggle('on', b.dataset.layout === layout);
     const slots = slotsFor(items.length);
-    if (items.length === 2 && layout === 'overlay') {
+    if (items.length >= 2 && layout === 'overlay') {
       const withBars = items.filter((x) => x.data.bars.length);
       if (!withBars.length) return empty(slots[0]);
       paintSlot(slots[0], buildCompareOption(withBars, state.m, benchmarks), compareInfoHtml(withBars, state.m));
@@ -480,10 +487,10 @@ export function mountIntraday(el, { date, onCard, benchmarks = [] }) {
   }
 
   function heading(items) {
-    const two = items.length === 2;
+    const many = items.length > 1;
     title.innerHTML = items
-      .map((x, i) => `<b class="ic-name" data-card="${escapeHtml(x.code)}" title="點名稱開資訊卡"${two ? ` style="color:${PICK_COLORS[i]}"` : ''}>${escapeHtml(x.name || x.code)} ${escapeHtml(x.code)}</b>`)
-      .join(' <span class="muted">vs</span> ') + ` <span class="muted">· ${escapeHtml(date)}</span>`;
+      .map((x, i) => `<b class="ic-name" data-card="${escapeHtml(x.code)}" title="點名稱開資訊卡"${many ? ` style="color:${pickColor(i)}"` : ''}>${escapeHtml(x.name || x.code)}${many && items.length > 3 ? '' : ` ${escapeHtml(x.code)}`}</b>`)
+      .join(items.length === 2 ? ' <span class="muted">vs</span> ' : '<span class="muted">、</span>') + ` <span class="muted">· ${escapeHtml(date)}</span>`;
   }
 
   async function fetchDay(code) {
@@ -511,12 +518,12 @@ export function mountIntraday(el, { date, onCard, benchmarks = [] }) {
     const d = state.items[0].data;
     const step = `${state.items.some((x) => x.data.step_min === 5) ? '5 分 K' : '1 分 K'}${state.items.some((x) => x.data.source === 'recorded') ? '（自錄，無成交量）' : ''}`;
     const benchIn = (colors) => (benchmarks.length ? `；虛線＝${benchmarks.map((b, i) => `<span style="color:${colors[i % colors.length]}">${escapeHtml(b.name)}</span>`).join('／')}` : '');
-    const bench = benchIn(state.items.length === 2 && layout === 'overlay' ? COMPARE_BENCH_COLORS : BENCH_COLORS);
+    const bench = benchIn(state.items.length >= 2 && layout === 'overlay' ? COMPARE_BENCH_COLORS : BENCH_COLORS);
     note.innerHTML =
-      state.items.length === 2 && layout === 'overlay'
-        ? `${step}；兩檔都換算成相對各自昨收的 %，可直接比強弱；● 各自的日內最高點${bench}；Ctrl／⌘＋點 K 的列可換檔或取消`
-        : state.items.length === 2
-          ? `${step}；上下兩張各自完整的走勢（價格軸、漲停線、紫線＝均價）${bench}；Ctrl／⌘＋點 K 的列可換檔或取消`
+      state.items.length >= 2 && layout === 'overlay'
+        ? `${step}；${state.items.length} 檔都換算成相對各自昨收的 %，可直接比強弱；● 各自的日內最高點${bench}；Ctrl／⌘＋點 K 的列可再加或取消（最多 ${MAX_PICKS} 檔）`
+        : state.items.length >= 2
+          ? `${step}；上下各一張完整的走勢（價格軸、漲停線、紫線＝均價）${bench}；Ctrl／⌘＋點 K 的列可再加或取消（最多 ${MAX_PICKS} 檔）`
         : `${d.step_min === 5 ? '5 分 K' : '1 分 K'}${d.source === 'recorded' ? '（自錄，無成交量）' : ''}；紫線＝均價；● 日內最高點${bench}${benchmarks.length ? '（同一 % 軸）' : ''}；Ctrl／⌘＋點另一列可加入比較`;
     draw();
   }

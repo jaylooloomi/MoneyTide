@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { PRESETS, cardHtml, digestText, shownFilter, finderMarkIndex, finderMarkTitle, csvExport, defaultGroupName, filterHtml, funnelText, presetOf, filterOptions, matchesFilter, progressView, queryOf, statsText } from '../../static/js/finder.js';
+import { PRESETS, themeNewsHtml, cardHtml, digestText, shownFilter, finderMarkIndex, finderMarkTitle, csvExport, defaultGroupName, filterHtml, funnelText, presetOf, filterOptions, matchesFilter, progressView, queryOf, statsText } from '../../static/js/finder.js';
 
 test('queryOf sends only the fields of the chosen method; blank 起漲差 means not required', () => {
   const p = { daily_r: 0.75, daily_window: 20, new_daily_r: 0.85, pool_top: 30, intraday_r: 0.5, peak_gap: 8, start_gap: '', require_burst: true, groupings: ['custom', 'news'], pool_sources: ['gain'] };
@@ -85,7 +85,8 @@ test('cardHtml: kind, closest grouping, members (outside one marked), facts and 
   assert.match(cardHtml({ ...G, seen_days: [], checked_days: 4 }, 6), /🆕 首次/);
   assert.doesNotMatch(cardHtml({ ...G, seen_days: [], checked_days: 0 }, 7), /fd-seen/); // nothing to compare with
   const th = cardHtml({ ...G, themes: [{ term: '被動元件', count: 2 }, { term: 'AI', count: 1 }], members: [{ ...G.members[0], themes: ['被動元件', 'AI'] }, G.members[1]] }, 8);
-  assert.match(th, /📰 題材：被動元件（2）、AI（1）/);
+  assert.match(th, /📰 題材：<span class="fd-theme" data-theme="0"[^>]*>被動元件（2）<\/span>、<span class="fd-theme" data-theme="1"[^>]*>AI（1）<\/span>/);
+  assert.match(th, /<div class="fd-theme-news" hidden><\/div>/);
   assert.match(th, /title="1 甲[^"]*📰 被動元件、AI/);
   assert.doesNotMatch(html, /fd-themes/);
   assert.match(cardHtml({ ...G, sources: [{ label: '概念股', group: 'AI' }] }, 1), /概念股：AI/);
@@ -225,4 +226,16 @@ test('shownFilter: a saved chip the day has no cards for falls back to 全部 (s
   assert.equal(shownFilter(d, '跨族群新組合'), 'all');
   assert.equal(shownFilter(d, undefined), 'all');
   assert.equal(csvExport({ ...d, date: '2026-10-22', params: {}, groups: [{ kind: '已知族群', members: [{ code: '1', name: 'a' }] }] }, shownFilter(d, '跨族群新組合'))[2].length, 1);
+});
+
+test('themeNewsHtml: the headlines behind a 題材, links only for http(s), names and escaping', () => {
+  const html = themeNewsHtml({ term: 'PCB', titles: [
+    { title: 'PCB族群 <律勝> 連飆', source: '鉅亨', url: 'https://news.example/1', date: '2026-10-20', names: ['律勝'] },
+    { title: '別的', source: 'X', url: 'javascript:alert(1)', date: null, names: [] },
+  ] });
+  assert.match(html, /📰 PCB/);
+  assert.match(html, /<a href="https:\/\/news\.example\/1" target="_blank" rel="noopener noreferrer">PCB族群 &lt;律勝&gt; 連飆<\/a> <span class="fd-named">律勝<\/span> <small class="muted">10-20 · 鉅亨<\/small>/);
+  assert.doesNotMatch(html, /javascript:/); // a non-http url is shown as plain text
+  assert.match(themeNewsHtml({ term: 'X', titles: [] }), /沒有存下這個題材的標題/);
+  assert.equal(themeNewsHtml(undefined), '');
 });

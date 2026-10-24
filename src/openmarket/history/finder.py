@@ -590,9 +590,10 @@ def persistence(groups: list[dict], earlier: Mapping[str, dict]) -> list[dict]:
 THEME_TERM = re.compile(r"^[\u4e00-\u9fffA-Za-z0-9／/+&.\-（）()]+$")  # CJK, letters, digits, a few separators
 THEMES_PER_STOCK = 3
 THEMES_PER_GROUP = 4
+THEME_TITLES = 8  # headlines kept per group theme (the news day stores at most 5 per keyword)
 
 
-def news_themes(groups: list[dict], news_days: list[dict]) -> list[dict]:
+def news_themes(groups: list[dict], news_days: list[dict], dates: list[str] | None = None) -> list[dict]:
     """「為什麼在動」: the news keywords (of the stored news days, {term: {codes: {code: n}}}) that named
     each member, most mentions first. Adds member `themes` (top THEMES_PER_STOCK) and group `themes`
     [{term, count}] (how many members a keyword named, top THEMES_PER_GROUP) to copies of the groups."""
@@ -614,8 +615,28 @@ def news_themes(groups: list[dict], news_days: list[dict]) -> list[dict]:
             for t, _ in terms:
                 group_terms[t] = group_terms.get(t, 0) + 1
         top = sorted(group_terms.items(), key=lambda kv: (-kv[1], kv[0]))[:THEMES_PER_GROUP]
-        out.append({**g, "members": members, "themes": [{"term": t, "count": n} for t, n in top]})
+        names = [m["name"] for m in g["members"] if m.get("name")]
+        themes = [{"term": t, "count": n, "titles": theme_titles(t, news_days, dates, names)} for t, n in top]
+        out.append({**g, "members": members, "themes": themes})
     return out
+
+
+def theme_titles(term: str, news_days: list[dict], dates: list[str] | None, names: list[str]) -> list[dict]:
+    """The stored headlines of `term` (newest day first), those naming a member first; each
+    {title, source, url, date, names: [the members it names]}."""
+    hits, rest = [], []
+    for i, day in enumerate(news_days):
+        for h in (day.get(term) or {}).get("titles") or []:
+            named = [n for n in names if n in h.get("title", "")]
+            item = {**h, "date": dates[i] if dates and i < len(dates) else None, "names": named}
+            (hits if named else rest).append(item)
+    seen, out = set(), []
+    for h in hits + rest:
+        if h.get("title") in seen:
+            continue
+        seen.add(h.get("title"))
+        out.append(h)
+    return out[:THEME_TITLES]
 
 
 # ---- one full search ----------------------------------------------------------------------------

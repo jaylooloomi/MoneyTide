@@ -711,7 +711,8 @@ def create_app(
             earlier = {e.isoformat(): r for e in earlier_days if (r := store.finder(e, method, key)) is not None}
             groups = persistence(res.get("groups", []), earlier)
             # 📰 the news keywords naming each member (the latest 3 news days within a week up to d), attached, not stored
-            news = [store.news_day(x) for x in store.news_dates_sorted(up_to=d, limit=3) if (d - x).days <= NEWS_THEME_DAYS]
+            news_dates = [x for x in store.news_dates_sorted(up_to=d, limit=3) if (d - x).days <= NEWS_THEME_DAYS]
+            news = [store.news_day(x) for x in news_dates]
             # 🏦 法人 read now, not from the stored result: it is published after the close
             by_code = {r["code"]: r for r in store.day_rows(d)}
             groups = inst_summary(groups, store.inst_net([d]).get(d, {}), by_code)
@@ -739,7 +740,7 @@ def create_app(
             groups = margin_summary(groups, margin_rows.get(d, {}))
             streak = inst_streak(groups, margin_changes(margin_rows), margin_days)
             groups = [{**g, "margin_streak": t["inst_streak"]} for g, t in zip(groups, streak)]
-            return {**res, "groups": finder_news_themes(groups, news)}
+            return {**res, "groups": finder_news_themes(groups, news, [x.isoformat() for x in news_dates])}
 
         if not refresh:
             hit = await asyncio.to_thread(store.finder, d, method, key)

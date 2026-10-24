@@ -199,7 +199,7 @@ export function mountRace(box, d, { onStock } = {}) {
       <div class="seg race-speed">${Object.entries(RACE_SPEEDS)
         .map(([k, [label]]) => `<button type="button" data-speed="${k}"${k === speed ? ' class="on"' : ''}>${label}</button>`)
         .join('')}</div>
-      <small class="muted">${step}；● ＝到目前為止的最高點；👑 龍頭＝市值最大；${LEAD_ICON} 領漲＝當下排第一${lead ? `（收盤領漲：${escapeHtml(byCode.get(lead.code)?.name || lead.code)}，${fmtClock(lead.from)} 起一路領先）` : ''}；先鎖漲停的排前面；點一列看右邊的走勢圖，Ctrl／⌘＋點再加一檔一起比較</small>
+      <small class="muted">${step}；● ＝到目前為止的最高點；👑 龍頭＝市值最大；${LEAD_ICON} 領漲＝當下排第一${lead ? `（收盤領漲：${escapeHtml(byCode.get(lead.code)?.name || lead.code)}，${fmtClock(lead.from)} 起一路領先）` : ''}；先鎖漲停的排前面；點一列看右邊的走勢圖，Ctrl／⌘＋點可再加好幾檔一起比較</small>
     </div>
     <div class="rt">
       <div class="rt-axis">${TICKS.map(([label, m]) => `<span style="left:${pctX(m)}%">${label}</span>`).join('')}</div>
@@ -240,13 +240,13 @@ export function mountRace(box, d, { onStock } = {}) {
   const head = box.querySelector('.rt-head');
   const playBtn = box.querySelector('[data-act="play"]');
   const state = { m: RACE_END, timer: null, picked: [] };
-  // a plain click shows one stock; Ctrl / ⌘ / Shift + click adds a second one to compare (at most two)
+  // a plain click shows one stock; Ctrl / ⌘ / Shift + click adds more to compare (up to MAX_PICKS)
   function pick(code, additive = false) {
     state.picked = nextPicks(state.picked, code, additive);
     for (const [c, el] of rows) {
       const i = state.picked.indexOf(c);
       el.classList.toggle('on', i >= 0);
-      el.style.outlineColor = i >= 0 && state.picked.length === 2 ? `${PICK_COLORS[i]}aa` : '';
+      el.style.outlineColor = i >= 0 && state.picked.length > 1 ? `${PICK_COLORS[i % PICK_COLORS.length]}aa` : '';
     }
     chart.show(state.picked.map((c) => ({ code: c, name: byCode.get(c)?.name }))).then(() => chart.sync(state.m));
   }

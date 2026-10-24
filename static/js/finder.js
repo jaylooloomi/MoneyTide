@@ -105,6 +105,21 @@ export function marginText(g) {
   return `<div class="fd-margin" title="融資增加＝用借來的錢買（多半是散戶槓桿追價）；融券增加＝放空變多；券資比高代表軋空的可能">💳 ${parts.join('　')}</div>`;
 }
 
+/** The headlines behind one 📰 題材 (shown under the theme line when it is clicked). */
+export function themeNewsHtml(theme) {
+  if (!theme) return '';
+  const items = (theme.titles || [])
+    .map((h) => {
+      const named = h.names?.length ? ` <span class="fd-named">${h.names.map((n) => escapeHtml(n)).join('、')}</span>` : '';
+      const meta = [h.date ? h.date.slice(5) : '', h.source || ''].filter(Boolean).map((x) => escapeHtml(x)).join(' · ');
+      const title = escapeHtml(h.title || '');
+      const link = /^https?:\/\//.test(h.url || '') ? `<a href="${escapeHtml(h.url)}" target="_blank" rel="noopener noreferrer">${title}</a>` : title;
+      return `<li>${link}${named}${meta ? ` <small class="muted">${meta}</small>` : ''}</li>`;
+    })
+    .join('');
+  return `<div class="fd-theme-h"><b>📰 ${escapeHtml(theme.term)}</b> <small class="muted">近 3 個新聞日的標題（先列有點名這組股票的）</small></div>${items ? `<ol>${items}</ol>` : '<p class="hint">沒有存下這個題材的標題。</p>'}`;
+}
+
 export function cardHtml(g, i) {
   const title =
     g.sources?.length
@@ -146,7 +161,9 @@ export function cardHtml(g, i) {
   const margin = marginText(g);
   const news = g.news?.length ? `<div class="fd-news">📰 ${g.news.map((t) => escapeHtml(t)).join('<br>📰 ')}</div>` : '';
   const themes = g.themes?.length
-    ? `<div class="fd-themes" title="近 3 個新聞日提到這幾檔的題材關鍵字（括號＝提到幾檔）">📰 題材：${g.themes.map((t) => `${escapeHtml(t.term)}${g.members.length > 1 ? `（${t.count}）` : ''}`).join('、')}</div>`
+    ? `<div class="fd-themes" title="近 3 個新聞日提到這幾檔的題材關鍵字（括號＝提到幾檔）；點題材看新聞標題">📰 題材：${g.themes
+        .map((t, k) => `<span class="fd-theme" data-theme="${k}" role="button" tabindex="0">${escapeHtml(t.term)}${g.members.length > 1 ? `（${t.count}）` : ''}</span>`)
+        .join('、')}</div><div class="fd-theme-news" hidden></div>`
     : '';
   const seen = g.seen_days?.length
     ? `<span class="fd-seen" title="前幾天也找到同一組合（成員重疊過半）：${g.seen_days.map((x) => x.slice(5)).join('、')}">🔁 近 ${g.checked_days + 1} 天第 ${g.seen_days.length + 1} 次</span>`
@@ -568,8 +585,22 @@ export function mountFinderPanel(container, { onStock, onResult }) {
       window.alert(`儲存失敗：${err.message}`);
     }
   }, true);
+  // 📰 a theme on a card: toggle its headlines under the theme line (not the card's detail)
+  body.addEventListener('click', (e) => {
+    const chip = e.target.closest('.fd-theme[data-theme]');
+    if (!chip || !state.data) return;
+    e.stopPropagation();
+    const card = chip.closest('.fd-card');
+    const g = state.data.groups[Number(card.dataset.i)];
+    const box = card.querySelector('.fd-theme-news');
+    const open = !box.hidden && box.dataset.theme === chip.dataset.theme;
+    for (const c of card.querySelectorAll('.fd-theme')) c.classList.toggle('on', !open && c === chip);
+    box.hidden = open;
+    box.dataset.theme = chip.dataset.theme;
+    box.innerHTML = open ? '' : themeNewsHtml(g.themes?.[Number(chip.dataset.theme)]);
+  }, true);
   body.addEventListener('click', async (e) => {
-    if (e.target.closest('button[data-save]')) return;
+    if (e.target.closest('button[data-save]') || e.target.closest('.fd-theme-news')) return; // a headline link: not the detail
     const card = e.target.closest('.fd-card');
     if (!card || !state.data) return;
     const g = state.data.groups[Number(card.dataset.i)];
@@ -588,7 +619,7 @@ export function mountFinderPanel(container, { onStock, onResult }) {
       if (!resp.ok) throw new Error(d.detail || `HTTP ${resp.status}`);
       // the card's 🔁 and 📰 come along into the detail header
       const seen = card.querySelector('.fd-seen')?.outerHTML || '';
-      const themes = card.querySelector('.fd-themes')?.textContent || '';
+      const themes = (card.querySelector('.fd-themes')?.textContent || '').replace('；點題材看新聞標題', '');
       const inst = card.querySelector('.fd-inst')?.outerHTML || ''; // 🏦 who is buying, under the title
       detail.innerHTML = `<div class="panel-h"><b>${escapeHtml(g.members.map((m) => m.name).join('、'))}</b>${seen}${themes ? `<span class="fd-themes">${escapeHtml(themes)}</span>` : ''}<button type="button" class="icon" data-act="close" aria-label="關閉" style="margin-left:auto">✕</button></div>${inst}<div class="fd-detail-body"></div>`;
       state.stopRace = renderBody(detail.querySelector('.fd-detail-body'), d, '20', onStock, '點一列看那檔的分時走勢');

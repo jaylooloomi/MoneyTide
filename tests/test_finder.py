@@ -173,7 +173,7 @@ def test_news_themes_per_member_and_group():
     ]
     (g,) = news_themes([{"members": [{"code": "2327"}, {"code": "2492"}, {"code": "9999"}]}], news)
     assert [m["themes"] for m in g["members"]] == [["被動元件", "AI"], ["被動元件", "漲價"], []]
-    assert g["themes"] == [{"term": "被動元件", "count": 2}, {"term": "AI", "count": 1}, {"term": "漲價", "count": 1}]
+    assert [{k: t[k] for k in ("term", "count")} for t in g["themes"]] == [{"term": "被動元件", "count": 2}, {"term": "AI", "count": 1}, {"term": "漲價", "count": 1}]
 
 
 def test_co_mentions():
@@ -309,7 +309,7 @@ def test_finder_api_stored_result_gets_history_and_themes(tmp_path):
         r = client.get("/api/history/finder", params={"date": d.isoformat(), "method": "known", "groupings": "industry"})
         assert r.status_code == 200
         (g,) = r.json()["groups"]
-        assert g["checked_days"] == 0 and g["themes"] == [{"term": "題材甲", "count": 1}]
+        assert g["checked_days"] == 0 and [{k: t[k] for k in ("term", "count")} for t in g["themes"]] == [{"term": "題材甲", "count": 1}]
         assert g["members"][0]["themes"] == ["題材甲"]
 
 
@@ -526,3 +526,18 @@ def test_margin_summary_and_endpoints(tmp_path):
     assert fg["margin"] == {"margin_chg": 25, "margin_bal": 120, "short_chg": 4, "short_bal": 6, "short_ratio": 5.0}
     assert fg["margin_streak"] == {"days": 2, "side": "buy"}  # 融資連增 2 天 (3/3, 3/4); 3/2 decreased
     assert card == {**fg["margin"], "streak": {"days": 2, "side": "buy"}}
+
+
+def test_theme_titles_put_the_headlines_naming_a_member_first():
+    from openmarket.history.finder import news_themes
+
+    day1 = {"PCB": {"codes": {"3354": 1}, "titles": [
+        {"title": "PCB族群走高 欣興領軍", "source": "A", "url": "https://a/1"},
+        {"title": "PCB族群紅綠互見 律勝連飆", "source": "B", "url": "https://b/2"},
+    ]}}
+    day2 = {"PCB": {"codes": {"3354": 2}, "titles": [{"title": "PCB族群紅綠互見 律勝連飆", "source": "B", "url": "https://b/2"}, {"title": "律勝再攻 PCB族群", "source": "C", "url": "https://c/3"}]}}
+    (g,) = news_themes([{"members": [{"code": "3354", "name": "律勝"}, {"code": "1", "name": "甲"}]}], [day1, day2], ["2026-10-21", "2026-10-20"])
+    titles = g["themes"][0]["titles"]
+    assert [t["title"] for t in titles] == ["PCB族群紅綠互見 律勝連飆", "律勝再攻 PCB族群", "PCB族群走高 欣興領軍"]  # naming 律勝 first, no repeats
+    assert titles[0]["names"] == ["律勝"] and titles[0]["date"] == "2026-10-21" and titles[1]["date"] == "2026-10-20"
+    assert titles[2]["names"] == [] and titles[2]["url"] == "https://a/1"

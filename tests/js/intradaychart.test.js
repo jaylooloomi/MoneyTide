@@ -77,10 +77,12 @@ test('statsAt: the lock is caught when the rounded % rebuilds a price just above
   assert.equal(s.locked, true);
 });
 
-test('nextPicks: a plain click shows one, Ctrl/⌘/Shift adds a second, a third replaces the older', () => {
+test('nextPicks: a plain click shows one, Ctrl/⌘/Shift adds more (up to MAX_PICKS), the modifier on a picked one drops it', () => {
   assert.deepEqual(nextPicks(['A'], 'B', false), ['B']);
   assert.deepEqual(nextPicks(['A'], 'B', true), ['A', 'B']);
-  assert.deepEqual(nextPicks(['A', 'B'], 'C', true), ['B', 'C']);
+  assert.deepEqual(nextPicks(['A', 'B'], 'C', true), ['A', 'B', 'C']);
+  const ten = Array.from({ length: 10 }, (_, i) => `S${i}`);
+  assert.deepEqual(nextPicks(ten, 'X', true), [...ten.slice(1), 'X']); // past ten the oldest goes
   assert.deepEqual(nextPicks(['A', 'B'], 'A', true), ['B']); // modifier on a picked one drops it
   assert.deepEqual(nextPicks(['A'], 'A', true), ['A']); // never empty
   assert.deepEqual(nextPicks([], 'A', true), ['A']);
@@ -103,4 +105,15 @@ test('buildCompareOption / compareInfoHtml: two stocks on one % axis, figures si
   assert.match(html, /甲<\/b><\/td><td><b style="color:[^"]+">乙/);
   assert.match(html, /漲幅<\/td><td><span class="up">\+10\.00%<\/span><\/td><td><span class="up">\+3\.00%/);
   assert.match(html, /鎖漲停<\/td><td><span class="up">09:02<\/span><\/td><td>—/); // 甲 locked from 09:02 and still locked; 乙 never
+});
+
+test('buildCompareOption: many stocks get their own colours and side-by-side volume slots', () => {
+  const mk = (p) => ({ prev_close: p, step_min: 1, bars: [[0, p, p, p, p, 100], [1, p, p * 1.02, p, p * 1.01, 200]] });
+  const items = Array.from({ length: 4 }, (_, i) => ({ code: `${i}`, name: `股${i}`, data: mk(10 + i) }));
+  const opt = buildCompareOption(items, 270);
+  const lines = opt.series.filter((x) => x.type === 'line');
+  assert.equal(new Set(lines.map((x) => x.lineStyle.color)).size, 4);
+  const bars = opt.series.filter((x) => x.type === 'bar');
+  assert.deepEqual(bars.map((x) => x.data[0][0]), [0, 0.225, 0.45, 0.675]); // 0.9 of a minute split four ways
+  assert.match(compareInfoHtml(items, 270), /股3/);
 });
