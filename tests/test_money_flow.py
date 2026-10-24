@@ -341,3 +341,12 @@ def test_hot_class_and_parents():
     out = next_day_stats([(d1, [["1"]]), (d2, [["2"]])], lambda d, cs: "surge" if cs == ["1"] else "habitual",
                          lambda d: {"1": row, "2": row}, {d1: d2, d2: d3}.get, lambda d: 0.0, parents={"surge": "hot", "habitual": "hot"})
     assert out["hot"]["groups"] == 2 and out["hot"]["days"] == 2 and out["surge"]["days"] == 1 and out["habitual"]["days"] == 1
+
+
+
+def test_evidence_classes_of_stored_groups():
+    from openmarket.history.linkage import evidence_class, evidence_yes
+
+    g = {"evidence": {"excess": {"ok": True}, "baseline": {"ok": True}, "burst": {"ok": None}, "sync": {"ok": False}, "samedir": {"ok": True}}}
+    assert evidence_yes(g) == 3 and evidence_class(3) == "ev2"
+    assert evidence_yes({}) == 0 and evidence_class(0) == "ev0" and evidence_class(5) == "ev4"

@@ -161,3 +161,11 @@ test('hotHtml splits 🔥 into 突然湧入 and 平常就這樣 when the server 
   assert.match(html, /其中突然湧入（當沖比 ≥ 平常 2 倍） 2 組／4 檔次/);
   assert.match(html, /其中平常就這樣 3 組／6 檔次/);
 });
+
+test('hotHtml shows the next day by evidence count when the server sends it', () => {
+  const x = (n) => ({ groups: n, stocks: n, gap: 1, close: 0.5, excess: -0.1, intraday: -0.5, fade: 55, down: 50 });
+  const html = hotHtml([], null, { days: 60, first: 'a', last: 'b', stats: { hot: x(3), rest: x(5), evidence: { ev4: x(2), ev0: x(7) } } });
+  assert.match(html, /依證據數分組（所有已存的日子）隔天：<br>✓ ≥ 4 項 2 組／2 檔次/);
+  assert.match(html, /✓ ≤ 1 項 7 組/);
+  assert.doesNotMatch(html, /✓ 2～3 項/); // none in that class
+});

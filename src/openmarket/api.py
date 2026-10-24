@@ -25,7 +25,7 @@ from .explain import explain_day
 from .history.linkage import (
     pearson,
     INTRADAY_HIGH_R, INTRADAY_LOW_R, bucket_closes, daily_linkage, fmt_minute, pair_matrix, peak_minute_from_bars, peak_minute_from_ticks,
-    align_bars, amplitude_pct, limit_down_pct, limit_up_pct, minute_bars, turnover_rate, peak_stats, tick_bars, with_close_bar, race_points, returns, locked_level, daily_k, index_k, daytrade_ratios, daytrade_group, hot_class, next_day_stats, DAYTRADE_BASE_DAYS, DAYTRADE_HOT, top_members, verdict_r, verdict_timing,
+    align_bars, amplitude_pct, limit_down_pct, limit_up_pct, minute_bars, turnover_rate, peak_stats, tick_bars, with_close_bar, race_points, returns, locked_level, daily_k, index_k, daytrade_ratios, daytrade_group, evidence_class, evidence_yes, hot_class, next_day_stats, DAYTRADE_BASE_DAYS, DAYTRADE_HOT, top_members, verdict_r, verdict_timing,
 )
 from .history.finder import INST_STREAK_DAYS, INTRADAY_BASES, FinderParams, laggards, inst_streak, inst_summary, margin_changes, margin_summary, pair_extras, persistence, run_search
 from .history.finder import news_themes as finder_news_themes  # api.py has its own news_themes route
@@ -767,10 +767,15 @@ def create_app(
         pos = {d: i for i, d in enumerate(days_all)}
         nxt = {d: days_all[i + 1] for i, d in enumerate(days_all[:-1])}
         per_day: dict[date, set] = {}
+        ev_count: dict[tuple, int] = {}  # (day, members) → ✓ among the server's 5 checks (the larger of the two methods)
         key = p.key() + "|" + ",".join(sorted(p.groupings))  # the tail: any subset of these (a day may lack 新聞族群)
         for method in ("known", "new"):
             for d, res in store.finder_days(method, key, any_version=True, min_version=NEXT_DAY_MIN_VERSION, groupings=p.groupings):
-                per_day.setdefault(d, set()).update(tuple(sorted(m["code"] for m in g["members"])) for g in res.get("groups", []))
+                for g in res.get("groups", []):
+                    ms = tuple(sorted(m["code"] for m in g["members"]))
+                    per_day.setdefault(d, set()).add(ms)
+                    n = evidence_yes(g)
+                    ev_count[(d, ms)] = max(n, ev_count.get((d, ms), 0))
         # days outside the trading-day window (older than 400 days, or since unmarked) are left out
         results = sorted((d, [list(g) for g in gs]) for d, gs in per_day.items() if d in pos)
         codes = sorted({c for _, gs in results for g in gs for c in g})
@@ -798,6 +803,9 @@ def create_app(
 
         # 🔥 as a whole, and its two kinds (突然湧入／平常就這樣) beside it
         stats = next_day_stats(results, class_of, rows_on, nxt.get, index_pct, parents={"surge": "hot", "habitual": "hot"})
+        # the same next day by how much evidence a group had (does more evidence mean more follow-through?)
+        by_evidence = next_day_stats(results, lambda d, cs: evidence_class(ev_count.get((d, tuple(sorted(cs))), 0)), rows_on, nxt.get, index_pct)
+        stats["evidence"] = {k: v for k, v in by_evidence.items() if k not in ("hot", "rest")}
         return {"days": len(results), "first": results[0][0].isoformat() if results else None, "last": results[-1][0].isoformat() if results else None, "stats": stats}
 
     @app.get("/api/history/index-race")

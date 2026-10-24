@@ -431,6 +431,19 @@ def hot_class(group: Mapping) -> str:
     return "surge" if xs and sum(xs) / len(xs) >= SURGE_X else "habitual"
 
 
+EVIDENCE_CHECKS = ("excess", "baseline", "burst", "sync", "samedir")  # what a stored N group carries (server-side)
+
+
+def evidence_yes(group: Mapping) -> int:
+    """✓ among a stored group's 5 server-side checks (a check without data counts as no ✓)."""
+    ev = group.get("evidence") or {}
+    return sum(1 for k in EVIDENCE_CHECKS if (ev.get(k) or {}).get("ok") is True)
+
+
+def evidence_class(n: int) -> str:
+    return "ev4" if n >= 4 else "ev2" if n >= 2 else "ev0"
+
+
 def next_day_stats(results: list[tuple[date, list[list[str]]]], class_of, rows_on, next_of, index_pct, parents: Mapping[str, str] | None = None) -> dict:
     """隔天表現 of N's groups by class: results [(day, [member codes per group])], class_of(day, codes) →
     'hot'／'rest' or any other class name (True/False read as hot/rest), rows_on(day) → {code: row},

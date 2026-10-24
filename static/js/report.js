@@ -171,9 +171,17 @@ export function hotHtml(list, stats, wide = null) {
   const all = w && (w.hot.stocks || w.rest.stocks)
     ? `<p class="rp-line">所有已存的日子（${wide.days} 天，${escapeHtml(wide.first || '')}～${escapeHtml(wide.last || '')}）隔天：<br>${line('🔥', w.hot)}${w.surge ? `<br>　${line('其中突然湧入（當沖比 ≥ 平常 2 倍）', w.surge)}` : ''}${w.habitual ? `<br>　${line('其中平常就這樣', w.habitual)}` : ''}<br>${line('其他', w.rest)}</p>`
     : '';
+  // the same next day by evidence (does more evidence mean more follow-through?)
+  const ev = w?.evidence;
+  const evLine = ev && Object.keys(ev).length
+    ? `<p class="rp-line" title="伺服器端 5 項證據（扣指數、隨機、同爆量、同分鐘、同漲跌）的 ✓ 數；沒資料的項目不算 ✓">依證據數分組（所有已存的日子）隔天：${[['ev4', '✓ ≥ 4 項'], ['ev2', '✓ 2～3 項'], ['ev0', '✓ ≤ 1 項']]
+      .filter(([k]) => ev[k])
+      .map(([k, label]) => `<br>${line(label, ev[k])}`)
+      .join('')}</p>`
+    : '';
   return `<div class="rp-hot" title="有當沖資料的成員平均當沖比 ≥ 50%：隔日沖短線熱錢，隔天常開高走低；這是風險警示，不算在資金證據裡">
     <h3 class="rp-h">🔥 隔日沖警示 <small class="muted">${hot.length} 組；隔天常開高走低</small></h3>
-    ${hot.length ? `<ul class="rp-hot-list">${rows}</ul>` : '<p class="rp-line muted">今天沒有 🔥 組合。</p>'}${s}${all}</div>`;
+    ${hot.length ? `<ul class="rp-hot-list">${rows}</ul>` : '<p class="rp-line muted">今天沒有 🔥 組合。</p>'}${s}${all}${evLine}</div>`;
 }
 
 /** The report as plain text (複製成文字: for notes or a chat). */
