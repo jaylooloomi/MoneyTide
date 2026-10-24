@@ -104,17 +104,36 @@ export function priceRange(data) {
 
 export const BENCH_COLORS = ['#7fb3ff', '#f0a35e']; // 大盤, 櫃買
 
-/** A benchmark's race points ([[minute, close %, …]]) up to minute m, drawn at the same % of this
- *  stock's previous close: on the right-hand % axis the two lines read against each other directly. */
-export function benchPath(points, prev, m) {
+export const BENCH_ALIGNS = { open: '開盤對齊', prev: '昨收' }; // how 大盤／櫃買 are drawn beside a stock
+
+/** A benchmark's race points ([[minute, close %, …]]) → [[minute, % since its 09:00 point, day %]]: at the
+ *  open both indexes read 0, so they start together whatever their overnight gap. */
+export function sinceOpen(points) {
+  const base = points?.[0]?.[1];
+  if (base === undefined || base === null) return [];
+  return points.map((p) => [p[0], ((1 + p[1] / 100) / (1 + base / 100) - 1) * 100, p[1]]);
+}
+
+/** A benchmark's race points up to minute m as [minute, price] beside this stock. align 'prev': the same %
+ *  of the stock's previous close (the right-hand % axis reads both); 'open': its move since the open,
+ *  from the stock's first price, so the stock and both indexes start at one point. */
+export function benchPath(points, prev, m, align = 'prev', start = null) {
+  if (align === 'open' && start) return sinceOpen(points).filter((p) => p[0] <= m).map((p) => [p[0], start * (1 + p[1] / 100)]);
   return (points || []).filter((p) => p[0] <= m).map((p) => [p[0], priceAt(prev, p[1])]);
 }
 
-export function buildIntradayOption(data, m, benches = []) {
+export function buildIntradayOption(data, m, benches = [], align = 'prev') {
   const prev = data.prev_close;
   const bars = data.bars.filter((b) => b[0] <= m);
   const range = priceRange(data);
-  const benchLines = benches.map((b) => ({ name: b.name, all: benchPath(b.points, prev, END), path: benchPath(b.points, prev, m) }));
+  const start = data.bars[0]?.[4] ?? null; // the stock line's first point (its first bar's close): the three lines start there
+  const benchLines = benches.map((b) => ({
+    name: b.name,
+    all: benchPath(b.points, prev, END, align, start),
+    path: benchPath(b.points, prev, m, align, start),
+    open: sinceOpen(b.points),
+    day: b.points || [],
+  }));
   for (const b of benchLines) {
     for (const [, price] of b.all) {
       range.min = Math.min(range.min, price);
@@ -153,12 +172,12 @@ export function buildIntradayOption(data, m, benches = []) {
       axisPointer: { type: 'line', link: [{ xAxisIndex: 'all' }] },
       formatter: (ps) => {
         const t = ps[0]?.value?.[0];
-        const b = bars.find((x) => x[0] === t);
+        const b = [...bars].reverse().find((x) => x[0] <= t);
         if (!b) return '';
         const idx = benchLines
-          .map((x) => [x.name, x.path.filter((p) => p[0] <= t).at(-1)])
+          .map((x) => [x.name, x.open.filter((p) => p[0] <= t).at(-1)])
           .filter(([, p]) => p)
-          .map(([name, p]) => `<br>${escapeHtml(name)} ${fmtPct(pctOf(p[1]))}`)
+          .map(([name, p]) => `<br>${escapeHtml(name)} 開盤以來 ${fmtPct(p[1])}（當日 ${fmtPct(p[2])}）`)
           .join('');
         return `${fmtClock(t)}<br>價 ${b[4]}（${fmtPct(pctOf(b[4]))}）<br>高 ${b[2]}　低 ${b[3]}${b[5] != null ? `<br>量 ${Math.round(b[5] / 1000).toLocaleString()} 張` : ''}${idx}`;
       },
@@ -224,7 +243,9 @@ const COMPARE_BENCH_COLORS = ['#9aa0aa', '#c39bd3']; // 大盤／櫃買 in a com
 
 /** Several stocks on one % axis (each against its own previous close), volume below, 大盤／櫃買 dashed;
  *  everything up to minute m, the axis range from the whole day so it does not jump while playing. */
-export function buildCompareOption(items, m, benches = []) {
+export function buildCompareOption(items, m, benches = [], align = 'prev') {
+  // 'open': the indexes from 0 at 09:00 (their move since the open), so the two start together
+  const benchPts = benches.map((b) => (align === 'open' ? sinceOpen(b.points) : (b.points || []).map((p) => [p[0], p[1], p[1]])));
   const pctOf = (d, p) => (p / d.prev_close - 1) * 100;
   let lo = 0;
   let hi = 0;
@@ -234,7 +255,7 @@ export function buildCompareOption(items, m, benches = []) {
       hi = Math.max(hi, pctOf(data, b[2]));
     }
   }
-  for (const b of benches) for (const p of b.points || []) (lo = Math.min(lo, p[1])), (hi = Math.max(hi, p[1]));
+  for (const pts of benchPts) for (const p of pts) (lo = Math.min(lo, p[1])), (hi = Math.max(hi, p[1]));
   const pad = Math.max((hi - lo) * 0.06, 0.3);
   const head = { xAxis: m, lineStyle: { color: '#ffd400', type: 'solid', width: 1.5 }, label: { show: false } };
   const xAxis = (gridIndex, labels) => ({
@@ -283,7 +304,7 @@ export function buildCompareOption(items, m, benches = []) {
     type: 'line',
     xAxisIndex: 0,
     yAxisIndex: 0,
-    data: (b.points || []).filter((p) => p[0] <= m).map((p) => [p[0], p[1]]),
+    data: benchPts[i].filter((p) => p[0] <= m).map((p) => [p[0], p[1]]),
     showSymbol: false,
     silent: true,
     z: 1,
@@ -312,9 +333,9 @@ export function buildCompareOption(items, m, benches = []) {
           })
           .filter(Boolean);
         const idx = benches
-          .map((b) => [b.name, (b.points || []).filter((p) => p[0] <= at).at(-1)])
+          .map((b) => [b.name, sinceOpen(b.points).filter((p) => p[0] <= at).at(-1)])
           .filter(([, p]) => p)
-          .map(([name, p]) => `${escapeHtml(name)} ${fmtPct(p[1])}`);
+          .map(([name, p]) => `${escapeHtml(name)} 開盤以來 ${fmtPct(p[1])}（當日 ${fmtPct(p[2])}）`);
         return [fmtClock(at), ...stocks, ...idx].join('<br>');
       },
     },
@@ -392,12 +413,14 @@ export function infoHtml(data, s, m) {
 // ---- DOM / ECharts ---------------------------------------------------------------------
 
 const LAYOUT_KEY = 'openmarket.intraday.compare';
+const ALIGN_KEY = 'openmarket.intraday.benchAlign';
 export const COMPARE_LAYOUTS = { overlay: '疊圖', stack: '上下' };
 
 /** The chart panel inside `el`: show([{code, name}]) draws one stock, or several (疊圖 on one % axis /
  *  上下 one full chart each, switchable); sync(m) redraws up to minute m. load(code, name) = one stock. */
 export function mountIntraday(el, { date, onCard, benchmarks = [] }) {
   el.innerHTML = `<div class="ic-head"><span class="ic-title"></span><span class="muted ic-note"></span>
+      <div class="seg ic-align"${benchmarks.length ? '' : ' hidden'} title="大盤／櫃買虛線：開盤對齊＝從開盤一起出發（比開盤後的強弱）；昨收＝各自相對昨收的漲跌">${Object.entries(BENCH_ALIGNS).map(([k, label]) => `<button type="button" data-align="${k}">${label}</button>`).join('')}</div>
       <div class="seg ic-layout" hidden>${Object.entries(COMPARE_LAYOUTS).map(([k, label]) => `<button type="button" data-layout="${k}">${label}</button>`).join('')}</div>
       <button type="button" class="icon wide ic-card">資訊卡</button></div>
     <div class="ic-bodies"></div>`;
@@ -405,6 +428,29 @@ export function mountIntraday(el, { date, onCard, benchmarks = [] }) {
   const note = el.querySelector('.ic-note');
   const bodies = el.querySelector('.ic-bodies');
   const layoutSeg = el.querySelector('.ic-layout');
+  const alignSeg = el.querySelector('.ic-align');
+  let align = 'open';
+  try {
+    if (localStorage.getItem(ALIGN_KEY) in BENCH_ALIGNS) align = localStorage.getItem(ALIGN_KEY);
+  } catch {
+    /* default */
+  }
+  const markAlign = () => {
+    for (const b of alignSeg.querySelectorAll('[data-align]')) b.classList.toggle('on', b.dataset.align === align);
+  };
+  markAlign();
+  alignSeg.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-align]');
+    if (!b) return;
+    align = b.dataset.align;
+    try {
+      localStorage.setItem(ALIGN_KEY, align);
+    } catch {
+      /* ignore */
+    }
+    markAlign();
+    draw();
+  });
   const cache = new Map();
   let layout = 'overlay';
   try {
@@ -476,13 +522,13 @@ export function mountIntraday(el, { date, onCard, benchmarks = [] }) {
     if (items.length >= 2 && layout === 'overlay') {
       const withBars = items.filter((x) => x.data.bars.length);
       if (!withBars.length) return empty(slots[0]);
-      paintSlot(slots[0], buildCompareOption(withBars, state.m, benchmarks), compareInfoHtml(withBars, state.m));
+      paintSlot(slots[0], buildCompareOption(withBars, state.m, benchmarks, align), compareInfoHtml(withBars, state.m));
       return;
     }
     items.forEach((x, i) => {
       if (slots[i].sub) slots[i].sub.textContent = `${x.name || x.code} ${x.code}`; // 上下: which chart is which
       if (!x.data.bars.length) return empty(slots[i], x.name);
-      paintSlot(slots[i], buildIntradayOption(x.data, state.m, benchmarks), infoHtml(x.data, statsAt(x.data, state.m), state.m));
+      paintSlot(slots[i], buildIntradayOption(x.data, state.m, benchmarks, align), infoHtml(x.data, statsAt(x.data, state.m), state.m));
     });
   }
 

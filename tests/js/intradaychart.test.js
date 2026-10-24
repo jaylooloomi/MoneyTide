@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { benchPath, buildCompareOption, compareInfoHtml, nextPicks, buildIntradayOption, infoHtml, priceRange, statsAt, vwapPath } from '../../static/js/intradaychart.js';
+import { sinceOpen, benchPath, buildCompareOption, compareInfoHtml, nextPicks, buildIntradayOption, infoHtml, priceRange, statsAt, vwapPath } from '../../static/js/intradaychart.js';
 
 // prev close 100, limit-up +10% (110): locks at 09:02, opens at 09:03, locks again at 09:04
 const data = {
@@ -116,4 +116,22 @@ test('buildCompareOption: many stocks get their own colours and side-by-side vol
   const bars = opt.series.filter((x) => x.type === 'bar');
   assert.deepEqual(bars.map((x) => x.data[0][0]), [0, 0.225, 0.45, 0.675]); // 0.9 of a minute split four ways
   assert.match(compareInfoHtml(items, 270), /股3/);
+});
+
+test('sinceOpen / benchPath(open): 大盤 and 櫃買 start together at the stock\'s open', () => {
+  const twse = [[0, 0.5], [10, 1.5], [270, -0.06]];
+  const otc = [[0, 2.0], [10, 1.0], [270, 3.35]];
+  const a = sinceOpen(twse);
+  const b = sinceOpen(otc);
+  assert.equal(a[0][1], 0);
+  assert.equal(b[0][1], 0); // both at 0 at 09:00, whatever the overnight gap
+  assert.ok(Math.abs(a[1][1] - ((1.015 / 1.005 - 1) * 100)) < 1e-9);
+  assert.equal(a[2][2], -0.06); // the day % is kept for the tooltip
+  assert.deepEqual(sinceOpen([]), []);
+  const p1 = benchPath(twse, 100, 270, 'open', 80);
+  const p2 = benchPath(otc, 100, 270, 'open', 80);
+  assert.deepEqual([p1[0], p2[0]], [[0, 80], [0, 80]]); // one starting point, at the stock's open
+  assert.ok(Math.abs(benchPath(twse, 100, 0)[0][1] - 100.5) < 1e-9); // 'prev' (default): unchanged
+  const opt = buildIntradayOption(data, 270, [{ name: '大盤', points: twse }], 'open');
+  assert.equal(opt.series.find((x) => x.name === '大盤').data[0][1], opt.series.find((x) => x.name === '價').data[0][1]); // the stock line's first point
 });
