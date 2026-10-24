@@ -1,73 +1,21 @@
-# Night Shift Result（2026-10-24）
+# Night Shift Result（2026-10-25）
 
 ## 收尾
 | 項目 | 狀態 | commit | 備註 |
 |---|---|---|---|
-| K 動畫最上方固定大盤／OTC（夜班中你新增） | ✅ 完成 | 5b733d3 | 不編號、不參與排名；1 分 K（舊日 5 分 K），對齊官方指數、收在官方收盤；10/22 加權 −1.81%、櫃買 −3.47% |
-| 縣市點擊顯示公司明細 | 跳過 [存疑] | — | 版面 A／B 你還沒選（scope-reviewer 複核後改為存疑） |
+| （無明確收尾項目） | — | — | 存疑兩項見「需要你決定的事」 |
 
 ## 加分項（每行一個，可獨立 revert）
 | # | 名稱 | Score | 參考來源（競品 / 專案 / 文章） | 做了什麼 | 驗證指令 | 測試狀態 | 否決的替代作法 |
 |---|---|---|---|---|---|---|---|
-| 01 | N 卡片「存成自訂族群」 | 6.0（scores-01.md） | TradingView Import watchlist；Chartink／Screener.in 的 screener→watchlist 擴充 | N 每張卡片右上「＋族群」：跳出名稱（預設「N1022 華經+驊宏資」，可改），用既有 /api/groups 建立並加入成員，按鈕變「✓ 已存」；不會同時展開卡片。改 finder.js、app.css、finder.test.js（49 行） | `npm test`（78 ✅）；瀏覽器實測存成「ZZ夜班測試」→ API 查到 2 檔 → 已刪除還原；續做：按鈕不再折行 | ✅ | ① 後端新增批次端點（不必要，既有 API 足夠）② 自動存不問名稱（會塞滿族群清單） |
-| 02 | N 卡片「資金規模」 | 5.0（scores-02.md） | TradingView screener volume／market cap 欄；Twelve Data 熱力圖文章 | 卡片多一行「💰 成交值 18.72 億（占全市場 0.18%）　平均漲幅 +9.98%」。改 finder.py（money_size、FINDER_VERSION→3）、finder.js、app.css、兩邊測試。順便看出找法2 有的組合只有 0.1 億（小錢） | `uv run pytest`（240 ✅）、`npm test`（78 ✅）；10/22 瀏覽器實測 | ✅ | ① 前端自己加總（拿不到全市場總成交值，占比算不出）② 只顯示成交值不顯示占比（不同日子無法比較） |
-| 03 | 找法2 成交量門檻（≥300 張） | 6.2（scores-03.md） | TradingView screener volume 篩選；你為找法1 指定的「至少>300張」 | 找法2 的「條件」多「成交量 ≥（張）」，預設 300；候選池先濾掉小量股。10/22：3 組 0.1～0.75 億的小量配對消失，只留華新科+金山電（260 億）。改 finder.py、finder.js、兩邊測試 | `uv run pytest`（240 ✅）、`npm test`（78 ✅）；10/22 實跑 | ✅ | ① 改用成交值門檻（張數跟找法1 一致，比較好懂）② 跟找法1 共用同一個欄位（兩種找法要能分開調） |
-| 04 | N 結果匯出 CSV | 3.8（scores-04.md） | TradingView screener 下載 .csv | N 標題列「CSV」：匯出目前顯示的卡片（依篩選按鈕），一列一檔成分股＋群組指標＋當天條件；檔名含找法、日期、篩選。改 finder.js、finder.test.js | `npm test`（79 ✅）；瀏覽器擷取檔案：10/22 細產業 → 表頭＋6 列 | ✅ | ① 加進 history.js 的 CSV_EXPORTS（N 在那之後才掛上，按鈕掛不到）② 一列一群組（成員擠在一格，Excel 不好篩） |
-| 05 | N 漏斗統計 | 7.0（scores-06.md） | TradingView screener standard/custom levels；Chaikin preset screens | 統計列下多一行漏斗。10/22 找法1：「進入分時比對 197 對 → 刷掉：分時相關不足 143、開盤即高點（假同步） 46、高點時間差太大 2 → 三關都過 6 對 → 6 群」——**分時相關 ≥0.5 是最嚴的一關**。改 finder.py（confirm 彙總、FINDER_VERSION→4）、finder.js、app.css、兩邊測試 | `uv run pytest`（240 ✅）、`npm test`（80 ✅）；10/22 瀏覽器實測 | ✅ | ① 前端自己數（拿不到被刷掉的配對）② 只顯示通過數（看不出哪個條件最嚴） |
-| 06 | N 條件預設組 嚴格／標準／寬鬆 | 2.0（scores-07.md） | TradingView screener standard/custom levels；fffinstill、Chaikin presets | 「條件」最前面一排：嚴格（0.85／0.6／5 分）、標準（0.8／0.5／8 分）、寬鬆（0.7／0.35／15 分）；只改日相關、分時相關、高點差，其他設定不動；手動改值就顯示「自訂」。10/22 找法1：標準 6 群 → 寬鬆 38 群。改 finder.js、app.css、finder.test.js | `npm test`（81 ✅）；瀏覽器實測切寬鬆再切回標準 | ✅ | ① 預設組也改振幅／成交量／分類（會蓋掉你自己設的條件）② 存成後端設定（不必要，偏好本來就存在瀏覽器） |
-| 07 | 背景預算最近 5 個交易日 | 6.0（scores-08.md） | maverick-mcp cache warmer；Barchart 收盤後排程掃描；StocksCafe 只預算會用到的 | 背景預算從「最新一天」改成「最近 5 個交易日、兩種找法、預設門檻」；已存過的跳過，真的算了才休息 5 秒。重啟後 03:42:30 開始、03:43:35 補齊 10/16～10/22 共 10 份（10/22 已有，跳過）。改 api.py | `uv run pytest`（240 ✅）；唯讀查 finder_result：2/10 → 10/10 | ✅ | ① 預算全部歷史日（StocksCafe 的教訓：算一堆用不到的）② 把使用者自訂門檻也預算（伺服器不知道瀏覽器裡的設定） |
-| 08 | B 排行標出 N 找到共同注資的族群 | 3.3（scores-10.md） | Futu Market Monitor（watchlist 上標 unusual activity）；Acuity Market Reader | finder API 加 stored_only（只讀已存結果；沒有就回空，0.19 秒，絕不觸發計算）；B 族群名稱前加 🔗，滑鼠移上去看哪幾檔與日R／分時R／高點差。10/22 官方產業：資訊服務業（華經、驊宏資）、電子零組件業（興勤、金山電）。改 api.py、history.js、finder.js、兩邊測試 | `uv run pytest`（241 ✅）、`npm test`（82 ✅）；瀏覽器實測只發出一個 stored_only 請求 | ✅ | ① B 自己觸發搜尋（會在瀏覽 B 時偷跑幾秒到幾十秒）② 連找法2 也標（找法2 沒有來源分類，對不到 B 的列） |
-| 09 | N 卡片「近 5 天出現 N 次」 | 2.9（scores-11.md） | stock-correlation skill（rolling correlation）；Futu Market Monitor | 卡片標題旁「🔁 近 5 天第 N 次」或「🆕 首次」（滑鼠看是哪幾天）。10/22：華經+驊宏資 10/16、10/19 也出現（第 3 次）；雷科+鈦昇、凱美+金山電各第 2 次。只讀前 4 天已存結果，成員重疊過半算同一組合。改 finder.py、api.py、finder.js、app.css、兩邊測試 | `uv run pytest`（242 ✅）、`npm test`（82 ✅）；10/22 瀏覽器實測 | ✅ | ① 存進快取（前幾天的結果晚點才算好，徽章會過期）② 用完全相同成員比對（多一兩檔就對不上，太嚴） |
-| 10 | N 卡片「📰 新聞題材」 | 3.7（scores-13.md） | Finviz screener News 欄／Daily Digest；Benzinga Why Is It Moving | 卡片多一行「📰 題材：被動元件（2）」，成員 tooltip 列各自題材；近 3 個新聞日裡提到這檔的關鍵字，回傳時附上（不改快取），過濾「音量🔊」這類解析殘渣。實測抓到 api.py 裡同名的 news_themes 路由遮住匯入（500），已改名並補端點測試。新聞多半只點名大型股，小型股配對常沒有題材。改 finder.py、api.py、finder.js、app.css、兩邊測試 | `uv run pytest`（244 ✅）、`npm test`（82 ✅）；10/22 瀏覽器實測 | ✅ | ① 算進快取（新聞會補抓，存進去會過期）② 每檔都列一長串題材（卡片會爆；只取前 3） |
-| 11 | 卡片明細帶入 🔁／📰 | 7.5（scores-15.md） | Finviz screener → quote 頁帶 News | 點卡片展開的 K 檢視標題列，帶上卡片的「🔁 近 5 天第 N 次」與「📰 題材」（直接取卡片上已畫好的內容，不動卡片程式）。改 finder.js、app.css | `npm test`（82 ✅）；瀏覽器實測展開 10/22 卡片 | ✅ | ① 抽共用函式重寫卡片（會動到 bonus-09／10 的程式）② 明細再打一次 API 取資料（資料已在卡片上） |
-| 12 | 工具列「💡 資金連動」摘要 | 3.3（scores-16.md） | moomoo Market Monitor float bar／bottom bar | 歷史頁工具列（狀態燈前）「💡 資金連動：找法1 6 群（🔁 3）／找法2 1 群」，點了捲到 N（避開黏在上方的 A／B）；只讀已存結果，沒存過的日子（如 9/01）不顯示。改 history.js、finder.js、app.css、finder.test.js | `npm test`（83 ✅）；瀏覽器實測 10/22 文字、點擊後 N 位於可視區頂端 8px、9/01 隱藏 | ✅ | ① 放進黏在頂端的 A／B 面板（會擠到熱力圖）② 共用 bonus-08 的讀取（會改到 bonus-08 的程式） |
-| 13 | C 族群輪動捲到才載入 | 7.0（scores-17.md） | Front-End Checklist section-level deferral／import on visibility；Core Web Vitals：別延後首屏內容 | 所有觸發 C 的地方都經過 loadRotation：開頁先等 3 秒讓 K／N／J 撐開版面，之後 C 在可視範圍 300px 內才真的發請求，否則記著、捲近時才載（換日期時 C 不在畫面也一樣）。改 history.js | `npm test`（83 ✅）；瀏覽器實測：開頁 0 個 rotation 請求 → 捲到 C 觸發後 36 列 | ✅ | ① 改後端讓 rotation 變快（冷啟動慢的根因在同時太多冷計算，不在 rotation 演算法）② C 改成按鈕才載入（多一個動作） |
-| 14 | 夜班改動審查＋修正 | 2.4（scores-19.md） | Google eng-practices「What to look for in a code review」 | 獨立審查員只讀差異：沒有 500／XSS／CSV 錯位；報 3 個確認＋3 個可能的問題，我逐條讀碼確認後修了 6 個（9fa4282、9c52ecd、86538b8、1e998ee、c64cdb0）：① 篩選退回「全部」時 CSV 匯不出 ② C 延後載入時舊請求仍會畫上舊分組 ③ 💡／🔗 可能顯示別天、N 算完不會更新 ④ 分類順序不同被當成不同搜尋（快取鍵排序）⑤ 大盤／OTC 兩個指數改同時抓 ⑥ 📰 只用一週內的新聞 | `uv run pytest`（245 ✅）、`npm test`（84 ✅）；重啟後實測 K 指數列與 N 題材正常 | ✅ | ① 自己審（會被自己的假設帶著走）② 一次大改全部（難審、難 revert） |
-| 15 | K 分時相關排除鎖漲停平線 | 3.5（scores-21.md） | 政大「漲跌幅限制對報酬相關性之影響」；Kim & Rhee (1997) price limits | 計畫：linkage.returns 加 locked 參數＋locked_level（官方最高觸漲停時取該盤最高收盤當鎖價，抗 Yahoo 還原權值），api linkage_payload 每盤套用；改 linkage.py／api.py／test_linkage.py ；實測 10/22 資安（2468、6148 鎖漲停）：2471–6148 R 0.199→0.317、6112–6148 0.577→0.600、群組分時 R 0.186→0.202，10/22 資訊服務業（前 8 大無漲停）完全不變 | `pytest tests/test_linkage.py` | ✅ pytest 246、node 84 | 用官方漲停價直接比（Yahoo 還原價刻度不同會失準）；整盤剔除漲停股（丟太多資料） |
-| 16 | K 右側個股走勢疊上大盤／OTC 虛線 | 5.0（scores-22.md） | TradingView「Compare or Add Symbol」；Yahoo 奇摩股市個股走勢加權對照 | 點 K 的個股，右側走勢圖多兩條虛線（藍＝大盤、橘＝櫃買），畫在「該股昨收的同一 %」，右側 % 軸直接對讀；跟著播放頭畫；tooltip 也列兩個指數 %；y 軸範圍含整條指數線。實測 10/22 零壹 +2.94% vs 大盤 −1.81%／櫃買 −3.47%。改 intradaychart.js／race.js／intradaychart.test.js | `node --test tests/js/intradaychart.test.js` | ✅ node 85、pytest 246 | 另開一個 % 副軸（兩軸刻度不同反而難對讀）；在 K 時間軸列算「相對大盤」差值（接近「扣掉大盤」，使用者說先不要） |
-| 17 | N 卡片法人改「張＋億元」並在回應時補上 | 4.7（scores-23.md；P1 前提不成立作廢，改 P1b） | Goodinfo!／CMoney 三大法人買賣超（張、金額）；TWSE T86 公布時間 | 原本「法人 +3.2 億」其實是股數，易讀成金額；且法人在搜尋當下存死，盤後公布前搜的那天永遠空白。現在 with_history 每次回應依 inst_day 重算 inst_summary（張、≈ 億元＝股×收盤、買超／賣超檔數），卡片顯示「法人 +3,219 張（≈ +1.6 億）（買超 2／賣超 0 檔）」；舊格式結果退回只顯示張。實測 10/22 華經+驊宏資 +3,219 張≈1.64 億。改 finder.py／api.py／finder.js／2 測試檔 | `pytest tests/test_finder.py`；`node --test tests/js/finder.test.js` | ✅ pytest 247、node 85 | 重新跑搜尋把法人寫回（要重算整個漏斗，浪費）；只改單位不補時間差（盤後空白問題仍在） |
-| 18 | N 成員 chip tooltip 加各檔法人張數 | 20.0（scores-24.md） | Goodinfo! 個股法人買賣超；財報狗 籌碼分佈 | 滑過卡片上的成員 chip，tooltip 多「法人 +1,000 張」，看得出是一檔被買還是全部被買（資料來自 bonus-17 回應時附上的 inst_net）；沒有法人時不顯示。改 finder.js／finder.test.js | `node --test tests/js/finder.test.js` | ✅ node 85、pytest 247 | chip 上直接印張數（卡片變擠）；另開一張逐檔法人表（重複 K 檢視） |
-| 19 | N 卡片「法人連買／連賣 N 天」 | 2.5（scores-24.md） | Goodinfo!「三大法人連續買超天數」；CMoney「投信連買 N 日」；Yahoo 股市 法人連續買超 | 回應時用最近 20 個法人日算組合合計淨買賣同號的連續天數（≥ 2 天才顯示；當天法人未出 → 不顯示），卡片 facts 加紅「法人連買 N 天」／綠「法人連賣 N 天」。實測 10/22 雷科+鈦昇 法人連賣 4 天；暖機後回應 0.28 秒（法人 20 天查詢 0.13 秒）。改 finder.py／api.py／finder.js／2 測試檔 | `pytest tests/test_finder.py`；`node --test tests/js/finder.test.js` | ✅ pytest 248、node 85 | 逐檔連買天數（組合才是要看的單位）；存進 finder_result（盤後才公布會過期） |
-| 20 | 審查 bonus-15～19＋修正（20a：漲停價判斷） | 3.5（scores-25.md） | Google eng-practices「What to look for in a code review」 | 獨立審查員只讀差異，報 1 高 4 低。20a 修高的那個：用四捨五入過的漲停 % 反推價格（487.5×1.0995＝536.006）會比真漲停價 536 高，`high ≥ 價−0.001` 判不到 → K（bonus-15）與 N 原有的鎖漲停排除／🔒 時間、K 右側圖的鎖漲停全都漏掉 100–1000 元約 45% 的股票；10/22 實際 45 檔觸漲停漏判 9 檔（2383 等）。新增 linkage.limit_up_price（tick 價），Python 改用它，JS 改相對容差 2e-4（低於一個 tick 的 1e-3）；FINDER_VERSION 4→5 讓存好的 N 結果重算。改 linkage.py／finder.py／intradaychart.js／2 測試檔 | `pytest tests/test_linkage.py`；`node --test tests/js/intradaychart.test.js` | ✅ pytest 249、node 86 | 把 limit_up_pct 多保留小數（API 欄位與畫面會跟著變）；放大絕對容差（低價股會誤判下一個 tick） |
-| 20b | （續 20）審查的低嚴重度修正 | 同上 | 同上 | (3) 法人連買改沿「交易日」走、遇到沒法人的交易日就停，不再把中間缺資料的兩段接成連續；(5) 有成員沒收盤價時 ≈ 億元 改為不顯示（原本當 0 算，金額偏低且不提示）；FINDER_VERSION 改 6——實測發現 5 已被撤回的 N1 實驗用過、資料庫留有 3 筆 v5 舊結果會被誤當新結果，現已確認 10/22 重新計算（cached False）。未修：(2) 只在 5 分 K 內觸漲停時 locked_level 可能丟掉 1–2 個 0% 步（影響極小）；(4) 背景預算也會跑 with_history 的法人查詢（每次毫秒級）。改 api.py／finder.py／finder.js／2 測試檔 | `pytest tests/test_finder.py`；`node --test tests/js/finder.test.js` | ✅ pytest 249、node 86 | 存法人到 finder_result（盤後公布會過期）；以 inst_dates 直接算（缺日會被跳過） |
-| 21 | K 時間軸成員列 tooltip 加當天法人張數 | 3.0（scores-25.md） | Goodinfo! 個股法人買賣超；CMoney 族群法人進出 | linkage_payload 的 members 多 inst_net（當天三大法人淨股數，盤後才有），K 時間軸每列滑過顯示「法人 +2,010 張」；沒資料不顯示。實測 10/22 資安：華經 +2,010 張、驊宏資 +1,208 張、凱衛 −1 張。改 api.py／race.js／race.test.js | `node --test tests/js/race.test.js` | ✅ node 87、pytest 249 | 列上直接印張數（時間軸列已滿）；K 標題列放族群合計（B 已有族群法人欄） |
-| 22 | 法人附加資料的 API 層測試 | 4.5（scores-26.md） | Google Testing Blog「Test Sizes」；Martin Fowler「Practical Test Pyramid」 | 用 tmp store 走真正的 /api/history/finder（stored_only，不碰網路）：存 4 個交易日、中間一天沒抓法人 → 斷言 🏦 張／億元／逐檔 inst_net、連買只算 2 天（不跨缺日；20b 修之前的寫法會得 3 天）、存著的結果不被寫入法人。改 tests/test_finder.py | `pytest tests/test_finder.py -k streak_at_a_day` | ✅ pytest 250、node 87 | 只測純函式（審查抓到的正是串接層）；用 mock store（會跟真的 SQL 脫節） |
-| 23 | N 卡片「法人占成交 %」 | 3.8（scores-26.md） | Goodinfo!「法人買賣超佔成交量比重」；CMoney 籌碼；玩股網 主力進出占比 | 卡片 facts 多「法人占成交 8.8%」＝|法人淨買賣金額| ÷ 組合成交值（兩者已在卡片資料），tooltip 說明「越高越像法人在推」；沒有金額或成交值時不顯示。實測 10/22：華經+驊宏資 8.8%、波若威+訊芯-KY 10.6%、凱美+金山電 2.2%。改 finder.js／finder.test.js | `node --test tests/js/finder.test.js` | ✅ node 87、pytest 250 | 用張數 ÷ 成交量（多檔加總張數單位不一致時易誤導）；在後端算（前端已有兩個數字） |
-| 24 | N 卡片法人拆成外資／投信／自營 | 4.0（scores-27.md） | TWSE T86 分欄；CMoney「投信連買」「外資連買」；Goodinfo! 法人買賣超分欄 | inst_daily 早已存三欄（只是沒讀）。store 加 inst_split(day)（只讀，不改表），with_history 每次回應依組合成員加總成張，卡片 facts 多「（外資 +3,200／投信 0／自營 +19 張）」＋tooltip 說明三者動機差異。實測 10/22：六組全是外資主導、投信幾乎沒動。改 store.py／api.py／finder.js／2 測試檔 | `pytest tests/test_finder.py -k splits_inst`；`node --test tests/js/finder.test.js` | ✅ pytest 251、node 87 | 改 inst_net 回傳 tuple（會動到 B／metrics 既有用法）；存進 finder_result（盤後才公布會過期） |
-| 24b | （續 24）法人資訊集中到「🏦」一行 | 同上 | moomoo／富途 個股卡「資金」區塊分行呈現 | 實際看畫面：17／19／23／24 的法人片段夾在日 R、高點差中間，換行成三行、連賣天數掉到第三行尾。改成 💰 成交值下面獨立一行「🏦 法人 … 占成交 … （外資／投信／自營）… 連買 N 天」，R／時間那行恢復乾淨；沒有法人就不出這行。改 finder.js／finder.test.js／app.css | `node --test tests/js/finder.test.js`；瀏覽器截圖 10/22 N 卡片 | ✅ node 87、pytest 251 | 收進 tooltip（要滑過才看得到，失去一眼比較）；縮短文字（張／億都需要） |
-| 11b | （續 11）展開的 K 檢視也帶上 🏦 法人 | 9.0（scores-28.md） | Finviz screener → quote 頁帶同一組欄位；moomoo 個股卡展開保留資金區塊 | 點 N 卡片展開 K 檢視時，標題列下方複製卡片的 🏦 法人那一行（bonus-11 只帶 🔁／📰）。瀏覽器驗證 10/22 華經、驊宏資：標題「🔁 近 5 天第 3 次」下方出現「🏦 法人 +3,219 張（≈ +1.6 億）…外資 +3,200／投信 0／自營 +19 張」。改 finder.js（動 bonus-11 的區塊，所以沿用 11 的編號） | 瀏覽器：點 N 卡片 → 標題列下一個元素是 .fd-inst | ✅ node 87、pytest 251 | 重新查詢法人（卡片已有）；放進 tooltip（失去一眼看到） |
-| 25 | N 篩選 chip「🏦 法人買超／賣超」 | 6.0（scores-29.md） | Finviz screener「Institutional Transactions」；Goodinfo! 選股「法人買超」 | 當天法人已附上時，兩種找法的 chip 列尾多「🏦 法人買超 N」「🏦 法人賣超 N」，點了只留那些卡片、不重算；CSV 沿用同一篩選；當天沒法人就不出這兩顆（存著的篩選退回「全部」）。瀏覽器驗證 10/22 找法1：買超 3／賣超 3，點賣超只剩雷科+鈦昇、波若威+聯鈞、波若威+訊芯-KY。改 finder.js／finder.test.js | `node --test tests/js/finder.test.js` | ✅ node 87、pytest 251 | 另開排序（先前 C4 判斷不值得）；後端篩（要重查） |
-| 24c | （續 24）N 卡片「投信連買／連賣 N 天」 | 2.3（scores-30.md） | CMoney「投信連買 3 日」；Goodinfo!「投信連續買超」；財報狗 投信動向 | store 加 inst_trust(days)（讀既有 trust_net 欄），with_history 沿用 inst_streak 的邏輯只看投信，卡片 🏦 行加「投信連買 N 天」。實測：10/22 華新科+金山電 投信連買 3 天（三大法人合計沒有連續）；凱美+金山電 10/21 投信連賣 4 天→10/22 5 天（前後一致）；10/20 中美晶+環球晶 法人連賣 8 天。改 store.py／api.py／finder.js／2 測試檔 | `pytest tests/test_finder.py -k trust_streak` | ✅ pytest 252、node 87 | 外資／自營也各算連續（卡片太擠，投信最有指向性）；改 inst_split 吃多天（動到 24 的介面） |
-| 04b | （續 04）CSV 補上法人欄位 | 3.0（scores-31.md） | Finviz screener Export（匯出＝畫面欄位）；Goodinfo! 匯出含法人欄 | CSV 在「條件」前多 9 欄：個股法人(張)、群組法人(張／億)、法人占成交%、外資／投信／自營(張)、法人連續、投信連續（「連買3」）；沒有法人時留空不寫 0；用 🏦 chip 篩選匯出時檔名是「…_法人買超.csv」而不是內部代號 @inst+。改 finder.js／finder.test.js（動 bonus-04 的區塊，沿用 04 編號） | `node --test tests/js/finder.test.js` | ✅ node 87、pytest 252 | 另出一份法人 CSV（要對兩個檔）；只匯群組欄（逐檔法人張也要） |
-| 26 | N 回應的法人連續天數只查卡片成員 | 2.3（scores-32.md） | Use The Index, Luke!「only fetch what you need」；SQLite 主鍵 (date, code) | bonus-19／24c 的 20 天連續天數各讀全市場 ~44,800 列（0.11 秒×2）；store.inst_net／inst_trust 加可選 codes（不給＝原行為，B／metrics 不變），with_history 只傳卡片成員 → 253 列 0.003 秒。實測暖機後 N 回應 0.38 → 0.14 秒（每次頁面載入打 3 次），連續天數結果與改前相同。改 store.py／api.py／test_finder.py | `pytest tests/test_finder.py -k limited_to_some_codes`；計時腳本 | ✅ pytest 253、node 87 | 加索引／快取（索引＝migration、快取要處理法人回補的失效）；整個 with_history 改成背景先算（盤後才公布會過期） |
-| 27 | K 摘要列加「法人（前 N 大成員）」 | 2.3（scores-33.md） | Goodinfo! 族群法人買賣超摘要；CMoney 族群籌碼 | K 的摘要列（日 R／分時 R／高點標準差／龍頭領先）後面多一格「法人（前 8 大成員）+4,823 張　買超 7／賣超 1」，標題寫明只加總 K 列出的市值前幾大、整個族群看 B（scorer 提醒部分加總可能誤導，所以標示清楚）；沒法人不顯示。瀏覽器驗證 10/22 資安。改 linkage.js／linkage.test.js | `node --test tests/js/linkage.test.js` | ✅ node 88、pytest 253 | 改抓整個族群的法人（K 只拿前 8 大的分 K，數字對不上畫面）；不顯示（每列滑 tooltip） |
-| 28 | 個股資訊卡加法人 | 4.0（scores-34.md） | Yahoo 奇摩股市 個股法人買賣；Goodinfo! 個股法人買超與連續天數；CMoney 個股籌碼 | 歷史頁任一處點股票打開的資訊卡，表格多兩列：「法人 −9,020 張　投信連買 3 天」「外資 −10,106／投信 +1,976／自營 −890 張」。/api/history/stock 多回 inst（沿用 inst_streak 與 bonus-26 的成員查詢，沿交易日、遇缺日停）；當天法人未出 → null、不顯示。實測 10/22 華新科；暖機後卡片 API 0.06 秒（法人部分 0.016 秒）。改 history/api.py／history.js／test_finder.py | `pytest tests/test_finder.py -k stock_card` | ✅ pytest 254、node 88 | 另開法人歷史小圖（卡片已有價格走勢，太擠）；前端另打一支 API（多一次往返） |
 
 ## 判斷不值得做
-- C4 N 卡片可排序（1.5，scores-04.md）：每天篩完通常只剩幾張卡，排序幫助不大，還會改到現有預設順序。
-- C3 N 卡片連動趨勢（短窗 R vs 20 日 R）（1.0）：「趨勢」是詮釋性標籤，要改 describe／前端／測試多處，效益不明確。
-- C6 K 動畫標出同時爆量時間點（0.8）：要改 K 的核心 payload 與動畫渲染，影響範圍大。
-- 第 2 輪 TOP: none（scores-05.md）：D2 PTT 討論熱度（1.5，只有標題、沒有回文數，量到的是關注度不是資金動機）；D1 從一檔股票找同夥（0.9，新分頁＋API＋約 200 行，太重）。
-- F2 N 卡片 20 日迷你走勢（1.0，scores-08.md）：不是你要求的，多檔改動，而且每次搜尋多算 20 日路徑，跟 1 分鐘目標相衝。
-- 第 5 輪 TOP: none（scores-09.md）：G1 盤中錄製順便記成交量（0.6）：要改每次輪詢的錄製器、資料格式和所有讀取端，累計量歸零／漏輪詢的處理風險高；目前有 Yahoo 補。
-- 第 7 輪剩下 TOP: none（scores-12.md）：I2 K 動畫標出 N 找到的成員（1.8）：只涵蓋找法1 且在前 8 大的成員，又要動剛大改過的 race.js。
-- 第 8 輪剩下 TOP: none（scores-14.md）：J6 兩種找法雙重確認（1.0）：同一套漏斗跑兩次，等於重複計算同一證據；10/22 兩邊沒有任何相同組合，標記幾乎不會出現。
-- 第 10 輪剩下 TOP: none（scores-18.md）：L2 即時頁也放 💡 摘要（1.8）：歷史頁已有（bonus-12），即時頁工具列已經很擠。
-- N1 N 卡片「誰先動」（2.2，scores-20.md）：做完後用 10/22 真實資料實驗，已放棄並撤回。5 分 K 與 1 分 K 錯開 ±1～10 分鐘，同一筆資金帶動的股票相關都在「同一分鐘」最高（0.49～0.80），錯開後只剩 0.2 以下 → 幾乎不會顯示任何領先，做成標籤沒有意義（實驗腳本在 scratchpad/exp/lead_diag.py）。
-- U2 B 族群法人欄拆外資／投信／自營（0.2，scores-28.md）：要動 metrics 的族群資金流快取與版本，只換來一個 tooltip；N 卡片已拆。
-- W1 審查 bonus-21～25（1.0，scores-30.md）：20 那輪已審過最易錯的漲停價與串接層，這批多是讀既有欄位＋排版，scorer 判間接。
-- 第 26 輪 TOP: none（scores-35.md）：AB1 審查 bonus-21～28（1.1）：scorer 判為流程而非功能。改由自己快速比對 5 條法人讀取路徑（N 卡片／chip、K 列、K 摘要、個股卡、CSV）：單位都是股÷1000＝張，當天沒法人時都不顯示（不是 0），未發現不一致。
-- 第 27 輪 TOP: none（scores-36.md）：AC1 即時頁個股卡顯示最近一日法人（1.8）：要動每次輪詢都重畫的即時卡片，影響面大於效益。連續兩輪 TOP: none → 依規則收工。
+-
 
 ## 需要你決定的事
-- 縣市點擊看公司明細：請在方案 A（右側清單往下鑽成公司明細，我推薦）與方案 B（列內展開前 10＋看全部）之間選一個，我就做。
-- [存疑] 扣掉大盤的驗證、資金動機產出形式（A/B/C）：未動。
-- 融資融券（散戶槓桿資金）當動機證據（V1，scores-29.md）：要新資料源（TWSE MI_MARGN）＋新資料表，屬 DB migration，夜班圍欄禁止；要做請白天決定。
-- N 的快取版本從 4 跳到 6（bonus-20b）：5 曾被撤回的 N1 實驗用過、資料庫留有舊 v5 結果。重啟後背景會重算最近 5 天；更早的日子第一次打開 N 會重新計算（約數秒）。
-- 夜班期間的 preview 伺服器（port 8765）還開著，跑的是本分支的程式；不需要可以直接關。
+- [存疑] 證據清單其他門檻要不要放進「條件」
+- [存疑] 資料庫容量保留期限（1 分 K 一年約 1～2 GB）
+- 開工時工作區乾淨，沒有 stash
+
 ## 統計
-- 回合：Stop hook 計 51 回合（上限 120）；研究 27 輪、scorer 評分 36 張表（scores-01～36）。
-- commit：`git log main..HEAD` 43 個（收尾 1、加分項 33 列〔01～28＋04b／11b／20b／24b／24c〕、scope／docs 其餘）。
-- 檔案：`git diff main --name-only` 58 個（含 .agent-pipeline/）；程式＋測試淨增約 1,300 行（58 檔 +1,737／−433，含 .agent-pipeline 文件）。
-- 最後測試：pytest 254 passed；node --test 88 passed、0 failed。
-- 結束原因：無候選（第 26、27 輪連續 TOP: none），剩餘約 5.7 小時未用。
+- 進行中
