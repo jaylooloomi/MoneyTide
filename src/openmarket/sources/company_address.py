@@ -136,3 +136,12 @@ async def fetch_county_groups(client: httpx.AsyncClient, progress=lambda done, t
     if len(rows) < MIN_COMPANIES:
         raise ValueError(f"company basic-information APIs returned only {len(rows)} companies")
     return group_by_county(rows)
+
+
+async def fetch_company_names(client: httpx.AsyncClient) -> dict[str, str]:
+    """{code: 公司全名} from the same two basic-information APIs (for matching 轉投資 names)."""
+    twse = (await get_with_retry(client, TWSE_URL)).json()
+    tpex = (await get_with_retry(client, TPEX_URL)).json()
+    out = {str(r.get("公司代號", "")).strip(): str(r.get("公司名稱", "")).strip() for r in twse}
+    out.update({str(r.get("SecuritiesCompanyCode", "")).strip(): str(r.get("CompanyName", "")).strip() for r in tpex})
+    return {k: v for k, v in out.items() if k and v}

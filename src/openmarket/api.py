@@ -43,6 +43,9 @@ from .sources.official import fetch_tpex_day, fetch_twse_day
 from .sources.official_index import fetch_index_month
 from .sources.institutional import fetch_inst_day
 from .sources.margin import fetch_margin_day
+from .sources.moneydj import fetch_relations
+from .sources.company_address import fetch_company_names
+from .relations import NameIndex, RelationCollector, relation_edges, relation_groups
 from .sources.sector_index import fetch_sector_day
 from .sources.company_address import fetch_county_groups
 from .sources.google_news import fetch_headlines
@@ -95,6 +98,46 @@ def create_app(
     settings = SettingsStore(config.data_dir / "settings.json")
     watchlist = Watchlist(config.data_dir / "watchlist.json")
     groups = GroupStore(config.data_dir / "groups.json")
+
+    def listed_codes() -> list[str]:
+        """Common stocks of the latest stored day, the largest market cap first (crawled first)."""
+        store = app.state.history
+        days = store.trading_dates(limit=1)
+        rows = [r for r in store.day_rows(days[0]) if r.get("kind") == "stock"] if days else []
+        return [r["code"] for r in sorted(rows, key=lambda r: -(r.get("market_cap") or 0))]
+
+    rel_cache: dict = {"version": None}
+
+    def relation_graph() -> dict:
+        """Edges and groups between listed stocks, rebuilt when the relation tables change."""
+        store = app.state.history
+        days = store.trading_dates(limit=1)
+        key = (store.relations_version, days[0] if days else None)
+        if rel_cache["version"] == key:
+            return rel_cache
+        rows = [r for r in store.day_rows(days[0]) if r.get("kind") == "stock"] if days else []
+        idx = NameIndex.build(store.company_names(), {r["code"]: r["name"] for r in rows})
+        invest, board = store.relation_rows()
+        edges = relation_edges(invest, board, idx, [r["code"] for r in rows])
+        by_pair: dict[frozenset, list[dict]] = {}
+        by_code: dict[str, list[dict]] = {}
+        for e in edges:
+            by_pair.setdefault(frozenset((e["src"], e["dst"])), []).append(e)
+            by_code.setdefault(e["src"], []).append(e)
+            by_code.setdefault(e["dst"], []).append(e)
+        names = {r["code"]: r["name"] for r in rows}
+        groups = relation_groups(edges, {r["code"]: r.get("market_cap") or 0 for r in rows})
+        rel_cache.update(version=key, edges=edges, by_pair=by_pair, by_code=by_code, groups=groups, names=names)
+        return rel_cache
+
+    def edge_view(e: dict, names: Mapping[str, str]) -> dict:
+        return {**e, "src_name": names.get(e["src"], e["src"]), "dst_name": names.get(e["dst"], e["dst"])}
+
+    def group_view(g: dict | None, names: Mapping[str, str]) -> dict | None:
+        if not g:
+            return None
+        return {"leader": g["leader"], "leader_name": names.get(g["leader"], g["leader"]), "size": len(g["members"]),
+                "members": [{"code": c, "name": names.get(c, c)} for c in g["members"][:12]]}
 
     def stock_names() -> dict[str, str]:
         """Common-stock code → name from the ISIN listing (empty until it has loaded)."""
@@ -165,6 +208,14 @@ def create_app(
                 fetch_sectors=lambda d: fetch_sector_day(client, d),
             )
             tasks.append(asyncio.create_task(app.state.collector.run()))
+            # 轉投資／董監 from MoneyDJ: one stock at a time, slowly, after the start-up has settled
+            app.state.relations = RelationCollector(
+                store=app.state.history,
+                fetch=lambda code: fetch_relations(client, code, asyncio.sleep, 4.0),
+                fetch_names=lambda: fetch_company_names(client),
+                codes=listed_codes,
+            )
+            tasks.append(asyncio.create_task(app.state.relations.run()))
             ptt_client = app.state.ptt_client = make_ptt_client()
             app.state.news = NewsThemeCollector(
                 store=app.state.history,
@@ -754,6 +805,15 @@ def create_app(
             groups = margin_summary(groups, margin_rows.get(d, {}))
             streak = inst_streak(groups, margin_changes(margin_rows), margin_days)
             groups = [{**g, "margin_streak": t["inst_streak"]} for g, t in zip(groups, streak)]
+            # 🏢 持股／董監 relations among the members (crawled from MoneyDJ; empty until it has run)
+            rg = relation_graph()
+            def with_rel(grp: dict) -> dict:
+                codes = [m["code"] for m in grp["members"]]
+                es = [edge_view(e, rg["names"]) for i, a in enumerate(codes) for b in codes[i + 1:] for e in rg["by_pair"].get(frozenset((a, b)), [])]
+                leaders = {id(rg["groups"][c]) for c in codes if c in rg["groups"]}
+                same = len(leaders) == 1 and all(c in rg["groups"] for c in codes)
+                return {**grp, "relations": es, "rel_group": group_view(rg["groups"][codes[0]], rg["names"]) if same else None}
+            groups = [with_rel(grp) for grp in groups]
             return {**res, "groups": finder_news_themes(groups, news, [x.isoformat() for x in news_dates])}
 
         if not refresh:
@@ -834,6 +894,25 @@ def create_app(
         rows.sort(key=lambda r: -(r.get("market_cap") or 0))
         return await linkage_payload(d, rows)
 
+    @app.get("/api/history/relations/{code}")
+    async def stock_relations(code: str) -> dict:
+        """One stock's listed relations for its card: who it holds, who holds it, its group."""
+        g = await asyncio.to_thread(relation_graph)
+        es = [edge_view(e, g["names"]) for e in g["by_code"].get(code, [])]
+        fetched = app.state.history.relation_fetched().get(code)
+        return {
+            "code": code,
+            "holds": [e for e in es if e["src"] == code],
+            "held_by": [e for e in es if e["dst"] == code],
+            "group": group_view(g["groups"].get(code), g["names"]),
+            "fetched_at": fetched["fetched_at"] if fetched and not fetched["error"] else None,
+        }
+
+    @app.get("/api/relations/status")
+    def relations_status() -> dict:
+        r = getattr(app.state, "relations", None)
+        return r.status() if r else {"running": False, "stored": len(app.state.history.relation_fetched())}
+
     PAIR_DAYS = 20  # 同漲同跌 over this many trading days
     PAIR_FINDER_DAYS = 5  # N results of the latest this many days
 
@@ -853,7 +932,13 @@ def create_app(
             pct = {x: {r["code"]: r["change_pct"] for r in rs if r["code"] in wanted} for x, rs in store.change_rows(dates).items()}
             found = store.finder_any(store.trading_dates(up_to=d, limit=PAIR_FINDER_DAYS))
             news_dates = [x for x in store.news_dates_sorted(up_to=d, limit=3) if (d - x).days <= NEWS_THEME_DAYS]
-            return pair_extras(wanted, rows, groupings, pct, found, [store.news_day(x) for x in news_dates])
+            pairs = pair_extras(wanted, rows, groupings, pct, found, [store.news_day(x) for x in news_dates])
+            g = relation_graph()
+            for p in pairs:
+                p["relations"] = [edge_view(e, g["names"]) for e in g["by_pair"].get(frozenset((p["a"], p["b"])), [])]
+                ga, gb = g["groups"].get(p["a"]), g["groups"].get(p["b"])
+                p["group"] = group_view(ga, g["names"]) if ga is not None and ga is gb else None
+            return pairs
 
         return {"date": d.isoformat(), "days": PAIR_DAYS, "pairs": await asyncio.to_thread(build)}
 

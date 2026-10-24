@@ -58,6 +58,26 @@ CREATE TABLE IF NOT EXISTS margin_day (
     rows INTEGER NOT NULL DEFAULT 0,
     fetched_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS corp_invest (
+    code TEXT NOT NULL,
+    name TEXT NOT NULL,
+    currency TEXT, cost REAL, shares REAL, pct REAL, book REAL, method TEXT
+);
+CREATE TABLE IF NOT EXISTS corp_board (
+    code TEXT NOT NULL,
+    title TEXT, name TEXT, corp TEXT, lots REAL, pct REAL
+);
+CREATE TABLE IF NOT EXISTS corp_fetch (
+    code TEXT PRIMARY KEY,
+    invest_rows INTEGER, board_rows INTEGER,
+    fetched_at TEXT NOT NULL,
+    error TEXT NOT NULL DEFAULT ''
+);
+CREATE TABLE IF NOT EXISTS company_name (
+    code TEXT PRIMARY KEY,
+    full_name TEXT NOT NULL,
+    fetched_at TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS intraday_tick (
     date TEXT NOT NULL,
     ts TEXT NOT NULL,
@@ -130,6 +150,7 @@ class HistoryStore:
         self._news_version = 0  # bumped on news writes; part of the hot-themes cache key
         self._inst_version = 0  # bumped on institutional writes
         self._inst_day_version: dict[date, int] = {}  # per day: only that day's money-flow cache goes stale
+        self.relations_version = 0  # bumped on 轉投資／董監／full-name writes (relations cache)
         path.parent.mkdir(parents=True, exist_ok=True)
         with self._conn() as c:
             c.executescript(SCHEMA)
@@ -653,6 +674,57 @@ class HistoryStore:
                 "INSERT OR REPLACE INTO finder_result (date, method, params, result, computed_at) VALUES (?, ?, ?, ?, ?)",
                 (day.isoformat(), method, params, json.dumps(result, ensure_ascii=False), datetime.now().astimezone().isoformat()),
             )
+
+    # ---- company relations (轉投資 / 法人董監, relations.py) and official full names -----------------
+
+    def save_relations(self, code: str, invest: list | None, board: list | None, fetched_at: datetime, error: str = "") -> None:
+        """Replace one stock's rows; an error keeps the old rows and only records the attempt."""
+        with self._lock, self._conn() as c:
+            if not error:
+                c.execute("DELETE FROM corp_invest WHERE code = ?", (code,))
+                c.execute("DELETE FROM corp_board WHERE code = ?", (code,))
+                c.executemany(
+                    "INSERT INTO corp_invest (code, name, currency, cost, shares, pct, book, method) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                    [(code, r.name, r.currency, r.cost, r.shares, r.pct, r.book, r.method) for r in invest or []],
+                )
+                c.executemany(
+                    "INSERT INTO corp_board (code, title, name, corp, lots, pct) VALUES (?, ?, ?, ?, ?, ?)",
+                    [(code, r.title, r.name, r.corp, r.lots, r.pct) for r in board or []],
+                )
+            c.execute(
+                "INSERT OR REPLACE INTO corp_fetch (code, invest_rows, board_rows, fetched_at, error) VALUES (?, ?, ?, ?, ?)",
+                (code, len(invest or []), len(board or []), fetched_at.isoformat(), error),
+            )
+        self.relations_version += 1
+
+    def relation_fetched(self) -> dict[str, dict]:
+        with self._conn() as c:
+            return {r["code"]: {"fetched_at": r["fetched_at"], "error": r["error"]} for r in c.execute("SELECT code, fetched_at, error FROM corp_fetch")}
+
+    def relation_rows(self) -> tuple[dict[str, list[dict]], dict[str, list[dict]]]:
+        """({code: its 轉投資 rows}, {code: its 董監 rows with a corporate holder})."""
+        invest: dict[str, list[dict]] = {}
+        board: dict[str, list[dict]] = {}
+        with self._conn() as c:
+            for r in c.execute("SELECT code, name, pct, method, shares, book FROM corp_invest"):
+                invest.setdefault(r["code"], []).append(dict(r))
+            for r in c.execute("SELECT code, title, name, corp, lots, pct FROM corp_board WHERE corp IS NOT NULL"):
+                board.setdefault(r["code"], []).append(dict(r))
+        return invest, board
+
+    def save_company_names(self, names: dict[str, str], fetched_at: datetime) -> None:
+        with self._lock, self._conn() as c:
+            c.executemany("INSERT OR REPLACE INTO company_name (code, full_name, fetched_at) VALUES (?, ?, ?)", [(k, v, fetched_at.isoformat()) for k, v in names.items()])
+        self.relations_version += 1
+
+    def company_names(self) -> dict[str, str]:
+        with self._conn() as c:
+            return {r["code"]: r["full_name"] for r in c.execute("SELECT code, full_name FROM company_name")}
+
+    def company_names_at(self) -> datetime | None:
+        with self._conn() as c:
+            row = c.execute("SELECT MAX(fetched_at) AS at FROM company_name").fetchone()
+        return datetime.fromisoformat(row["at"]) if row and row["at"] else None
 
     def finder_any(self, days: list[date]) -> list[tuple[str, str, dict]]:
         """Every stored N result on `days`, whatever its thresholds: (date, method, result)."""
