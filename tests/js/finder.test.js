@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { PRESETS, BIG_MIN, isBig, factorText, evidenceRank, rowsHeight, themeNewsHtml, cardHtml, digestText, shownFilter, finderMarkIndex, finderMarkTitle, csvExport, defaultGroupName, filterHtml, funnelText, presetOf, filterOptions, matchesFilter, progressView, queryOf, statsText } from '../../static/js/finder.js';
+import { PRESETS, BIG_MIN, condText, isBig, factorText, evidenceRank, rowsHeight, themeNewsHtml, cardHtml, digestText, shownFilter, finderMarkIndex, finderMarkTitle, csvExport, defaultGroupName, filterHtml, funnelText, presetOf, filterOptions, matchesFilter, progressView, queryOf, statsText } from '../../static/js/finder.js';
 
 test('queryOf sends only the fields of the chosen method; blank 起漲差 means not required', () => {
   const p = { daily_r: 0.75, daily_window: 20, new_daily_r: 0.85, pool_top: 30, intraday_r: 0.5, peak_gap: 8, start_gap: '', require_burst: true, groupings: ['custom', 'news'], pool_sources: ['gain'] };
@@ -295,4 +295,10 @@ test('只看 3 檔以上 keeps the groups of more than two members (cards and CS
   const d = { date: '2026-10-22', method: 'known', params: {}, groups: [pair, trio] };
   assert.equal(csvExport(d, 'all')[2].length, 5); // 2 + 3 member rows
   assert.equal(csvExport(d, 'all', true)[2].length, 3); // the trio only
+});
+
+test('condText: the 條件 in a few words, for 盤後報告', () => {
+  const p = { daily_r: 0.8, new_daily_r: 0.8, intraday_basis: 'sector', excess_r: 0.4, intraday_r: 0.5, peak_gap: 8, dense: 0.7 };
+  assert.equal(condText(p), '日 R ≥ 0.8（找法2 0.8）、扣大盤＋類股後分時 R ≥ 0.4、高點差 ≤ 8 分、群內 0.7');
+  assert.match(condText({ ...p, intraday_basis: 'raw' }), /、分時 R ≥ 0\.5、/);
 });

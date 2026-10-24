@@ -132,10 +132,10 @@ export function trackHtml(dates, rows) {
 // ---- panel --------------------------------------------------------------------------------------
 
 /** 分頁3: refresh(date, days) with the trading days list (newest first) to find the 4 days before. */
-export function mountReportPanel(container, { onStock }) {
+export function mountReportPanel(container, { onStock, query, condText }) {
   const sec = document.createElement('section');
   sec.className = 'panel hReport';
-  sec.innerHTML = `<div class="panel-h"><b>盤後報告</b><span class="muted" id="rpNote">N 的預設條件（找法1＋找法2），每天收盤後算好</span>
+  sec.innerHTML = `<div class="panel-h"><b>盤後報告</b><span class="muted" id="rpNote"></span>
       <button type="button" class="icon wide" id="rpCopy" style="margin-left:auto" title="把報告複製成純文字">複製成文字</button></div>
     <div class="rp-body"><p class="hint">選一天看報告。</p></div>`;
   container.append(sec);
@@ -143,7 +143,10 @@ export function mountReportPanel(container, { onStock }) {
   const state = { ticket: 0, text: '', allGone: false, last: null };
 
   async function result(date, method, storedOnly) {
-    const q = new URLSearchParams({ date, method });
+    // 分頁2's 條件 (query): the result stored under exactly those (any change is another key, so a
+    // changed 條件 computes again rather than reusing what the old ones found)
+    const q = new URLSearchParams(query ? query(method) : { method });
+    q.set('date', date);
     if (storedOnly) q.set('stored_only', '1');
     const r = await fetch(`/api/history/finder?${q}`, { cache: 'no-store' });
     const j = r.ok ? await r.json() : null;
@@ -153,6 +156,7 @@ export function mountReportPanel(container, { onStock }) {
   async function refresh(date, days) {
     if (!date) return;
     const t = ++state.ticket;
+    sec.querySelector('#rpNote').textContent = `找法1＋找法2，用分頁2 的條件：${condText ? condText() : '預設'}`;
     body.innerHTML = '<p class="hint">整理中…</p>';
     const i = days.indexOf(date);
     const dates = days.slice(i, i + TRACK_DAYS).reverse(); // oldest → the report day

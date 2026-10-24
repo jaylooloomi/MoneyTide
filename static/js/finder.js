@@ -38,6 +38,12 @@ export const FIELDS = [
   ['min_size', '最少幾檔', 'int', '', ''],
 ];
 
+/** The thresholds that decide a group, in a few words (盤後報告's header). */
+export function condText(p) {
+  const intraday = p.intraday_basis && p.intraday_basis !== 'raw' ? `${BASES[p.intraday_basis]}後分時 R ≥ ${p.excess_r}` : `分時 R ≥ ${p.intraday_r}`;
+  return `日 R ≥ ${p.daily_r}（找法2 ${p.new_daily_r}）、${intraday}、高點差 ≤ ${p.peak_gap} 分、群內 ${p.dense}`;
+}
+
 export const BASES = { sector: '扣大盤＋類股', market: '扣大盤', raw: '原始' };
 
 export function queryOf(method, params) {
@@ -801,5 +807,8 @@ export function mountFinderPanel(container, { onStock, onResult }) {
       state.date = date;
       schedule();
     },
+    // the 條件 now in use, for 盤後報告: the same query (so the same stored result, or the same search)
+    query: (method) => queryOf(method, pref.params),
+    condText: () => condText(pref.params),
   };
 }

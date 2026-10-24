@@ -756,7 +756,7 @@ export async function showHistory() {
       },
     });
     finderPanel.refresh(st.date);
-    reportPanel = mountReportPanel($('#historyTab3'), { onStock: openHistCard });
+    reportPanel = mountReportPanel($('#historyTab3'), { onStock: openHistCard, query: finderPanel.query, condText: finderPanel.condText });
     if (histTab.current === 3) reportPanel.refresh(st.date, st.days);
     setTimeout(() => {
       // once K/N/J have their content, C's real position decides (it loads when scrolled near)
