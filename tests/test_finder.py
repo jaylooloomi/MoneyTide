@@ -766,3 +766,22 @@ def test_laggards_are_the_known_group_s_stocks_left_behind():
     assert laggards({**g, "matches": [{**g["matches"][0], "overlap": 0.4}]}, rows, groupings) is None  # no real home
     big = rows + [{"code": f"Z{i}", "name": "z", "kind": "stock", "industry": "X", "change_pct": 0, "volume_shares": 1} for i in range(40)]
     assert laggards(g, big, groupings) is None  # 45 stocks in X: too broad to mean anything
+
+
+
+def test_finder_days_any_version_takes_the_same_thresholds_newest_first(tmp_path):
+    import json
+    from datetime import datetime
+
+    from openmarket.history.store import HistoryStore
+
+    s = HistoryStore(tmp_path / "h.sqlite")
+    key = lambda v, r=0.4: json.dumps({"excess_r": r, "v": v}, sort_keys=True) + "|industry"  # noqa: E731
+    s.save_finder(date(2026, 8, 3), "known", key(9), {"groups": [{"tag": "old"}]})
+    s.save_finder(date(2026, 8, 4), "known", key(9), {"groups": [{"tag": "old"}]})
+    s.save_finder(date(2026, 8, 4), "known", key(10), {"groups": [{"tag": "new"}]})
+    s.save_finder(date(2026, 8, 4), "known", key(10, 0.5), {"groups": [{"tag": "other"}]})  # other thresholds
+    got = s.finder_days("known", key(10), any_version=True)
+    assert [(d.isoformat(), r["groups"][0]["tag"]) for d, r in got] == [("2026-08-03", "old"), ("2026-08-04", "new")]
+    assert [d.isoformat() for d, _ in s.finder_days("known", key(10))] == ["2026-08-04"]
+    assert [d.isoformat() for d, _ in s.finder_days("known", key(10), any_version=True, min_version=10)] == ["2026-08-04"]

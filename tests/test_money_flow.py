@@ -325,3 +325,16 @@ def test_next_day_stats_hot_apart_from_the_rest():
                           "intraday": round(((98 / 105 - 1) * 100 + (104 / 101 - 1) * 100) / 2, 2), "fade": 50.0, "down": 50.0}
     assert out["rest"]["stocks"] == 1 and out["rest"]["fade"] == 0.0
     assert next_day_stats([(d2, [["1"]])], lambda d, cs: True, lambda d: {}, {}.get, lambda d: None)["hot"]["stocks"] == 0  # no next day
+
+
+
+def test_hot_class_and_merge():
+    from openmarket.history.linkage import hot_class, merge_next
+
+    assert hot_class({"hot": False, "by_code": {}, "base": {}}) == "rest"
+    assert hot_class({"hot": True, "by_code": {"1": 62.0, "2": 55.0}, "base": {"1": 25.0, "2": 30.0}}) == "surge"  # 2.48× and 1.83×
+    assert hot_class({"hot": True, "by_code": {"1": 62.0}, "base": {"1": 60.0}}) == "habitual"
+    assert hot_class({"hot": True, "by_code": {"1": 62.0}, "base": {}}) == "habitual"  # no usual known
+    a = {"groups": 1, "days": 1, "stocks": 2, "gap": 2.0, "close": 1.0, "excess": 0.0, "intraday": -1.0, "fade": 50.0, "down": 50.0}
+    b = {"groups": 2, "days": 3, "stocks": 6, "gap": 4.0, "close": -1.0, "excess": -2.0, "intraday": -3.0, "fade": 100.0, "down": 0.0}
+    assert merge_next([a, b]) == {"groups": 3, "days": 3, "stocks": 8, "gap": 3.5, "close": -0.5, "excess": -1.5, "intraday": -2.5, "fade": 87.5, "down": 12.5}

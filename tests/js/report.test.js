@@ -154,3 +154,10 @@ test('reportText lists 高點錯開但走勢一樣 too', () => {
   const shapes = shapeList([{ shape_pairs: [p] }]);
   assert.match(reportText('2026-08-28', [], [], [], null, shapes), /高點錯開但走勢一樣（1 對，可能分批推進）：\n   台塑＋台化：高點差 60 分、扣指數 R 0\.65/);
 });
+
+test('hotHtml splits 🔥 into 突然湧入 and 平常就這樣 when the server does', () => {
+  const x = (n) => ({ groups: n, stocks: n * 2, gap: 1, close: -1, excess: -1, intraday: -2, fade: 60, down: 50 });
+  const html = hotHtml([], null, { days: 10, first: 'a', last: 'b', stats: { hot: x(5), surge: x(2), habitual: x(3), rest: x(9) } });
+  assert.match(html, /其中突然湧入（當沖比 ≥ 平常 2 倍） 2 組／4 檔次/);
+  assert.match(html, /其中平常就這樣 3 組／6 檔次/);
+});

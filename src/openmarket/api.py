@@ -25,7 +25,7 @@ from .explain import explain_day
 from .history.linkage import (
     pearson,
     INTRADAY_HIGH_R, INTRADAY_LOW_R, bucket_closes, daily_linkage, fmt_minute, pair_matrix, peak_minute_from_bars, peak_minute_from_ticks,
-    align_bars, amplitude_pct, limit_down_pct, limit_up_pct, minute_bars, turnover_rate, peak_stats, tick_bars, with_close_bar, race_points, returns, locked_level, daily_k, index_k, daytrade_ratios, daytrade_group, next_day_stats, DAYTRADE_BASE_DAYS, DAYTRADE_HOT, top_members, verdict_r, verdict_timing,
+    align_bars, amplitude_pct, limit_down_pct, limit_up_pct, minute_bars, turnover_rate, peak_stats, tick_bars, with_close_bar, race_points, returns, locked_level, daily_k, index_k, daytrade_ratios, daytrade_group, hot_class, merge_next, next_day_stats, DAYTRADE_BASE_DAYS, DAYTRADE_HOT, top_members, verdict_r, verdict_timing,
 )
 from .history.finder import INST_STREAK_DAYS, INTRADAY_BASES, FinderParams, laggards, inst_streak, inst_summary, margin_changes, margin_summary, pair_extras, persistence, run_search
 from .history.finder import news_themes as finder_news_themes  # api.py has its own news_themes route
@@ -753,6 +753,10 @@ def create_app(
                                                       "gap_pct": pct(r.get("open"), r.get("prev_close")), "intraday_pct": pct(r.get("close"), r.get("open"))}
                                                   for c, r in rows.items()}}
 
+    # the oldest FINDER_VERSION whose groups are those of today's: 9 fixed the session alignment, 10 only
+    # added shape_pairs — the next-day statistics take both
+    NEXT_DAY_MIN_VERSION = 9
+
     @app.get("/api/history/next-day")
     def history_next_day(request: Request) -> dict:
         """隔天表現 of the N groups on every day stored under the given 條件 (both methods, one entry per
@@ -765,11 +769,13 @@ def create_app(
         for method in ("known", "new"):
             groupings, _ = finder_groupings(p.groupings, days_all[-1]) if days_all else ({}, [])
             key = p.key() + "|" + ",".join(sorted(groupings))
-            for d, res in store.finder_days(method, key):
+            for d, res in store.finder_days(method, key, any_version=True, min_version=NEXT_DAY_MIN_VERSION):
                 per_day.setdefault(d, set()).update(tuple(sorted(m["code"] for m in g["members"])) for g in res.get("groups", []))
         results = sorted((d, [list(g) for g in gs]) for d, gs in per_day.items())
         codes = sorted({c for _, gs in results for g in gs for c in g})
-        ratios = daytrade_ratios(store, [d for d, _ in results], codes)
+        # each day's 當沖比 and the DAYTRADE_BASE_DAYS before it (平常, for 突然湧入 against 平常就這樣)
+        need = sorted({x for d, _ in results for x in days_all[max(0, days_all.index(d) - DAYTRADE_BASE_DAYS):days_all.index(d) + 1]}) if results else []
+        ratios = daytrade_ratios(store, need, codes)
         index = store.index_rows()
 
         def index_pct(d: date) -> float | None:
@@ -785,7 +791,15 @@ def create_app(
                 rows_cache[d] = {r["code"]: r for r in store.day_rows(d)}
             return rows_cache[d]
 
-        stats = next_day_stats(results, lambda d, cs: daytrade_group({c: ratios.get(c, {}).get(d) for c in cs})["hot"], rows_on, nxt.get, index_pct)
+        def class_of(d: date, cs: list[str]) -> str:
+            before = days_all[max(0, days_all.index(d) - DAYTRADE_BASE_DAYS):days_all.index(d)]
+            g = daytrade_group({c: ratios.get(c, {}).get(d) for c in cs}, {c: [v for x in before if (v := ratios.get(c, {}).get(x)) is not None] for c in cs})
+            return hot_class(g)
+
+        stats = next_day_stats(results, class_of, rows_on, nxt.get, index_pct)
+        # the 🔥 total as before, the two kinds beside it
+        hot = [stats[k] for k in ("surge", "habitual") if k in stats]
+        stats["hot"] = merge_next(hot) if hot else stats.get("hot")
         return {"days": len(results), "first": results[0][0].isoformat() if results else None, "last": results[-1][0].isoformat() if results else None, "stats": stats}
 
     @app.get("/api/history/index-race")

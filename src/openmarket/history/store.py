@@ -883,13 +883,34 @@ class HistoryStore:
             ).fetchall()
         return [(r["date"], r["method"], json.loads(r["result"])) for r in rows]
 
-    def finder_days(self, method: str, params: str) -> list[tuple[date, dict]]:
-        """Every day with an N result stored under exactly these thresholds, oldest first."""
+    def finder_days(self, method: str, params: str, any_version: bool = False, min_version: int = 0) -> list[tuple[date, dict]]:
+        """Every day with an N result stored under these thresholds, oldest first. any_version: also under
+        an earlier FINDER_VERSION with the same thresholds (the newest one a day) — for statistics over the
+        groups, which a version bump that only adds fields leaves as they were; min_version: no older one."""
         import json
 
+        if not any_version:
+            with self._conn() as c:
+                rows = c.execute("SELECT date, result FROM finder_result WHERE method = ? AND params = ? ORDER BY date", (method, params)).fetchall()
+            return [(date.fromisoformat(r["date"]), json.loads(r["result"])) for r in rows]
+
+        def strip(key: str) -> tuple[str, int]:
+            head, _, tail = key.partition("|")
+            try:
+                fields = json.loads(head)
+            except ValueError:
+                return key, -1
+            v = fields.pop("v", 0)
+            return json.dumps(fields, sort_keys=True, ensure_ascii=False) + "|" + tail, v
+
+        want, _ = strip(params)
+        best: dict[str, tuple[int, str]] = {}
         with self._conn() as c:
-            rows = c.execute("SELECT date, result FROM finder_result WHERE method = ? AND params = ? ORDER BY date", (method, params)).fetchall()
-        return [(date.fromisoformat(r["date"]), json.loads(r["result"])) for r in rows]
+            for r in c.execute("SELECT date, params, result FROM finder_result WHERE method = ?", (method,)):
+                k, v = strip(r["params"])
+                if k == want and v >= min_version and v >= best.get(r["date"], (-1, ""))[0]:
+                    best[r["date"]] = (v, r["result"])
+        return [(date.fromisoformat(d), json.loads(res)) for d, (_, res) in sorted(best.items())]
 
     def finder(self, day: date, method: str, params: str) -> dict | None:
         import json

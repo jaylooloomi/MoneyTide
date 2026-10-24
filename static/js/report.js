@@ -169,7 +169,7 @@ export function hotHtml(list, stats, wide = null) {
   const w = wide?.stats;
   const line = (label, x) => `${label} ${x.groups} 組／${x.stocks} 檔次：開盤 ${p(x.gap)}、收盤 ${p(x.close)}（扣大盤 ${p(x.excess)}）、開高走低 <b>${x.fade == null ? '—' : `${x.fade.toFixed(0)}%`}</b>、收黑 ${x.down == null ? '—' : `${x.down.toFixed(0)}%`}`;
   const all = w && (w.hot.stocks || w.rest.stocks)
-    ? `<p class="rp-line">所有已存的日子（${wide.days} 天，${escapeHtml(wide.first || '')}～${escapeHtml(wide.last || '')}）隔天：<br>${line('🔥', w.hot)}<br>${line('其他', w.rest)}</p>`
+    ? `<p class="rp-line">所有已存的日子（${wide.days} 天，${escapeHtml(wide.first || '')}～${escapeHtml(wide.last || '')}）隔天：<br>${line('🔥', w.hot)}${w.surge ? `<br>　${line('其中突然湧入（當沖比 ≥ 平常 2 倍）', w.surge)}` : ''}${w.habitual ? `<br>　${line('其中平常就這樣', w.habitual)}` : ''}<br>${line('其他', w.rest)}</p>`
     : '';
   return `<div class="rp-hot" title="有當沖資料的成員平均當沖比 ≥ 50%：隔日沖短線熱錢，隔天常開高走低；這是風險警示，不算在資金證據裡">
     <h3 class="rp-h">🔥 隔日沖警示 <small class="muted">${hot.length} 組；隔天常開高走低</small></h3>

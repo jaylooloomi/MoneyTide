@@ -419,12 +419,25 @@ def daytrade_group(vals: Mapping[str, float | None], before: Mapping[str, list[f
     return {"by_code": known, "avg": avg, "hot": avg is not None and avg >= DAYTRADE_HOT, "base": base}
 
 
-def next_day_stats(results: list[tuple[date, list[list[str]]]], hot_of, rows_on, next_of, index_pct) -> dict:
-    """隔天表現 of N's groups, 🔥 apart from the rest: results [(day, [member codes per group])], hot_of(day,
-    codes) → 🔥?, rows_on(day) → {code: row}, next_of(day) → the next trading day or None, index_pct(day)
-    → 大盤 % or None. Per class: {groups, stocks, days, gap, close, excess, intraday, fade, down} — means in %,
-    fade = the share closing below the open, down = the share closing below 昨收; excess = close − 大盤."""
-    acc = {k: {"groups": 0, "days": set(), "gap": [], "close": [], "excess": [], "intraday": []} for k in ("hot", "rest")}
+SURGE_X = 2.0  # 🔥 突然湧入: the members' 當沖比 at least this many times their usual (the 20 days before)
+
+
+def hot_class(group: Mapping) -> str:
+    """A group's 當沖 as a class: 'rest' (not 🔥), 'surge' (🔥 and the members at SURGE_X × their usual or
+    more, on average — hot money rushing in) or 'habitual' (🔥 but day-traded this much anyway)."""
+    if not group["hot"]:
+        return "rest"
+    xs = [v / group["base"][c] for c, v in group["by_code"].items() if group["base"].get(c)]
+    return "surge" if xs and sum(xs) / len(xs) >= SURGE_X else "habitual"
+
+
+def next_day_stats(results: list[tuple[date, list[list[str]]]], class_of, rows_on, next_of, index_pct) -> dict:
+    """隔天表現 of N's groups by class: results [(day, [member codes per group])], class_of(day, codes) →
+    'hot'／'rest' or any other class name (True/False read as hot/rest), rows_on(day) → {code: row},
+    next_of(day) → the next trading day or None, index_pct(day) → 大盤 % or None. Per class: {groups,
+    stocks, days, gap, close, excess, intraday, fade, down} — means in %, fade = the share closing below
+    the open, down = the share closing below 昨收; excess = close − 大盤."""
+    acc: dict[str, dict] = {k: {"groups": 0, "days": set(), "gap": [], "close": [], "excess": [], "intraday": []} for k in ("hot", "rest")}
     for day, groups in results:
         nd = next_of(day)
         if nd is None:
@@ -432,7 +445,9 @@ def next_day_stats(results: list[tuple[date, list[list[str]]]], hot_of, rows_on,
         nxt = rows_on(nd)
         idx = index_pct(nd)
         for codes in groups:
-            a = acc["hot" if hot_of(day, codes) else "rest"]
+            k = class_of(day, codes)
+            k = "hot" if k is True else "rest" if k is False else k
+            a = acc.setdefault(k, {"groups": 0, "days": set(), "gap": [], "close": [], "excess": [], "intraday": []})
             got = False
             for c in codes:
                 r = nxt.get(c)
@@ -457,6 +472,19 @@ def next_day_stats(results: list[tuple[date, list[list[str]]]], hot_of, rows_on,
                   "fade": round(sum(1 for x in a["intraday"] if x < 0) / len(a["intraday"]) * 100, 1) if a["intraday"] else None,
                   "down": round(sum(1 for x in a["close"] if x < 0) / len(a["close"]) * 100, 1) if a["close"] else None}
     return out
+
+
+def merge_next(parts: list[dict]) -> dict:
+    """Two classes of next_day_stats as one (stock-weighted means; days as the larger of the two)."""
+    n = sum(p["stocks"] for p in parts)
+
+    def w(k):
+        xs = [(p[k], p["stocks"]) for p in parts if p.get(k) is not None and p["stocks"]]
+        tot = sum(m for _, m in xs)
+        return round(sum(v * m for v, m in xs) / tot, 2) if tot else None
+
+    return {"groups": sum(p["groups"] for p in parts), "days": max(p["days"] for p in parts), "stocks": n,
+            **{k: w(k) for k in ("gap", "close", "excess", "intraday")}, "fade": w("fade"), "down": w("down")}
 
 
 def daytrade_ratios(store: HistoryStore, days: list[date], codes: list[str]) -> dict[str, dict[date, float]]:
