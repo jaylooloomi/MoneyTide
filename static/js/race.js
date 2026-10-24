@@ -497,9 +497,13 @@ export function mountRace(box, d, { onStock } = {}) {
   // 5 日 K of the picked stocks, between the timeline and the intraday chart
   const midBox = box.querySelector('.race-mid');
   midBox.title = '選中股票的最近 5 個交易日＋之後 2 天：K 線、漲跌、🔒 漲停、量（橘＝量比 ≥ 2）、法人張數；點一根 K 看那天的分時走勢';
+  let k5Order = ''; // the picked codes in rank order, last drawn
   function drawK5() {
     const many = state.picked.length > 1;
-    midBox.innerHTML = `<div class="k5-title">5 日 K</div>${state.picked
+    // in the timeline's rank order at the playhead, not the order they were picked
+    const ordered = raceOrder(state.picked, frames, state.m);
+    k5Order = ordered.join(',');
+    midBox.innerHTML = `<div class="k5-title">5 日 K</div>${ordered
       .map((c) => k5CardHtml(byCode.get(c)?.name || c, c, many ? colorOf(c) : '#e6e6e6', d.daily_k?.[c] || [], k5Day))
       .join('')}`;
   }
@@ -538,6 +542,7 @@ export function mountRace(box, d, { onStock } = {}) {
     head.style.left = `${pctX(m)}%`;
     chart.sync(m);
     if (state.picked.length > 1) drawPairs(); // 最高點／鎖漲停／強弱 follow the playhead
+    if (state.picked.length > 1 && raceOrder(state.picked, frames, m).join(',') !== k5Order) drawK5(); // the ranks moved
     for (const [el, f] of benchRows) paint(el, f, m);
     raceOrder(codes, frames, m).forEach((c, i) => {
       const el = rows.get(c);
