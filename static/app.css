@@ -463,8 +463,9 @@ table.link-heat td.self { background: #3a3e48; }
 .fd-ev { font-size: 12px; margin: 2px 0 4px; }
 .fd-ev.strong { color: #ffd400; }
 .fd-ev span { font-size: 11px; }
-.fd-filter-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.fd-sort { width: auto; white-space: nowrap; }
+.fd-filter-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
+.fd-filter-row .fd-filter { margin-bottom: 0; } /* the row keeps the gap, so the chips and 依證據排序 share one centre line */
+.fd-sort { width: auto; white-space: nowrap; margin-left: auto; } /* at the right end of the chips' row */
 .fd-sort.on { background: #2f5fd0; color: #fff; }
 .fd-dt { font-size: 12px; margin-bottom: 4px; color: #ff9f43; }
 .card-br { font-size: 12px; margin: 6px 0; }
