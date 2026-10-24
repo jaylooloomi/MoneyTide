@@ -808,6 +808,18 @@ class HistoryStore:
                 out[date.fromisoformat(d)][code] = sh
         return out
 
+    def volumes(self, days: list[date], codes: Iterable[str]) -> dict[date, dict[str, float]]:
+        """{day: {code: 成交股數}} for the given stocks only (rows() loads every column of every stock)."""
+        codes = sorted(set(codes))
+        if not days or not codes:
+            return {}
+        out: dict[date, dict[str, float]] = {d: {} for d in days}
+        sql = f"SELECT date, code, volume_shares FROM daily_quote WHERE date IN ({', '.join('?' for _ in days)}) AND code IN ({', '.join('?' for _ in codes)})"
+        with self._conn() as c:
+            for d, code, v in c.execute(sql, [d.isoformat() for d in days] + codes):
+                out[date.fromisoformat(d)][code] = v
+        return out
+
     # ---- company relations (轉投資 / 法人董監, relations.py) and official full names -----------------
 
     def save_relations(self, code: str, invest: list | None, board: list | None, fetched_at: datetime, error: str = "") -> None:

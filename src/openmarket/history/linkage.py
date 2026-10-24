@@ -462,10 +462,10 @@ def next_day_stats(results: list[tuple[date, list[list[str]]]], hot_of, rows_on,
 def daytrade_ratios(store: HistoryStore, days: list[date], codes: list[str]) -> dict[str, dict[date, float]]:
     """{code: {day: 當沖比 %}} (上市 and 上櫃 alike)."""
     dt = store.daytrade(days, codes)
-    rows = store.rows(days)
+    vols = store.volumes(days, codes)  # these stocks' volume only: a 20-day window of every row was the slow part
     out: dict[str, dict[date, float]] = {c: {} for c in codes}
     for d in days:
-        vol = {r["code"]: r.get("volume_shares") for r in rows.get(d, [])}
+        vol = vols.get(d, {})
         for c, sh in dt.get(d, {}).items():
             if c in out and vol.get(c):
                 out[c][d] = round(sh / vol[c] * 100, 1)
