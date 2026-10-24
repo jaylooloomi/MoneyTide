@@ -125,8 +125,8 @@ test('hotHtml: the stored days’ next day, 🔥 against the rest', () => {
     rest: { groups: 80, stocks: 170, gap: 0.6, close: 0.3, excess: 0.1, intraday: -0.2, fade: 48, down: 45 } } };
   const html = hotHtml([], null, wide);
   assert.match(html, /所有已存的日子（12 天，2026-07-29～2026-10-22）/);
-  assert.match(html, /🔥 30 組／70 檔次：開盤 <span class="up">\+2\.10%<\/span>、收盤 <span class="down">-0\.50%<\/span>（扣大盤 <span class="down">-0\.80%<\/span>）、開高走低 <b>64%<\/b>、收黑 55%/);
-  assert.match(html, /其他 80 組／170 檔次/);
+  assert.match(html, /<tr><td class="l">🔥 全部<\/td><td>30／70<\/td><td><span class="up">\+2\.10%<\/span><\/td><td><span class="down">-0\.50%<\/span><\/td><td><span class="down">-0\.80%<\/span><\/td><td>64%<\/td><td>55%<\/td><\/tr>/);
+  assert.match(html, /其他（非 🔥）<\/td><td>80／170/);
 });
 
 test('todayMove: yesterday’s groups today, less 大盤; nothing for a group new today', () => {
@@ -158,15 +158,15 @@ test('reportText lists 高點錯開但走勢一樣 too', () => {
 test('hotHtml splits 🔥 into 突然湧入 and 平常就這樣 when the server does', () => {
   const x = (n) => ({ groups: n, stocks: n * 2, gap: 1, close: -1, excess: -1, intraday: -2, fade: 60, down: 50 });
   const html = hotHtml([], null, { days: 10, first: 'a', last: 'b', stats: { hot: x(5), surge: x(2), habitual: x(3), rest: x(9) } });
-  assert.match(html, /其中突然湧入（當沖比 ≥ 平常 2 倍） 2 組／4 檔次/);
-  assert.match(html, /其中平常就這樣 3 組／6 檔次/);
+  assert.match(html, /　突然湧入（≥ 平常 2 倍）<\/td><td>2／4/);
+  assert.match(html, /　平常就這樣<\/td><td>3／6/);
 });
 
 test('hotHtml shows the next day by evidence count when the server sends it', () => {
   const x = (n) => ({ groups: n, stocks: n, gap: 1, close: 0.5, excess: -0.1, intraday: -0.5, fade: 55, down: 50 });
   const html = hotHtml([], null, { days: 60, first: 'a', last: 'b', stats: { hot: x(3), rest: x(5), evidence: { ev4: x(2), ev0: x(7) } } });
-  assert.match(html, /依證據數分組（所有已存的日子）隔天：<br>✓ ≥ 4 項 2 組／2 檔次/);
-  assert.match(html, /✓ ≤ 1 項 7 組/);
+  assert.match(html, /證據 ✓ ≥ 4 項<\/td><td>2／2/);
+  assert.match(html, /證據 ✓ ≤ 1 項<\/td><td>7／7/);
   assert.doesNotMatch(html, /✓ 2～3 項/); // none in that class
 });
 

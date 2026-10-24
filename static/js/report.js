@@ -176,21 +176,28 @@ export function hotHtml(list, stats, wide = null) {
     : '<p class="rp-line muted">前幾天沒有 🔥 組合可比對隔天表現。</p>';
   // every stored day under the same 條件: 🔥 against the rest, the bigger sample
   const w = wide?.stats;
-  const line = (label, x) => `${label} ${x.groups} 組／${x.stocks} 檔次：開盤 ${p(x.gap)}、收盤 ${p(x.close)}（扣大盤 ${p(x.excess)}）、開高走低 <b>${x.fade == null ? '—' : `${x.fade.toFixed(0)}%`}</b>、收黑 ${x.down == null ? '—' : `${x.down.toFixed(0)}%`}`;
-  const all = w && (w.hot.stocks || w.rest.stocks)
-    ? `<p class="rp-line">所有已存的日子（${wide.days} 天，${escapeHtml(wide.first || '')}～${escapeHtml(wide.last || '')}）隔天：<br>${line('🔥', w.hot)}${w.surge ? `<br>　${line('其中突然湧入（當沖比 ≥ 平常 2 倍）', w.surge)}` : ''}${w.habitual ? `<br>　${line('其中平常就這樣', w.habitual)}` : ''}<br>${line('其他', w.rest)}</p>`
-    : '';
-  // the same next day by evidence (does more evidence mean more follow-through?)
-  const ev = w?.evidence;
-  const evLine = ev && Object.keys(ev).length
-    ? `<p class="rp-line" title="伺服器端 5 項證據（扣指數、隨機、同爆量、同分鐘、同漲跌）的 ✓ 數；沒資料的項目不算 ✓。同爆量、同分鐘要 1 分 K（約 30 天內才有），所以 ✓ ≥ 4 只會出現在最近的日子。研究（study 分支 exp5）：只看最近 30 天，仍是證據越少、後續越強">依證據數分組（所有已存的日子）隔天：${[['ev4', '✓ ≥ 4 項'], ['ev2', '✓ 2～3 項'], ['ev0', '✓ ≤ 1 項']]
-      .filter(([k]) => ev[k])
-      .map(([k, label]) => `<br>${line(label, ev[k])}`)
-      .join('')}</p>`
+  // every stored day under the same 條件, one table: 🔥 and its two kinds, the rest, and by evidence count
+  const ev = w?.evidence || {};
+  const tableRows = [
+    ['🔥 全部', w?.hot],
+    ['　突然湧入（≥ 平常 2 倍）', w?.surge],
+    ['　平常就這樣', w?.habitual],
+    ['其他（非 🔥）', w?.rest],
+    ['證據 ✓ ≥ 4 項', ev.ev4],
+    ['證據 ✓ 2～3 項', ev.ev2],
+    ['證據 ✓ ≤ 1 項', ev.ev0],
+  ].filter(([, x]) => x && x.stocks);
+  const pctCell = (v) => `<td>${p(v)}</td>`;
+  const all = tableRows.length
+    ? `<p class="rp-line muted">所有已存的日子（${wide.days} 天，${escapeHtml(wide.first || '')}～${escapeHtml(wide.last || '')}）成員的隔天表現：</p>
+      <table class="grid rp-next" title="證據數＝伺服器端 5 項（扣指數、隨機、同爆量、同分鐘、同漲跌）的 ✓ 數，沒資料不算 ✓；同爆量、同分鐘要 1 分 K（約 30 天內），所以 ✓ ≥ 4 只會出現在最近的日子。研究（study 分支 exp5）：證據越少、後續越強">
+      <thead><tr><th class="l">組合</th><th>組／檔次</th><th>開盤</th><th>收盤</th><th>扣大盤</th><th>開高走低</th><th>收黑</th></tr></thead><tbody>${tableRows
+        .map(([label, x]) => `<tr><td class="l">${escapeHtml(label)}</td><td>${x.groups}／${x.stocks}</td>${pctCell(x.gap)}${pctCell(x.close)}${pctCell(x.excess)}<td>${x.fade == null ? '—' : `${x.fade.toFixed(0)}%`}</td><td>${x.down == null ? '—' : `${x.down.toFixed(0)}%`}</td></tr>`)
+        .join('')}</tbody></table>`
     : '';
   return `<div class="rp-hot" title="有當沖資料的成員平均當沖比 ≥ 50%：隔日沖短線熱錢，隔天常開高走低；這是風險警示，不算在資金證據裡">
     <h3 class="rp-h">🔥 隔日沖警示 <small class="muted">${hot.length} 組；隔天常開高走低</small></h3>
-    ${hot.length ? `<ul class="rp-hot-list">${rows}</ul>` : '<p class="rp-line muted">今天沒有 🔥 組合。</p>'}${s}${all}${evLine}</div>`;
+    ${hot.length ? `<ul class="rp-hot-list">${rows}</ul>` : '<p class="rp-line muted">今天沒有 🔥 組合。</p>'}${s}${all}</div>`;
 }
 
 /** 🔥 突然湧入: a 🔥 group whose members day-trade at 2× their usual or more (on average). */

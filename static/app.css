@@ -500,6 +500,8 @@ table.link-heat td.self { background: #3a3e48; }
 .rp-top { border: 1px solid #ffd40055; background: #ffd4000d; border-radius: 6px; padding: 6px 10px; margin-bottom: 10px; font-size: 13px; }
 .rp-top ul { margin: 2px 0 0; padding-left: 18px; line-height: 1.7; }
 .rp-shape { border: 1px solid #5b8cff55; background: #5b8cff0d; border-radius: 6px; padding: 6px 10px; margin-bottom: 10px; }
+.rp-next { margin: 4px 0 2px; }
+.rp-next td, .rp-next th { padding: 3px 6px; }
 .rp-hot-list { margin: 2px 0 4px; padding-left: 18px; font-size: 13px; line-height: 1.6; }
 .rp-track td.rp-dump { font-weight: 600; }
 .rp-progress { margin: 0 0 6px; color: #ffd400; }
