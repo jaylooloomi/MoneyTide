@@ -1,5 +1,6 @@
 | # | Candidate | Impact | Urgency | Effort | Blast | Score | Reason |
 |---|---|---|---|---|---|---|---|
-| AA1 | 每日市場廣度月曆（一年每交易日一格，點擊跳日） | 6 | 4 | 5 | 2 | 2.4 | 回溯「哪天全面大漲」是原始需求核心，但現有 ◀▶ 與 T1 廣度列已部分覆蓋；需新 API、SQL 彙總、新區塊，改動偏大但多為新增、不改既有行為 |
+| I1 | N 卡片標「近 5 天出現 N 次」 | 7 | 5 | 4 | 3 | 2.9 | Requirement asks whether co-funding is persistent; rolling-correlation source supports cross-period tracking; reads only already-stored results, no new deps or migrations. |
+| I2 | K 動畫標出 N 找到的成員 | 6 | 4 | 3 | 4 | 2.0 | Requirement asks which members the same money moves; flagging outliers in the view is supported by Futu/Acuity, but K has been heavily changed recently, so blast is higher. |
 
-TOP: AA1 (2.4)
+TOP: I1 (2.9)

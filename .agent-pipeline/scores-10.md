@@ -1,6 +1,5 @@
 | # | Candidate | Impact | Urgency | Effort | Blast | Score | Reason |
 |---|---|---|---|---|---|---|---|
-| Z1 | 歷史熱力圖顏色期間：1 日／5 日／20 日 | 5 | 4 | 3 | 3 | 2.2 | Requirement is 回溯強勢族群／集體上漲, and multi-day color is the gap; Finviz period selection cited; new column plus A toggle, not rejected or dependency. |
-| Z2 | 即時個股卡片顯示近 20 日走勢小圖 | 3 | 2 | 2 | 2 | 1.5 | Cited sources (TradingView/Finviz click-through) do not support an inline 20-day chart; live card would show historical data; reuses existing API, small blast. |
+| H1 | B 族群排行標出「N 今天找到共同注資」的族群 | 6 | 5 | 3 | 3 | 3.3 | Requirement is multi-dimensional money flow and N's conclusions are otherwise only visible in N; cited Futu watchlist unusual-activity flags support it. Impact capped because it only covers 找法1 and stored days, not 找法2. |
 
-TOP: Z1 (2.2)
+TOP: H1 (3.3)

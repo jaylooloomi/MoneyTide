@@ -22,7 +22,7 @@ import { mountCountyMap } from './countymap.js';
 import { mountWordCloud } from './wordcloud.js';
 import { mountHistoryAiPanel } from './ainews.js';
 import { mountNewsPanel } from './newsthemes.js';
-import { mountFinderPanel } from './finder.js';
+import { digestText, finderMarkIndex, finderMarkTitle, mountFinderPanel } from './finder.js';
 import { mountLinkagePanel } from './linkage.js';
 
 const PREFS_KEY = 'openmarket.history.v1';
@@ -56,6 +56,7 @@ let aiPanel = null; // I: AI news explanations (ainews.js)
 let newsPanel = null; // J: news-driven hot groups (newsthemes.js)
 let linkPanel = null; // K: group linkage (linkage.js)
 let finderPanel = null; // N: 資金連動搜尋 (finder.js)
+const finderMarks = { date: null, byKey: new Map(), ticket: 0 }; // B's 🔗: N's stored 找法1 result for the day
 const countyPanel = { ctl: null, words: null, view: 'map', ticket: 0, cache: new Map() }; // H: county money map (countymap.js) or group word cloud (wordcloud.js)
 
 function loadPrefs() {
@@ -238,6 +239,8 @@ async function loadGroups_() {
     st.groups = data.groups.map((g) => ({ ...g, leader_pct: g.leader?.change_pct ?? null })); // bonus-09
     loadPeriods({ cachedOnly: true }); // bonus-10: fetch is deferred until A/B/D have loaded
     loadFlows(); // money flow columns
+    loadFinderMarks(); // 🔗 from N's stored result (never starts a search)
+    loadFinderDigest(); // 💡 toolbar line from the same stored results
   } catch {
     if (t !== tickets.groups) return;
     st.groups = [];
@@ -257,7 +260,7 @@ function renderGroups() {
   table.tBodies[0].innerHTML = sortRows(filterGroupRows(st.groups), st.groupSort.key, st.groupSort.dir) // bonus-20
     .map(
       (g) => `<tr data-group="${escapeHtml(g.name)}"${g.name === st.zoom ? ' class="hl"' : ''}>
-        <td class="l"><span class="clip" title="${escapeHtml(g.name)}">${g.z20 >= IGNITE_Z ? '<span title="成交比重暴增（Z ≥ 2）">🔥</span>' : ''}${escapeHtml(g.name)}</span></td>
+        <td class="l"><span class="clip" title="${escapeHtml(g.name)}">${g.z20 >= IGNITE_Z ? '<span title="成交比重暴增（Z ≥ 2）">🔥</span>' : ''}${finderMark(g.name)}${escapeHtml(g.name)}</span></td>
         ${rankCell(g)}
         <td class="muted">${g.count}</td>
         ${pct(g.avg_pct, 3)}
@@ -279,6 +282,64 @@ function renderGroups() {
 function ampCell(v) {
   if (v === null || v === undefined) return '<td class="muted">—</td>';
   return `<td style="background:rgba(255,179,0,${Math.min(v / 10, 1) * 0.55})">${v.toFixed(2)}%</td>`;
+}
+
+// ---- B 🔗: groups where N (找法1, default thresholds) found stocks one pool of money moved together ----
+function finderMark(name) {
+  const found = finderMarks.date === st.date ? finderMarks.byKey.get(`${GROUPING_LABEL[st.grouping]}|${name}`) : null;
+  return found ? `<span class="fd-mark" title="${escapeHtml(finderMarkTitle(found))}">🔗</span>` : '';
+}
+
+async function loadFinderMarks() {
+  const t = ++finderMarks.ticket;
+  const date = st.date;
+  try {
+    const data = await getJson(`/api/history/finder?date=${date}&method=known&stored_only=1`);
+    if (t !== finderMarks.ticket) return;
+    finderMarks.date = date;
+    finderMarks.byKey = finderMarkIndex(data);
+    renderGroups();
+  } catch {
+    /* no marks */
+  }
+}
+
+// ---- 💡 toolbar digest: what N found today (stored results only), click to jump to N ----------
+let digestTicket = 0;
+async function loadFinderDigest() {
+  let btn = $('#hFinderDigest');
+  if (!btn) {
+    btn = document.createElement('button');
+    btn.type = 'button';
+    btn.id = 'hFinderDigest';
+    btn.className = 'icon wide fd-digest';
+    btn.hidden = true;
+    btn.title = 'N · 資金連動搜尋今天的結果（🔁＝前幾天也出現過的組合）；點一下捲到 N';
+    btn.addEventListener('click', () => {
+      // the history view is the scroller; A/B may be sticky on top of it (wide screens), so land below them
+      const view = $('#historyView');
+      const target = $('#hFinderPanel');
+      if (!view || !target) return;
+      const sticky = [...view.querySelectorAll('.hA, .hB')].filter((el) => getComputedStyle(el).position === 'sticky');
+      const covered = Math.max(0, ...sticky.map((el) => el.getBoundingClientRect().bottom - view.getBoundingClientRect().top));
+      const top = view.scrollTop + target.getBoundingClientRect().top - view.getBoundingClientRect().top - covered - 8;
+      view.scrollTo({ top, behavior: 'smooth' });
+    });
+    $('#hStatus').before(btn);
+  }
+  const t = ++digestTicket;
+  const date = st.date;
+  btn.hidden = true; // never leave the previous day's digest up while this one loads (or fails)
+  try {
+    const q = (m) => getJson(`/api/history/finder?date=${date}&method=${m}&stored_only=1`).catch(() => null);
+    const [known, fresh] = await Promise.all([q('known'), q('new')]);
+    if (t !== digestTicket || date !== st.date) return;
+    const text = digestText(known, fresh);
+    btn.textContent = text;
+    btn.hidden = !text;
+  } catch {
+    btn.hidden = true;
+  }
 }
 
 // ---- C: rotation ------------------------------------------------------------
@@ -308,7 +369,51 @@ const BENCH_HINT = {
   share_z: '占上市櫃總成交值比重的 Z 值',
 };
 
-async function loadRotation() {
+// C is below the fold and its first computation after a restart is the heaviest on the page (94 s
+// once, slowing A/B/K/N meanwhile): ask for it only when C is near the screen; until then a request
+// is just remembered and runs as soon as C scrolls within C_NEAR px. At start-up the panels above C
+// are still placeholders, so the first decision waits C_SETTLE_MS.
+const C_NEAR = 300;
+const C_SETTLE_MS = 3000; // K / N / J fill in during the first seconds and push C down
+const rotationLazy = { pending: false, watching: false, ready: false }; // ready: the panels above C are mounted
+
+function rotationNear() {
+  const el = document.querySelector('#historyView .hC');
+  if (!el || el.offsetParent === null) return false;
+  const r = el.getBoundingClientRect();
+  return r.top < innerHeight + C_NEAR && r.bottom > -C_NEAR;
+}
+
+function loadRotation() {
+  if (!rotationLazy.ready) {
+    // start-up: K/N/J are not mounted yet, so C looks near the top; decide once they are
+    rotationLazy.pending = true;
+    return Promise.resolve();
+  }
+  if (rotationNear()) {
+    rotationLazy.pending = false;
+    return loadRotationNow();
+  }
+  rotationLazy.pending = true;
+  // a request still in flight is for the old settings: drop it (and its dimmed 載入中 state)
+  tickets.rotation += 1;
+  document.querySelector('#historyView .hC')?.classList.remove('loading');
+  if (!rotationLazy.watching) {
+    rotationLazy.watching = true;
+    const wake = () => {
+      if (rotationLazy.pending && rotationNear()) {
+        rotationLazy.pending = false;
+        loadRotationNow();
+      }
+    };
+    const el = document.querySelector('#historyView .hC');
+    if (el) new IntersectionObserver(wake, { rootMargin: `${C_NEAR}px` }).observe(el);
+    $('#historyView')?.addEventListener('scroll', wake, { passive: true }); // the observer can lag in background tabs
+  }
+  return Promise.resolve();
+}
+
+async function loadRotationNow() {
   const table = $('#hRotation');
   let data;
   const t = ++tickets.rotation;
@@ -599,7 +704,6 @@ export async function showHistory() {
     setupColResizer(); // and the A/B width ratio
     await loadDays();
     await applyHashDate(); // bonus-12
-    loadRotation(); // C can be slow on a cold start: the panels below must not wait for it
     loadIndex(); // bonus-04
     loadCalendar(); // bonus-14 (creates F synchronously, so G lands after it)
     indexPanel = mountIndexPanel($('#historyView'), (date) => {
@@ -615,8 +719,20 @@ export async function showHistory() {
     newsPanel = mountNewsPanel($('#historyView'), { getDate: () => st.date, onPick: pickNewsTheme, onStock: openHistCard });
     newsPanel.load();
     linkPanel = mountLinkagePanel($('#historyView'), { onStock: openHistCard });
-    finderPanel = mountFinderPanel($('#historyView'), { onStock: openHistCard });
+    finderPanel = mountFinderPanel($('#historyView'), {
+      onStock: openHistCard,
+      onResult: () => {
+        // N just stored a result: B's 🔗 and the 💡 digest may change
+        loadFinderMarks();
+        loadFinderDigest();
+      },
+    });
     finderPanel.refresh(st.date);
+    setTimeout(() => {
+      // once K/N/J have their content, C's real position decides (it loads when scrolled near)
+      rotationLazy.ready = true;
+      loadRotation();
+    }, C_SETTLE_MS);
     return;
   }
   chart.resize();
@@ -657,6 +773,15 @@ function closeHistCard() {
   }
 }
 
+/** The card's 三大法人 rows (張): 合計 with its streak, then 外資／投信／自營; '' before 法人 is out. */
+export function cardInstRows(i) {
+  if (!i) return '';
+  const n = (v) => `<span class="${v > 0 ? 'up' : v < 0 ? 'down' : ''}">${v > 0 ? '+' : v < 0 ? '−' : ''}${Math.abs(v).toLocaleString()}</span>`;
+  const streak = (s, who) => (s ? `<small class="${s.side === 'buy' ? 'up' : 'down'}">${who}連${s.side === 'buy' ? '買' : '賣'} ${s.days} 天</small>` : '');
+  return `<tr><td>法人</td><td>${n(i.total)} 張</td><td colspan="2">${[streak(i.streak, '法人'), streak(i.trust_streak, '投信')].filter(Boolean).join('　')}</td></tr>
+      <tr><td colspan="4" class="muted">外資 ${n(i.foreign)}／投信 ${n(i.trust)}／自營 ${n(i.dealer)} 張</td></tr>`;
+}
+
 async function openHistCard(code) {
   cardCode = code;
   let d;
@@ -676,6 +801,7 @@ async function openHistCard(code) {
       <tr><td>近 ${d.series.length} 日</td><td>${fmtPct(d.period_pct)}</td><td>成交值</td><td>${fmtTurnover(d.turnover_100m)}</td></tr>
       <tr><td>最高</td><td>${fmtPrice(d.high)}</td><td>最低</td><td>${fmtPrice(d.low)}</td></tr>
       <tr><td>成交量</td><td>${fmtNum(d.volume_lots, 0)} 張</td><td>市值</td><td>${fmtCap(d.market_cap)}</td></tr>
+      ${cardInstRows(d.inst)}
     </table>
     <div class="memb" data-memb="${escapeHtml(d.code)}"></div>
     <div class="btns">
@@ -1322,7 +1448,7 @@ function mountCountyPanel() {
       <span id="hMapCtl"></span><span id="hWordsCtl" hidden></span><span class="muted" id="hMapNote" style="margin-left:auto"></span><span class="muted" id="hWordsNote" style="margin-left:auto" hidden></span></div>
     <div id="hMap" style="height:620px"></div><div id="hWords" style="height:620px" hidden></div>`;
   $('#historyView').appendChild(sec);
-  countyPanel.ctl = mountCountyMap($('#hMap'), { controls: $('#hMapCtl'), note: $('#hMapNote'), prefKey: 'openmarket.history.mapMetric' });
+  countyPanel.ctl = mountCountyMap($('#hMap'), { controls: $('#hMapCtl'), note: $('#hMapNote'), prefKey: 'openmarket.history.mapMetric', onStock: openHistCard });
   countyPanel.words = mountWordCloud($('#hWords'), {
     controls: $('#hWordsCtl'),
     note: $('#hWordsNote'),

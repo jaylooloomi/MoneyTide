@@ -1,5 +1,5 @@
 | # | Candidate | Impact | Urgency | Effort | Blast | Score | Reason |
 |---|---|---|---|---|---|---|---|
-| AD1 | 即時熱力圖的族群分類切換（官方／自訂／概念股） | 7 | 5 | 3 | 3 | 3.9 | Requirement asks for custom and concept groups and a live heatmap as the main screen; live view still shows only official industry (cited: Finviz Themes, TradingView heatmap; sources are generic index pages). |
+| J6 | 兩種找法都找到同一組合 → 雙重確認 | 3 | 2 | 3 | 2 | 1.0 | Cited source is multi-timeframe confluence, a weak analogy for two runs of the same funnel, and the candidate itself notes it may double-count one piece of evidence; 10/22 had zero identical groups, so the badge would almost never fire. |
 
-TOP: AD1 (3.9)
+TOP: none (all below 2)

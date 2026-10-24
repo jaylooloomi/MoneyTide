@@ -3,8 +3,9 @@
 // tunable here and kept in localStorage. A result card opens K's view for its members
 // (/api/history/linkage-codes). Pure HTML builders on top (node --test); panel wiring below.
 
+import { addToGroup, createGroup } from './groups.js';
 import { renderBody } from './linkage.js';
-import { colorFor, escapeHtml, fmtPct } from './transform.js';
+import { colorFor, escapeHtml, fmtPct, fmtTurnover, toCsv } from './transform.js';
 
 export const METHODS = { known: '找法1 · 已知分類', new: '找法2 · 排行候選' };
 const KIND_COLOR = { 已知族群: '#2c4a6b', 已知族群的延伸: '#6b5a1e', 跨族群新組合: '#b8301a' };
@@ -20,6 +21,7 @@ export const FIELDS = [
   ['new_daily_r', '日相關 ≥', 'num', 'new', '新組合的歷史短，用較短的窗口'],
   ['new_daily_window', '日相關天數', 'int', 'new', ''],
   ['pool_top', '各排行取前', 'int', 'new', '漲幅、週轉率、比重暴增各取前 N 名'],
+  ['new_min_volume_lots', '成交量 ≥（張）', 'int', 'new', '候選池只收當天成交量至少這麼多張的股票（1 張＝1,000 股）'],
   ['intraday_r', '分時相關 ≥', 'num', '', '最近幾個交易日 5 分 K 報酬；鎖漲停的平線不計'],
   ['intraday_sessions', '分時天數', 'int', '', ''],
   ['peak_gap', '高點差 ≤（分）', 'int', '', '日內最高點（09:00–13:00）的時間差'],
@@ -43,6 +45,49 @@ export function queryOf(method, params) {
 }
 
 const fmtR = (r) => (r === null || r === undefined ? '—' : r.toFixed(2));
+const NAME_MAX = 30; // groups.py MAX_NAME_LEN
+
+/**
+ * Default name when a found group is saved as a 自訂族群: "N1022 華經+驊宏資…" — the date and the
+ * members, cut to the server's 30-character limit, without the characters a group name may not hold.
+ */
+export function defaultGroupName(g, date) {
+  const md = String(date || '').slice(5).replace('-', '');
+  const names = g.members.map((m) => m.name.replace(/[*＊]/g, '')).join('+');
+  const raw = `N${md} ${names}`.replace(/[/\\<>"',]/g, '');
+  return raw.length > NAME_MAX ? `${raw.slice(0, NAME_MAX - 1)}…` : raw;
+}
+
+/** 三大法人 in 張 and ≈ 億元 (g.inst, attached when served); older results only have inst_net in shares. */
+export function instText(g) {
+  const sign = (v) => (v > 0 ? '+' : v < 0 ? '−' : '');
+  const lots = (n) => (Math.abs(n) >= 1e4 ? `${(Math.abs(n) / 1e4).toFixed(1)} 萬張` : `${Math.abs(n).toLocaleString()} 張`);
+  const i = g.inst;
+  if (i) {
+    const cls = i.lots > 0 ? 'up' : i.lots < 0 ? 'down' : '';
+    const who = `<span class="muted">（買超 ${i.buyers}／賣超 ${i.sellers} 檔）</span>`;
+    const amount = i.amount_100m == null ? '' : `（≈ ${sign(i.amount_100m)}${Math.abs(i.amount_100m).toFixed(1)} 億）`;
+    return `法人 <b class="${cls}">${sign(i.lots)}${lots(i.lots)}</b>${amount}${who}`;
+  }
+  return g.inst_net ? `法人 ${sign(g.inst_net)}${lots(Math.round(g.inst_net / 1000))}` : '';
+}
+
+/** 法人占成交: the 法人 net amount against the group's turnover — is it 法人 money that moves the group? */
+export function instShareText(g) {
+  const amt = g.inst?.amount_100m;
+  if (amt == null || !(g.turnover_100m > 0)) return '';
+  const pct = (Math.abs(amt) / g.turnover_100m) * 100;
+  return `<span title="法人淨${amt >= 0 ? '買' : '賣'}超金額 ÷ 組合成交值：越高越像法人在推，越低代表主要是法人以外的資金">法人占成交 <b>${pct < 0.1 ? '<0.1' : pct.toFixed(1)}%</b></span>`;
+}
+
+/** 外資／投信／自營 of the group in 張 (g.inst_split, attached when served). */
+export function instSplitText(g) {
+  const s = g.inst_split;
+  if (!s) return '';
+  const n = (v) => `${v > 0 ? '+' : v < 0 ? '−' : ''}${Math.abs(v).toLocaleString()}`;
+  const part = (label, v) => `${label} <b class="${v > 0 ? 'up' : v < 0 ? 'down' : ''}">${n(v)}</b>`;
+  return `<span class="muted" title="三大法人拆開看：投信常是主題／作帳佈局，外資偏權值與大盤，自營多短線避險">（${part('外資', s.foreign)}／${part('投信', s.trust)}／${part('自營', s.dealer)} 張）</span>`;
+}
 
 export function cardHtml(g, i) {
   const title =
@@ -56,26 +101,47 @@ export function cardHtml(g, i) {
     .map((m) => {
       const extra = [m.peak ? `高點 ${m.peak}` : '', m.locked_at ? `🔒${m.locked_at}` : '', m.start ? `起漲 ${m.start}` : ''].filter(Boolean).join('　');
       const pool = g.pool?.[m.code]?.length ? `（${g.pool[m.code].join('、')}）` : '';
-      return `<span class="fd-chip${outside.has(m.code) ? ' out' : ''}" style="background:${colorFor(m.change_pct, 7)}" title="${escapeHtml(m.code)} ${escapeHtml(m.name)}${pool}　${extra}${m.turnover_rate != null ? `　週轉率 ${m.turnover_rate.toFixed(1)}%` : ''}${outside.has(m.code) ? '　（不在最接近的分類裡）' : ''}">${escapeHtml(m.name)} <small>${fmtPct(m.change_pct)}</small>${m.locked_at ? ' 🔒' : ''}</span>`;
+      const themes = m.themes?.length ? `　📰 ${m.themes.join('、')}` : '';
+      return `<span class="fd-chip${outside.has(m.code) ? ' out' : ''}" style="background:${colorFor(m.change_pct, 7)}" title="${escapeHtml(m.code)} ${escapeHtml(m.name)}${pool}　${extra}${m.turnover_rate != null ? `　週轉率 ${m.turnover_rate.toFixed(1)}%` : ''}${m.inst_net != null ? `　法人 ${m.inst_net > 0 ? '+' : m.inst_net < 0 ? '−' : ''}${Math.abs(Math.round(m.inst_net / 1000)).toLocaleString()} 張` : ''}${escapeHtml(themes)}${outside.has(m.code) ? '　（不在最接近的分類裡）' : ''}">${escapeHtml(m.name)} <small>${fmtPct(m.change_pct)}</small>${m.locked_at ? ' 🔒' : ''}</span>`;
     })
     .join('');
+  const money = g.turnover_100m != null
+    ? `<div class="fd-money">💰 成交值 <b>${fmtTurnover(g.turnover_100m)}</b>${g.turnover_share != null ? `（占全市場 <b>${g.turnover_share.toFixed(2)}%</b>）` : ''}　平均漲幅 <b class="${g.avg_pct > 0 ? 'up' : g.avg_pct < 0 ? 'down' : ''}">${fmtPct(g.avg_pct)}</b></div>`
+    : '';
   const facts = [
     `日 R <b>${fmtR(g.daily_r)}</b>`,
     `分時 R <b>${fmtR(g.intraday_r)}</b>`,
     `高點差 <b>${g.peak_spread ?? '—'}</b> 分`,
     g.start_spread != null ? `起漲差 ${g.start_spread} 分` : '',
     g.together_bursts?.length ? `同時爆量 ${g.together_bursts.slice(0, 3).join('、')}` : '',
-    g.inst_net ? `法人 ${g.inst_net > 0 ? '+' : '−'}${Math.abs(g.inst_net) >= 1e8 ? `${(Math.abs(g.inst_net) / 1e8).toFixed(1)} 億` : `${Math.round(Math.abs(g.inst_net) / 1e4).toLocaleString()} 萬`}` : '',
     g.resolution === 5 ? '<span class="muted">5 分 K</span>' : '',
   ]
     .filter(Boolean)
     .join('　');
+  // 🏦 everything about 法人 on one line of its own (who is buying), under 💰 (how much money)
+  const instParts = [
+    instText(g),
+    instShareText(g),
+    instSplitText(g),
+    g.inst_streak ? `<b class="${g.inst_streak.side === 'buy' ? 'up' : 'down'}" title="組合合計三大法人買賣超，連續同方向的天數">法人連${g.inst_streak.side === 'buy' ? '買' : '賣'} ${g.inst_streak.days} 天</b>` : '',
+    g.trust_streak ? `<b class="${g.trust_streak.side === 'buy' ? 'up' : 'down'}" title="只看投信：組合合計投信買賣超連續同方向的天數（投信連買常是主題／作帳佈局）">投信連${g.trust_streak.side === 'buy' ? '買' : '賣'} ${g.trust_streak.days} 天</b>` : '',
+  ].filter(Boolean);
+  const inst = instParts.length ? `<div class="fd-inst">🏦 ${instParts.join('　')}</div>` : '';
   const news = g.news?.length ? `<div class="fd-news">📰 ${g.news.map((t) => escapeHtml(t)).join('<br>📰 ')}</div>` : '';
+  const themes = g.themes?.length
+    ? `<div class="fd-themes" title="近 3 個新聞日提到這幾檔的題材關鍵字（括號＝提到幾檔）">📰 題材：${g.themes.map((t) => `${escapeHtml(t.term)}${g.members.length > 1 ? `（${t.count}）` : ''}`).join('、')}</div>`
+    : '';
+  const seen = g.seen_days?.length
+    ? `<span class="fd-seen" title="前幾天也找到同一組合（成員重疊過半）：${g.seen_days.map((x) => x.slice(5)).join('、')}">🔁 近 ${g.checked_days + 1} 天第 ${g.seen_days.length + 1} 次</span>`
+    : g.checked_days
+      ? '<span class="fd-seen new" title="前幾天的結果裡沒有這個組合">🆕 首次</span>'
+      : '';
   return `<div class="fd-card" data-i="${i}">
     <div class="fd-top"><span class="link-badge" style="background:${KIND_COLOR[g.kind] || '#3a3e48'}">${escapeHtml(g.kind)}</span>
-      <span class="fd-title">${title}</span><span class="muted">${g.members.length} 檔</span></div>
-    <div class="fd-chips">${chips}</div>
-    <div class="fd-facts">${facts}</div>${news}
+      <span class="fd-title">${title}</span>${seen}<span class="muted">${g.members.length} 檔</span>
+      <button type="button" class="icon fd-save" data-save="${i}" title="把這群股票存成自訂族群，之後在 B／C／K 追蹤">＋族群</button></div>
+    <div class="fd-chips">${chips}</div>${money}${inst}
+    <div class="fd-facts">${facts}</div>${themes}${news}
   </div>`;
 }
 
@@ -93,11 +159,24 @@ export function filterOptions(d) {
   } else {
     for (const label of d?.groupings || []) opts.push({ key: label, label, n: groups.filter((g) => g.sources?.some((s) => s.label === label)).length });
   }
+  // by who is buying (both methods), once the day's 法人 is out
+  if (groups.some((g) => g.inst)) {
+    for (const [key, label] of INST_FILTERS) opts.push({ key, label, n: groups.filter((g) => matchesFilter(g, key, d.method)).length });
+  }
   return opts;
+}
+
+const INST_FILTERS = [['@inst+', '🏦 法人買超'], ['@inst-', '🏦 法人賣超']]; // '@': never a grouping label
+
+/** The chip actually in effect: the saved one if that day has cards for it, else 全部 (cards and CSV agree). */
+export function shownFilter(d, saved) {
+  return saved && filterOptions(d).some((o) => o.key === saved && o.n) ? saved : 'all';
 }
 
 export function matchesFilter(g, key, method) {
   if (!key || key === 'all') return true;
+  if (key === '@inst+') return g.inst?.lots > 0;
+  if (key === '@inst-') return g.inst?.lots < 0;
   return method === 'new' ? g.kind === key : !!g.sources?.some((s) => s.label === key);
 }
 
@@ -105,6 +184,42 @@ export function filterHtml(d, current) {
   return `<div class="fd-filter seg">${filterOptions(d)
     .map((o) => `<button type="button" data-filter="${escapeHtml(o.key)}"${o.key === current ? ' class="on"' : ''}${o.n ? '' : ' disabled'}>${escapeHtml(o.label)} <small>${o.n}</small></button>`)
     .join('')}</div>`;
+}
+
+/**
+ * CSV of the cards on screen (the chip filter applies): one row per member, with its group's figures
+ * and the thresholds used, so runs with different settings can be compared in Excel.
+ * → [file name, header, rows] or null when nothing is shown.
+ */
+export function csvExport(d, filter = 'all') {
+  if (!d?.groups?.length) return null;
+  const groups = d.groups.map((g, i) => [g, i + 1]).filter(([g]) => matchesFilter(g, filter, d.method));
+  if (!groups.length) return null;
+  const p = d.params || {};
+  const cond =
+    d.method === 'new'
+      ? `排行前${p.pool_top} 成交量≥${p.new_min_volume_lots}張 日R≥${p.new_daily_r}(${p.new_daily_window}日)`
+      : `振幅>${p.min_amplitude}% 成交量≥${p.min_volume_lots}張 日R≥${p.daily_r}(${p.daily_window}日)`;
+  const header = [
+    '日期', '找法', '群組#', '類型', '來源／最接近分類', '代號', '名稱', '漲幅%', '週轉率%', '振幅%', '高點時間', '起漲時間', '鎖漲停',
+    '群組日R', '群組分時R', '高點差(分)', '起漲差(分)', '群組成交值(億)', '占全市場%', '群組平均漲幅%',
+    '個股法人(張)', '群組法人(張)', '群組法人(億)', '法人占成交%', '外資(張)', '投信(張)', '自營(張)', '法人連續', '投信連續', '條件',
+  ];
+  const streak = (s) => (s ? `連${s.side === 'buy' ? '買' : '賣'}${s.days}` : '');
+  const rows = groups.flatMap(([g, n]) => {
+    const src = g.sources?.length ? g.sources.map((s) => `${s.label}:${s.group}`).join('／') : g.matches?.[0] ? `${g.matches[0].label}:${g.matches[0].group}(${Math.round(g.matches[0].overlap * 100)}%)` : '';
+    const cut = (v) => (v == null ? '' : Math.round(v * 100) / 100);
+    return g.members.map((m) => [
+      d.date, METHODS[d.method] || d.method, n, g.kind, src, m.code, m.name, cut(m.change_pct), cut(m.turnover_rate), cut(m.amplitude_pct), m.peak || '', m.start || '', m.locked_at || '',
+      g.daily_r ?? '', g.intraday_r ?? '', g.peak_spread ?? '', g.start_spread ?? '', g.turnover_100m ?? '', g.turnover_share ?? '', g.avg_pct ?? '',
+      m.inst_net == null ? '' : Math.round(m.inst_net / 1000), g.inst?.lots ?? '', g.inst?.amount_100m ?? '',
+      g.inst?.amount_100m != null && g.turnover_100m > 0 ? cut((Math.abs(g.inst.amount_100m) / g.turnover_100m) * 100) : '',
+      g.inst_split?.foreign ?? '', g.inst_split?.trust ?? '', g.inst_split?.dealer ?? '', streak(g.inst_streak), streak(g.trust_streak), `${cond} 分時R≥${p.intraday_r} 高點差≤${p.peak_gap}分`,
+    ]);
+  });
+  const label = Object.fromEntries(INST_FILTERS)[filter]?.replace('🏦 ', '') || filter; // no internal '@inst+' in file names
+  const tag = filter && filter !== 'all' ? `_${label}` : '';
+  return [`資金連動搜尋_${d.method === 'new' ? '找法2' : '找法1'}_${d.date}${tag}.csv`, header, rows];
 }
 
 export function statsText(d) {
@@ -121,6 +236,18 @@ export function statsText(d) {
   return parts.filter(Boolean).join('　·　');
 }
 
+/**
+ * The funnel under the stats line: pairs reaching the intraday stage, what removed them (most first)
+ * and how many passed — which threshold to loosen when nothing is found.
+ */
+export function funnelText(d) {
+  const f = d?.stats?.funnel;
+  if (!f?.pairs) return '';
+  const why = Object.entries(f.rejected || {}).map(([k, n]) => `${k} ${n}`);
+  if (f.no_bars) why.push(`沒有分 K ${f.no_bars}`);
+  return `漏斗：進入分時比對 ${f.pairs} 對 → 刷掉：${why.join('、') || '無'} → 三關都過 ${f.passed} 對 → ${d.stats.groups} 群`;
+}
+
 /** Progress of a running search → {pct, text}: 日相關 0–15%, 抓分 K 15–90% (by stock), 比對 90–100%. */
 export function progressView(p) {
   if (!p?.running) return { pct: 3, text: '準備中…' };
@@ -133,18 +260,74 @@ export function progressView(p) {
   return { pct: 95, text: `③ 分時相關與高點比對${sec}` };
 }
 
+/**
+ * One-click threshold sets. They only touch the linkage thresholds (daily R, intraday R, high gap);
+ * 振幅, 成交量, groupings and pool settings stay as the user set them. 寬鬆 mostly loosens intraday R,
+ * the test that removes the most pairs (10/22 funnel: 143 of 197).
+ */
+export const PRESETS = {
+  strict: { label: '嚴格', values: { daily_r: 0.85, new_daily_r: 0.85, intraday_r: 0.6, peak_gap: 5 } },
+  standard: { label: '標準', values: { daily_r: 0.8, new_daily_r: 0.8, intraday_r: 0.5, peak_gap: 8 } },
+  loose: { label: '寬鬆', values: { daily_r: 0.7, new_daily_r: 0.75, intraday_r: 0.35, peak_gap: 15 } },
+};
+
+/** The preset the current values match exactly, or null (自訂). */
+export function presetOf(params) {
+  for (const [k, p] of Object.entries(PRESETS)) {
+    if (Object.entries(p.values).every(([f, v]) => Number(params[f]) === v)) return k;
+  }
+  return null;
+}
+
+// ---- B's 🔗: N's stored 找法1 cards indexed by the group they came from -----------------
+
+/** {`${grouping label}|${group}`: [found group]} from N's stored cards (a card can name several sources). */
+export function finderMarkIndex(result) {
+  const out = new Map();
+  for (const g of result?.groups || []) {
+    for (const s of g.sources || []) {
+      const k = `${s.label}|${s.group}`;
+      if (!out.has(k)) out.set(k, []);
+      out.get(k).push(g);
+    }
+  }
+  return out;
+}
+
+export function finderMarkTitle(found) {
+  const r = (v) => (v == null ? '—' : v.toFixed(2));
+  return `N 資金連動搜尋（找法1）在這個族群找到共同注資：\n${found
+    .map((g) => `${g.members.map((m) => m.name).join('、')}（日R ${r(g.daily_r)}、分時R ${r(g.intraday_r)}、高點差 ${g.peak_spread ?? '—'} 分）`)
+    .join('\n')}`;
+}
+
+/**
+ * The toolbar digest from N's stored results of the day (stored_only reads): '' when neither method
+ * has a stored result, else e.g. '💡 資金連動：找法1 6 群（🔁 3）／找法2 1 群'.
+ */
+export function digestText(known, fresh) {
+  const part = (label, d) => {
+    if (!d || d.stored === false || !Array.isArray(d.groups)) return null;
+    const again = d.groups.filter((g) => g.seen_days?.length).length;
+    return `${label} ${d.groups.length} 群${again ? `（🔁 ${again}）` : ''}`;
+  };
+  const parts = [part('找法1', known), part('找法2', fresh)].filter(Boolean);
+  return parts.length ? `💡 資金連動：${parts.join('／')}` : '';
+}
+
 // ---- panel --------------------------------------------------------------------------------------
 
 const PREF_KEY = 'openmarket.history.finder';
 const DEFAULTS = {
   min_amplitude: 3,
   min_volume_lots: 300,
+  new_min_volume_lots: 300,
   daily_r: 0.8, daily_window: 20, new_daily_r: 0.8, new_daily_window: 10, pool_top: 50,
   intraday_r: 0.5, intraday_sessions: 3, peak_gap: 8, start_gap: '', require_burst: false, dense: 0.7, min_size: 2,
   groupings: Object.keys(GROUPINGS), pool_sources: Object.keys(SOURCES),
 };
 
-export function mountFinderPanel(container, { onStock }) {
+export function mountFinderPanel(container, { onStock, onResult }) {
   const sec = document.createElement('section');
   sec.id = 'hFinderPanel';
   sec.className = 'panel hN';
@@ -168,7 +351,9 @@ export function mountFinderPanel(container, { onStock }) {
       <div class="seg" id="hFinderMethod">${Object.entries(METHODS).map(([k, l]) => `<button data-value="${k}">${l}</button>`).join('')}</div>
       <button type="button" class="icon wide" id="hFinderToggle">條件 ▾</button>
       <button type="button" class="icon wide" id="hFinderRun" title="用目前的條件重新計算這一天">重新計算</button>
+      <button type="button" class="icon wide" id="hFinderCsv" title="匯出目前顯示的卡片（依上面的篩選；Excel 可開）">CSV</button>
       <span class="muted" id="hFinderStats" style="margin-left:auto"></span></div>
+    <div class="fd-funnel muted" id="hFinderFunnel" title="每一關刷掉幾對：卡最多的那一關，就是要放寬的條件"></div>
     <div class="fd-form" id="hFinderForm" hidden></div>
     <div class="fd-progress" id="hFinderProgress" hidden><div class="fd-bar"><span></span></div><div class="fd-ptext"></div></div>
     <div id="hFinderBody" style="padding:8px 10px"><p class="hint">捲到這裡就會載入這一天的結果。</p></div>
@@ -221,7 +406,11 @@ export function mountFinderPanel(container, { onStock }) {
       pref.method === 'known'
         ? `<span class="fd-list">分類：${Object.entries(GROUPINGS).map(([k, l]) => `<label><input type="checkbox" data-list="groupings" value="${k}"${p.groupings.includes(k) ? ' checked' : ''}>${l}</label>`).join('')}</span>`
         : `<span class="fd-list">候選池：${Object.entries(SOURCES).map(([k, l]) => `<label><input type="checkbox" data-list="pool_sources" value="${k}"${p.pool_sources.includes(k) ? ' checked' : ''}>${l}</label>`).join('')}</span>`;
-    form.innerHTML = `${fields}${lists}<button type="button" class="icon wide" data-act="defaults">恢復預設</button>`;
+    const now = presetOf(p);
+    const presets = `<span class="fd-presets seg" title="只改日相關、分時相關、高點差三個門檻">${Object.entries(PRESETS)
+      .map(([k, x]) => `<button type="button" data-preset="${k}"${k === now ? ' class="on"' : ''}>${x.label}</button>`)
+      .join('')}${now ? '' : '<button type="button" class="on" disabled>自訂</button>'}</span>`;
+    form.innerHTML = `${presets}${fields}${lists}<button type="button" class="icon wide" data-act="defaults">恢復預設</button>`;
   }
   form.addEventListener('change', (e) => {
     const el = e.target;
@@ -238,11 +427,18 @@ export function mountFinderPanel(container, { onStock }) {
       else if (el.value.trim() !== '' && Number.isFinite(Number(el.value))) p[k] = Number(el.value);
     }
     save();
+    drawMethod(); // the preset buttons follow the edited values (a hand edit becomes 自訂)
     schedule(true);
   });
   form.addEventListener('click', (e) => {
-    if (e.target.dataset.act !== 'defaults') return;
-    pref.params = { ...DEFAULTS };
+    const preset = e.target.closest('button[data-preset]')?.dataset.preset;
+    if (preset) {
+      Object.assign(pref.params, PRESETS[preset].values);
+    } else if (e.target.dataset.act === 'defaults') {
+      pref.params = { ...DEFAULTS };
+    } else {
+      return;
+    }
     save();
     drawMethod();
     schedule(true);
@@ -260,6 +456,17 @@ export function mountFinderPanel(container, { onStock }) {
     schedule(true);
   });
   sec.querySelector('#hFinderRun').addEventListener('click', () => load(true));
+  sec.querySelector('#hFinderCsv').addEventListener('click', () => {
+    const out = csvExport(state.data, state.data ? shownFilter(state.data, pref.filter[state.data.method]) : 'all');
+    if (!out) return;
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([toCsv(out[1], out[2])], { type: 'text/csv;charset=utf-8' }));
+    a.download = out[0];
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  });
 
   const key = () => `${state.date}|${queryOf(pref.method, pref.params)}`;
   async function load(refresh = false) {
@@ -275,7 +482,9 @@ export function mountFinderPanel(container, { onStock }) {
       if (t !== state.ticket) return;
       if (!resp.ok) throw new Error(data.detail || `HTTP ${resp.status}`);
       state.data = data;
+      if (!data.cached) onResult?.(); // a newly computed result (stored now) — let other panels re-read
       sec.querySelector('#hFinderStats').textContent = statsText(data);
+      sec.querySelector('#hFinderFunnel').textContent = funnelText(data);
       drawCards();
     } catch (err) {
       if (t !== state.ticket) return;
@@ -297,8 +506,7 @@ export function mountFinderPanel(container, { onStock }) {
       closeDetail();
       return;
     }
-    let f = pref.filter[data.method] || 'all';
-    if (!filterOptions(data).some((o) => o.key === f && o.n)) f = 'all';
+    const f = shownFilter(data, pref.filter[data.method]);
     const cards = data.groups.map((g, i) => (matchesFilter(g, f, data.method) ? cardHtml(g, i) : '')).join('');
     body.innerHTML = `${filterHtml(data, f)}<div class="fd-cards">${cards}</div><p class="hint" style="margin:6px 0 0">點卡片看這群股票的連動動畫與走勢</p>`;
     closeDetail();
@@ -319,7 +527,29 @@ export function mountFinderPanel(container, { onStock }) {
     detail.innerHTML = '';
     for (const c of body.querySelectorAll('.fd-card')) c.classList.remove('on');
   }
+  // ＋族群: save a found group as a 自訂族群 (the existing group API; creating one is idempotent)
   body.addEventListener('click', async (e) => {
+    const btn = e.target.closest('button[data-save]');
+    if (!btn || !state.data) return;
+    e.stopPropagation();
+    const g = state.data.groups[Number(btn.dataset.save)];
+    const name = window.prompt('存成自訂族群，名稱：', defaultGroupName(g, state.date));
+    if (!name || !name.trim()) return;
+    btn.disabled = true;
+    btn.textContent = '儲存中…';
+    try {
+      await createGroup(name.trim());
+      for (const m of g.members) await addToGroup(name.trim(), m.code);
+      btn.textContent = '✓ 已存';
+      btn.title = `已存成自訂族群「${name.trim()}」，可在「管理族群」修改`;
+    } catch (err) {
+      btn.disabled = false;
+      btn.textContent = '＋族群';
+      window.alert(`儲存失敗：${err.message}`);
+    }
+  }, true);
+  body.addEventListener('click', async (e) => {
+    if (e.target.closest('button[data-save]')) return;
     const card = e.target.closest('.fd-card');
     if (!card || !state.data) return;
     const g = state.data.groups[Number(card.dataset.i)];
@@ -336,7 +566,11 @@ export function mountFinderPanel(container, { onStock }) {
       const d = await resp.json();
       if (t !== state.detailTicket) return;
       if (!resp.ok) throw new Error(d.detail || `HTTP ${resp.status}`);
-      detail.innerHTML = `<div class="panel-h"><b>${escapeHtml(g.members.map((m) => m.name).join('、'))}</b><button type="button" class="icon" data-act="close" aria-label="關閉" style="margin-left:auto">✕</button></div><div class="fd-detail-body"></div>`;
+      // the card's 🔁 and 📰 come along into the detail header
+      const seen = card.querySelector('.fd-seen')?.outerHTML || '';
+      const themes = card.querySelector('.fd-themes')?.textContent || '';
+      const inst = card.querySelector('.fd-inst')?.outerHTML || ''; // 🏦 who is buying, under the title
+      detail.innerHTML = `<div class="panel-h"><b>${escapeHtml(g.members.map((m) => m.name).join('、'))}</b>${seen}${themes ? `<span class="fd-themes">${escapeHtml(themes)}</span>` : ''}<button type="button" class="icon" data-act="close" aria-label="關閉" style="margin-left:auto">✕</button></div>${inst}<div class="fd-detail-body"></div>`;
       state.stopRace = renderBody(detail.querySelector('.fd-detail-body'), d, '20', onStock, '點一列看那檔的分時走勢');
     } catch (err) {
       if (t === state.detailTicket) detail.innerHTML = `<p class="hint">${escapeHtml(err.message)}</p>`;

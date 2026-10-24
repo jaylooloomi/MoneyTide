@@ -1,5 +1,5 @@
 | # | Candidate | Impact | Urgency | Effort | Blast | Score | Reason |
 |---|---|---|---|---|---|---|---|
-| AJ1 | 熱力圖全螢幕模式 | 4 | 3 | 2 | 2 | 3.0 | Requirement is heatmap-as-main-screen; fullscreen directly enlarges it, but the cited TradingView fullscreen claim is not verified here. Not rejected (§4), no new dep, no existing behaviour changed beyond adding header buttons. |
+| M1 | 審查夜班改動並修正確認缺陷 | 6 | 6 | 5 | 3 | 2.4 | Requirement needs trustworthy N/K results; Google eng-practices pre-merge review is cited; two integration bugs already slipped past unit tests, so more are plausible. Effort is a full diff review. Blast is bounded by the fence (≤5 files, ≤300 lines, one commit per fix). |
 
-TOP: AJ1 (3.0)
+TOP: M1 (2.4)

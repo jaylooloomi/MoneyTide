@@ -1,6 +1,6 @@
 | # | Candidate | Impact | Urgency | Effort | Blast | Score | Reason |
 |---|---|---|---|---|---|---|---|
-| AM2 | 個股「量比」顏色模式（今日成交值 ÷ 20 日均成交值） | 6 | 4 | 4 | 3 | 2.0 | Requirement is 找集體上漲; volume-confirmed coloring (LuxAlgo Heatmap Volume) is cited; bonus-16 only covers group-level volume. |
-| AM1 | 熱力圖色階範圍可調（±3／±5／±7／±10%） | 4 | 3 | 2 | 3 | 2.0 | Requirement is 漲跌比例 as heatmap; flat-day pale colors are a real pain, but it is cosmetic and only partly backed by a forum request plus TradingView display settings. |
+| P2 | K 個股走勢疊上大盤／OTC 漲幅線 | 5 | 4 | 2 | 2 | 5.0 | Requirement asks for 大盤/OTC comparison (scope §3); cites TradingView Compare and Yahoo. Overlay is not 扣掉大盤 (§4), so no rejection. Additive, about 40 lines. |
+| P1 | N 卡片「🏦 法人」群組三大法人買賣超 | 7 | 5 | 3 | 3 | 3.9 | Requirement asks who drives the money (動機); cites Goodinfo, CMoney, TWSE T86. Uses existing inst_day, no new dep or table. Touches api.py, finder.py, finder.js and tests, so Blast is higher. |
 
-TOP: AM2 (2.0)
+TOP: P2 (5.0)

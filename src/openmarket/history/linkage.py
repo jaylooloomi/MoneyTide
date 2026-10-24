@@ -155,13 +155,30 @@ def bucket_closes(points: list[tuple[str, float]], size: int = 5) -> dict[int, f
     return out
 
 
-def returns(closes: Mapping[int, float], buckets: list[int]) -> list[float | None]:
-    """Bucket-to-bucket % returns on a shared bucket axis (None where either end is missing)."""
+def returns(closes: Mapping[int, float], buckets: list[int], locked: float | None = None) -> list[float | None]:
+    """Bucket-to-bucket % returns on a shared bucket axis (None where either end is missing). With
+    `locked` (the limit-up level in the closes' own scale), a step whose two closes both sit there is
+    None too: a flat locked line is not 'not moving together'."""
     out = []
     for a, b in zip(buckets, buckets[1:]):
         x, y = closes.get(a), closes.get(b)
-        out.append((y / x - 1) * 100 if x and y else None)
+        if locked and x and y and x >= locked * (1 - 1e-6) and y >= locked * (1 - 1e-6):
+            out.append(None)
+        else:
+            out.append((y / x - 1) * 100 if x and y else None)
     return out
+
+
+def locked_level(closes: Mapping[int, float], row: Mapping | None) -> float | None:
+    """The limit-up level in the closes' own scale, or None when the session never reached limit-up.
+    Taken as the session's top close when the official high touched the limit, so Yahoo's
+    back-adjusted prices (a different scale from the official ones) still match."""
+    if not closes or not row or not row.get("prev_close") or row.get("high") is None:
+        return None
+    limit = limit_up_price(row["prev_close"])
+    if limit is None or row["high"] < limit - 0.001:
+        return None
+    return max(closes.values())
 
 
 PEAK_END = 240  # minutes after 09:00: the intraday high is taken over 09:00–13:00
@@ -192,14 +209,20 @@ def tick_size(price: float) -> float:
     return next(t for top, t in TICKS if price < top)
 
 
-def limit_up_pct(prev_close: float | None) -> float | None:
-    """% change at the limit-up price: prev close × 1.1 rounded down to its tick (so 9.5–10%, not 10)."""
+def limit_up_price(prev_close: float | None) -> float | None:
+    """The limit-up price: prev close × 1.1 rounded down to its tick. Compare prices with this, not
+    with one rebuilt from the rounded % (487.5 → 536, but 9.95% rebuilds 536.006)."""
     if not prev_close:
         return None
     raw = prev_close * 1.1
     tick = tick_size(raw)
-    price = int(raw / tick + 1e-9) * tick
-    return round((price / prev_close - 1) * 100, 2)
+    return round(int(raw / tick + 1e-9) * tick, 2)
+
+
+def limit_up_pct(prev_close: float | None) -> float | None:
+    """% change at the limit-up price (so 9.5–10%, not 10)."""
+    price = limit_up_price(prev_close)
+    return None if price is None else round((price / prev_close - 1) * 100, 2)
 
 
 def limit_down_pct(prev_close: float | None) -> float | None:

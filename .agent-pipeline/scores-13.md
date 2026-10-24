@@ -1,5 +1,6 @@
 | # | Candidate | Impact | Urgency | Effort | Blast | Score | Reason |
 |---|---|---|---|---|---|---|---|
-| AC1 | 即時產業矩陣「量能倍數」欄（今日成交值 ÷ 近 20 日平均） | 7 | 6 | 4 | 3 | 3.5 | 已核准草圖含「量能」欄，原規格因無歷史而延後，現在可算；有 TradingView／Finviz 來源；盤中今日成交值為未收盤數字，需在實作中處理與全日均值的口徑差。 |
+| J7 | N 卡片每檔成員列出當天新聞題材 | 8 | 7 | 5 | 3 | 3.7 | requirement is 找資金背後的動機; Finviz news column and Benzinga per-stock catalyst lines do this; news_day codes already exist; 4 files, ~80 lines, within fences |
+| J6 | 兩種找法都找到同一組合 → 雙重確認 | 4 | 3 | 3 | 2 | 2.0 | Cited confluence scanners are real, but both finds use the same funnel, so the "confirmation" is likely duplicated evidence (candidate admits this); weak link to 判斷是不是同一筆資金 |
 
-TOP: AC1 (3.5)
+TOP: J7 (3.7)

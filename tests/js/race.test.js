@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { RACE_END, amplitudeSoFar, fmtClock, isLimitUp, leadOf, pathPoints, peakSoFar, raceDomain, raceFrames, raceOrder } from '../../static/js/race.js';
+import { RACE_END, amplitudeSoFar, fmtClock, instTip, isLimitUp, leadOf, pathPoints, peakSoFar, raceDomain, raceFrames, raceOrder } from '../../static/js/race.js';
 
 test('raceFrames forward-fills closes, remembers when a value was reached, keeps highs per minute', () => {
   const f = raceFrames({ A: [[0, 1, 2], [5, 10, 10], [6, 10, 10], [30, 9, 9.5]] }, ['A', 'B']);
@@ -78,4 +78,12 @@ test('amplitudeSoFar: highest high − lowest low up to the playhead', () => {
   assert.equal(amplitudeSoFar(f, 40), 7); // 6 − (−1)
   assert.equal(amplitudeSoFar(f, 270), 9); // 6 − (−3)
   assert.equal(amplitudeSoFar(raceFrames({}, ['X']).X, 270), null);
+});
+
+test('instTip: 三大法人 net shares as 張 for a K row tooltip', () => {
+  assert.equal(instTip(1_234_400), '　法人 +1,234 張');
+  assert.equal(instTip(-56_700), '　法人 −57 張');
+  assert.equal(instTip(0), '　法人 0 張');
+  assert.equal(instTip(null), '');
+  assert.equal(instTip(undefined), '');
 });

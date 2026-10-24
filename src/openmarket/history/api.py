@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from itertools import takewhile
 from datetime import date, datetime, time, timedelta
 
 from fastapi import APIRouter, HTTPException, Query
@@ -8,6 +9,7 @@ from fastapi import APIRouter, HTTPException, Query
 from ..config import TAIPEI
 
 from .ingest import INDEX_MARKETS, HistoryCollector, index_window
+from .finder import INST_STREAK_DAYS, inst_streak
 from .linkage import group_r20
 from .metrics import METRICS, Grouping, day_stocks, flow_baseline, group_flows, group_stats, industry_grouping, movers, rotation, stock_history, group_index, group_periods, group_rank_change
 from .store import HistoryStore
@@ -98,13 +100,29 @@ def create_history_router(
         except ValueError as exc:
             raise HTTPException(422, str(exc)) from exc
 
+    def stock_inst(store: HistoryStore, code: str, d: date) -> dict | None:
+        """三大法人 of one stock on d for its card: 外資／投信／自營／合計 in 張 and the 連買／連賣 streak
+        (on trading days, stopping at the first one without 法人); None while d has no 法人 for it."""
+        split = store.inst_split(d).get(code)
+        if split is None:
+            return None
+        have = store.inst_dates()
+        days = list(takewhile(lambda x: x in have, store.trading_dates(up_to=d, limit=INST_STREAK_DAYS)))
+        one = [{"members": [{"code": code}]}]
+        lots = lambda v: round(v / 1000)  # noqa: E731
+        return {
+            "foreign": lots(split[0]), "trust": lots(split[1]), "dealer": lots(split[2]), "total": lots(sum(split)),
+            "streak": inst_streak(one, store.inst_net(days, [code]), days)[0]["inst_streak"],
+            "trust_streak": inst_streak(one, store.inst_trust(days, [code]), days)[0]["inst_streak"],
+        }
+
     # bonus-02: one stock's card data with a short price history
     @r.get("/stock/{code}")
     def stock(code: str, to: str, days: int = Query(20, ge=2, le=250)) -> dict:
         data = stock_history(get_store(), code, _date(to), days)
         if data is None:
             raise HTTPException(404, f"no data for {code} on {to}")
-        return data
+        return {**data, "inst": stock_inst(get_store(), code, _date(to))}
 
     # bonus-04: cumulative group index comparison
     @r.get("/index")

@@ -109,8 +109,11 @@ def test_pair_check_rules():
 def test_confirm_keeps_dense_cores_of_passing_pairs():
     up = [0.1, 0.3, -0.2, 0.5, 0.1] * 6
     feats = {"A": mk(60, rets=up), "B": mk(62, rets=up), "C": mk(64, rets=up), "D": mk(150, rets=up)}
-    (g,) = confirm([{"members": ["A", "B", "C", "D"], "sources": [], "daily": {}}], feats, P)
+    funnel = {}
+    (g,) = confirm([{"members": ["A", "B", "C", "D", "Z"], "sources": [], "daily": {}}], feats, P, funnel)
     assert g["members"] == ["A", "B", "C"]  # D peaked 90 minutes later
+    # 10 pairs: A/B/C pass with each other (3), D fails the high gap with A/B/C (3), Z has no bars (4)
+    assert funnel == {"pairs": 10, "no_bars": 4, "passed": 3, "rejected": {"高點時間差太大": 3}}
     assert set(g["pairs"]) == {e("A", "B"), e("A", "C"), e("B", "C")}
 
 
@@ -121,8 +124,10 @@ def test_candidate_pool_and_match_known():
         {"code": "3", "kind": "stock", "change_pct": 5.0, "close": 10, "market_cap": 1000, "volume_shares": 1, "industry": "Y"},
         {"code": "E", "kind": "etf", "change_pct": 20.0, "close": 10, "market_cap": 1000, "volume_shares": 99, "industry": ""},
     ]
-    pool = candidate_pool(rows, {"3": 9.0}, FinderParams(pool_top=1))
+    pool = candidate_pool(rows, {"3": 9.0}, FinderParams(pool_top=1, new_min_volume_lots=0))
     assert pool == {"1": ["漲幅"], "2": ["週轉率"], "3": ["比重暴增"]}
+    # the volume floor (張 = 1,000 shares): only "2" traded ≥ 0.05 張 here
+    assert candidate_pool(rows, {"3": 9.0}, FinderParams(pool_top=1, new_min_volume_lots=0.05)) == {"2": ["漲幅", "週轉率"]}
     by = {r["code"]: r for r in rows}
     m = match_known(["1", "2", "3"], by, {"industry": lambda r: [r["industry"]]})
     assert m[0]["group"] == "X" and m[0]["overlap"] == pytest.approx(2 / 3) and m[0]["outside"] == ["3"]
@@ -130,6 +135,45 @@ def test_candidate_pool_and_match_known():
     assert kind_of([{"overlap": 1.0, "outside": []}], 2) == "已知族群"
     assert kind_of([{"overlap": 0.5, "outside": ["b"]}], 2) == "跨族群新組合"  # a pair with one member in a group
     assert kind_of([{"overlap": 0.4, "outside": ["a", "b", "c"]}], 5) == "跨族群新組合" and kind_of([], 2) == "跨族群新組合"
+
+
+def test_money_size():
+    from openmarket.history.finder import money_size
+
+    rows = {"A": {"turnover_yuan": 3e9, "change_pct": 9.9}, "B": {"turnover_yuan": 1e9, "change_pct": 4.1}}
+    assert money_size(["A", "B", "Z"], rows, 4e11) == {"turnover_100m": 40.0, "turnover_share": 1.0, "avg_pct": 7.0}
+    assert money_size(["A"], rows, 0)["turnover_share"] is None
+
+
+def test_persistence_same_combination_on_earlier_days():
+    from openmarket.history.finder import persistence
+
+    def grp(*codes):
+        return {"members": [{"code": c} for c in codes]}
+
+    today = [grp("A", "B"), grp("C", "D", "E"), grp("X", "Y")]
+    earlier = {
+        "2026-10-20": {"groups": [grp("A", "B"), grp("C", "D")]},  # A+B again; C+D overlaps 2/3
+        "2026-10-21": {"groups": [grp("A", "Z")]},  # A+Z vs A+B: 1/3, not the same
+        "2026-10-19": {"groups": [grp("B", "A")]},
+    }
+    out = persistence(today, earlier)
+    assert out[0]["seen_days"] == ["2026-10-19", "2026-10-20"] and out[0]["checked_days"] == 3
+    assert out[1]["seen_days"] == ["2026-10-20"]
+    assert out[2]["seen_days"] == []
+    assert "seen_days" not in today[0]  # the input is not changed
+
+
+def test_news_themes_per_member_and_group():
+    from openmarket.history.finder import news_themes
+
+    news = [
+        {"被動元件": {"codes": {"2327": 3, "2492": 1}}, "AI": {"codes": {"2327": 1}}},
+        {"被動元件": {"codes": {"2492": 2}}, "漲價": {"codes": {"2492": 1, "6173": 1}}, "其他": {"codes": {}}, "音量🔊": {"codes": {"2327": 9}}},
+    ]
+    (g,) = news_themes([{"members": [{"code": "2327"}, {"code": "2492"}, {"code": "9999"}]}], news)
+    assert [m["themes"] for m in g["members"]] == [["被動元件", "AI"], ["被動元件", "漲價"], []]
+    assert g["themes"] == [{"term": "被動元件", "count": 2}, {"term": "AI", "count": 1}, {"term": "漲價", "count": 1}]
 
 
 def test_co_mentions():
@@ -141,6 +185,29 @@ def test_co_mentions():
 def test_params_key_changes_with_any_threshold():
     assert FinderParams().key() != FinderParams(daily_r=0.75).key()
     assert FinderParams().key() == FinderParams().key()
+    # the same groupings / pool sources in another order are the same search
+    assert FinderParams(groupings=("custom", "industry")).key() == FinderParams(groupings=("industry", "custom")).key()
+    assert FinderParams(pool_sources=("share_z", "gain")).key() == FinderParams(pool_sources=("gain", "share_z")).key()
+    assert FinderParams(groupings=("custom",)).key() != FinderParams(groupings=("industry",)).key()
+
+
+def test_finder_api_stored_only_never_starts_a_search(tmp_path):
+    from datetime import datetime
+
+    from fastapi.testclient import TestClient
+
+    from openmarket.api import create_app
+    from openmarket.config import AppConfig
+    from openmarket.history.store import HistoryStore
+
+    s = HistoryStore(tmp_path / "h.sqlite")
+    d = date(2026, 3, 2)
+    s.save_day(d, [{"code": "A", "name": "a", "market": "上市", "industry": "X", "kind": "stock", "close": 10, "prev_close": 10, "change": 0, "change_pct": 0}], datetime(2026, 3, 2, 15))
+    app = create_app(AppConfig(data_dir=tmp_path), start_polling=False, start_history=False, start_concepts=False, history_store=s)
+    with TestClient(app, base_url="http://127.0.0.1") as client:
+        body = client.get("/api/history/finder", params={"date": d.isoformat(), "method": "known", "stored_only": 1, "groupings": "industry"}).json()
+        assert body["stored"] is False and body["groups"] == []
+        assert s.finder(d, "known", FinderParams(groupings=("industry",)).key() + "|industry") is None  # nothing computed or saved
 
 
 def test_store_batch_bars_and_results(tmp_path):
@@ -219,3 +286,209 @@ def test_pair_r_fast_path_matches_pearson():
     assert pr("A", "B") == pytest.approx(series_r(s["A"], s["B"], 3))
     assert pr("B", "A") == pr("A", "B")
     assert pr("A", "C") == pytest.approx(series_r(s["A"], s["C"], 3))  # the gap path
+
+
+def test_finder_api_stored_result_gets_history_and_themes(tmp_path):
+    """Through the endpoint: a stored result comes back with 🔁 and 📰 attached (catches name clashes in api.py)."""
+    from datetime import datetime
+
+    from fastapi.testclient import TestClient
+
+    from openmarket.api import create_app
+    from openmarket.config import AppConfig
+    from openmarket.history.store import HistoryStore
+
+    s = HistoryStore(tmp_path / "h.sqlite")
+    d = date(2026, 3, 2)
+    s.save_day(d, [{"code": "A", "name": "a", "market": "上市", "industry": "X", "kind": "stock", "close": 10, "prev_close": 10, "change": 0, "change_pct": 0}], datetime(2026, 3, 2, 15))
+    s.save_news_day(d, {"題材甲": {"mentions": 2, "codes": {"A": 2}, "titles": []}}, 2)
+    p = FinderParams(groupings=("industry",))
+    s.save_finder(d, "known", p.key() + "|industry", {"date": d.isoformat(), "method": "known", "groups": [{"members": [{"code": "A", "name": "a"}, {"code": "B", "name": "b"}]}], "stats": {}})
+    app = create_app(AppConfig(data_dir=tmp_path), start_polling=False, start_history=False, start_concepts=False, history_store=s)
+    with TestClient(app, base_url="http://127.0.0.1") as client:
+        r = client.get("/api/history/finder", params={"date": d.isoformat(), "method": "known", "groupings": "industry"})
+        assert r.status_code == 200
+        (g,) = r.json()["groups"]
+        assert g["checked_days"] == 0 and g["themes"] == [{"term": "題材甲", "count": 1}]
+        assert g["members"][0]["themes"] == ["題材甲"]
+
+
+def test_finder_api_themes_skip_news_older_than_a_week(tmp_path):
+    from datetime import datetime
+
+    from fastapi.testclient import TestClient
+
+    from openmarket.api import create_app
+    from openmarket.config import AppConfig
+    from openmarket.history.store import HistoryStore
+
+    s = HistoryStore(tmp_path / "h.sqlite")
+    d = date(2026, 3, 20)
+    s.save_day(d, [{"code": "A", "name": "a", "market": "上市", "industry": "X", "kind": "stock", "close": 10, "prev_close": 10, "change": 0, "change_pct": 0}], datetime(2026, 3, 20, 15))
+    s.save_news_day(date(2026, 3, 2), {"舊題材": {"mentions": 1, "codes": {"A": 1}, "titles": []}}, 1)  # 18 days before
+    p = FinderParams(groupings=("industry",))
+    s.save_finder(d, "known", p.key() + "|industry", {"date": d.isoformat(), "method": "known", "groups": [{"members": [{"code": "A", "name": "a"}]}], "stats": {}})
+    app = create_app(AppConfig(data_dir=tmp_path), start_polling=False, start_history=False, start_concepts=False, history_store=s)
+    with TestClient(app, base_url="http://127.0.0.1") as client:
+        (g,) = client.get("/api/history/finder", params={"date": d.isoformat(), "method": "known", "groupings": "industry"}).json()["groups"]
+        assert g["themes"] == [] and g["members"][0]["themes"] == []
+
+
+def test_inst_summary_in_lots_and_amount():
+    from openmarket.history.finder import inst_summary
+
+    groups = [{"members": [{"code": "A"}, {"code": "B"}, {"code": "C"}]}, {"members": [{"code": "X"}]}]
+    inst = {"A": 2_000_000.0, "B": -500_000.0, "C": 0.0}
+    rows = {"A": {"close": 100.0}, "B": {"close": 50.0}, "C": {"close": 10.0}}
+    g, empty = inst_summary(groups, inst, rows)
+    assert g["inst"] == {"lots": 1500, "amount_100m": round((2e6 * 100 - 5e5 * 50) / 1e8, 2), "buyers": 1, "sellers": 1}
+    assert g["inst_net"] == 1_500_000.0 and g["members"][1]["inst_net"] == -500_000.0
+    assert empty["inst"] is None  # 法人 not published for these yet
+    assert "inst" not in groups[0]  # copies, the stored result is untouched
+    no_close = inst_summary(groups[:1], inst, {"A": {"close": 100.0}, "B": {}, "C": {"close": 10.0}})[0]
+    assert no_close["inst"]["amount_100m"] is None and no_close["inst"]["lots"] == 1500
+
+
+def test_inst_streak_counts_same_sign_days_of_the_group():
+    from openmarket.history.finder import inst_streak
+
+    d = [date(2026, 10, 22), date(2026, 10, 21), date(2026, 10, 20), date(2026, 10, 19)]  # newest first
+    by_day = {
+        d[0]: {"A": 100.0, "B": -30.0},  # group +70
+        d[1]: {"A": 50.0},  # +50 (B missing that day: the members that have data)
+        d[2]: {"A": -10.0, "B": 40.0},  # +30
+        d[3]: {"A": -100.0, "B": 0.0},  # −100: the streak ends
+    }
+    groups = [{"members": [{"code": "A"}, {"code": "B"}]}, {"members": [{"code": "X"}]}]
+    g, none = inst_streak(groups, by_day, d)
+    assert g["inst_streak"] == {"days": 3, "side": "buy"} and none["inst_streak"] is None
+    sold = inst_streak([{"members": [{"code": "A"}]}], {d[0]: {"A": -1.0}, d[1]: {"A": -2.0}, d[2]: {"A": 3.0}}, d)[0]
+    assert sold["inst_streak"] == {"days": 2, "side": "sell"}
+    assert inst_streak(groups, by_day, d[:1])[0]["inst_streak"] is None  # one day is not a streak
+    assert inst_streak(groups, by_day, [])[0]["inst_streak"] is None  # the shown day has no 法人 yet
+
+
+def test_finder_api_attaches_inst_and_stops_the_streak_at_a_day_without_inst(tmp_path):
+    from datetime import datetime
+
+    from fastapi.testclient import TestClient
+
+    from openmarket.api import create_app
+    from openmarket.config import AppConfig
+    from openmarket.history.store import HistoryStore
+    from openmarket.sources.institutional import InstRow
+
+    s = HistoryStore(tmp_path / "h.sqlite")
+    days = [date(2026, 3, 2), date(2026, 3, 3), date(2026, 3, 4), date(2026, 3, 5)]
+    row = lambda c, close: {"code": c, "name": c.lower(), "market": "上市", "industry": "X", "kind": "stock", "close": close, "prev_close": close, "change": 0, "change_pct": 0}  # noqa: E731
+    for d in days:
+        s.save_day(d, [row("A", 100.0), row("B", 50.0)], datetime(d.year, d.month, d.day, 15))
+    buy = lambda a, b: [InstRow("A", a, 0, 0, a), InstRow("B", b, 0, 0, b)]  # noqa: E731
+    s.save_inst_day(days[0], buy(1000, 1000), datetime(2026, 3, 2, 17))  # buy
+    # 3/3: no 法人 fetched at all — the streak must not jump over it
+    s.save_inst_day(days[2], buy(3000, -1000), datetime(2026, 3, 4, 17))  # net buy
+    s.save_inst_day(days[3], buy(2_000_000, -500_000), datetime(2026, 3, 5, 17))  # net buy
+    key = FinderParams(groupings=("industry",)).key() + "|industry"
+    s.save_finder(days[3], "known", key, {"date": days[3].isoformat(), "method": "known", "groups": [{"members": [{"code": "A", "name": "a"}, {"code": "B", "name": "b"}]}], "stats": {}})
+    app = create_app(AppConfig(data_dir=tmp_path), start_polling=False, start_history=False, start_concepts=False, history_store=s)
+    with TestClient(app, base_url="http://127.0.0.1") as client:
+        g = client.get("/api/history/finder", params={"date": days[3].isoformat(), "method": "known", "stored_only": 1, "groupings": "industry"}).json()["groups"][0]
+    assert g["inst"] == {"lots": 1500, "amount_100m": round((2e6 * 100 - 5e5 * 50) / 1e8, 2), "buyers": 1, "sellers": 1}
+    assert [m["inst_net"] for m in g["members"]] == [2_000_000, -500_000]
+    assert g["inst_streak"] == {"days": 2, "side": "buy"}  # 3/5 and 3/4 only: 3/3 has no 法人, so 3/2 does not count
+    assert s.finder(days[3], "known", key)["groups"][0].get("inst") is None  # attached when served, never stored
+
+
+def test_finder_api_splits_inst_into_foreign_trust_dealer(tmp_path):
+    from datetime import datetime
+
+    from fastapi.testclient import TestClient
+
+    from openmarket.api import create_app
+    from openmarket.config import AppConfig
+    from openmarket.history.store import HistoryStore
+    from openmarket.sources.institutional import InstRow
+
+    s = HistoryStore(tmp_path / "h.sqlite")
+    d = date(2026, 3, 2)
+    row = lambda c: {"code": c, "name": c.lower(), "market": "上市", "industry": "X", "kind": "stock", "close": 10.0, "prev_close": 10.0, "change": 0, "change_pct": 0}  # noqa: E731
+    s.save_day(d, [row("A"), row("B"), row("C")], datetime(2026, 3, 2, 15))
+    s.save_inst_day(d, [InstRow("A", 1_500_000, -200_000, 10_000, 1_310_000), InstRow("B", 500_400, 0, -30_000, 470_400)], datetime(2026, 3, 2, 17))
+    assert s.inst_split(d)["A"] == (1_500_000, -200_000, 10_000)
+    key = FinderParams(groupings=("industry",)).key() + "|industry"
+    members = lambda *cs: [{"code": c, "name": c.lower()} for c in cs]  # noqa: E731
+    s.save_finder(d, "known", key, {"date": d.isoformat(), "method": "known", "groups": [{"members": members("A", "B")}, {"members": members("C")}], "stats": {}})
+    app = create_app(AppConfig(data_dir=tmp_path), start_polling=False, start_history=False, start_concepts=False, history_store=s)
+    with TestClient(app, base_url="http://127.0.0.1") as client:
+        ab, c = client.get("/api/history/finder", params={"date": d.isoformat(), "method": "known", "stored_only": 1, "groupings": "industry"}).json()["groups"]
+    assert ab["inst_split"] == {"foreign": 2000, "trust": -200, "dealer": -20}
+    assert c["inst_split"] is None  # no 法人 rows for C
+    assert ab["trust_streak"] is None  # one day is not a streak
+
+
+def test_finder_api_trust_streak_counts_投信_alone(tmp_path):
+    from datetime import datetime
+
+    from fastapi.testclient import TestClient
+
+    from openmarket.api import create_app
+    from openmarket.config import AppConfig
+    from openmarket.history.store import HistoryStore
+    from openmarket.sources.institutional import InstRow
+
+    s = HistoryStore(tmp_path / "h.sqlite")
+    days = [date(2026, 3, 2), date(2026, 3, 3), date(2026, 3, 4)]
+    row = {"code": "A", "name": "a", "market": "上市", "industry": "X", "kind": "stock", "close": 10.0, "prev_close": 10.0, "change": 0, "change_pct": 0}
+    for d in days:
+        s.save_day(d, [row], datetime(d.year, d.month, d.day, 15))
+    # 外資 sells every day (法人合計 sells) while 投信 buys three days running
+    for d in days:
+        s.save_inst_day(d, [InstRow("A", -900_000, 100_000, 0, -800_000)], datetime(d.year, d.month, d.day, 17))
+    key = FinderParams(groupings=("industry",)).key() + "|industry"
+    s.save_finder(days[-1], "known", key, {"date": days[-1].isoformat(), "method": "known", "groups": [{"members": [{"code": "A", "name": "a"}]}], "stats": {}})
+    app = create_app(AppConfig(data_dir=tmp_path), start_polling=False, start_history=False, start_concepts=False, history_store=s)
+    with TestClient(app, base_url="http://127.0.0.1") as client:
+        g = client.get("/api/history/finder", params={"date": days[-1].isoformat(), "method": "known", "stored_only": 1, "groupings": "industry"}).json()["groups"][0]
+    assert g["inst_streak"] == {"days": 3, "side": "sell"}
+    assert g["trust_streak"] == {"days": 3, "side": "buy"}
+
+
+def test_store_inst_queries_can_be_limited_to_some_codes(tmp_path):
+    from datetime import datetime
+
+    from openmarket.history.store import HistoryStore
+    from openmarket.sources.institutional import InstRow
+
+    s = HistoryStore(tmp_path / "h.sqlite")
+    d1, d2 = date(2026, 3, 2), date(2026, 3, 3)
+    for d in (d1, d2):
+        s.save_inst_day(d, [InstRow("A", 1, 2, 0, 3), InstRow("B", 4, 5, 0, 9), InstRow("C", 7, 8, 0, 15)], datetime(d.year, d.month, d.day, 17))
+    assert s.inst_net([d1, d2], ["A", "C"]) == {d1: {"A": 3, "C": 15}, d2: {"A": 3, "C": 15}}
+    assert s.inst_trust([d2], {"B"}) == {d2: {"B": 5}}
+    assert s.inst_net([d1]) == {d1: {"A": 3, "B": 9, "C": 15}}  # no codes: every stock, as before
+    assert s.inst_net([d1], []) == {d1: {}} and s.inst_net([], ["A"]) == {}
+
+
+def test_stock_card_endpoint_carries_inst(tmp_path):
+    from datetime import datetime
+
+    from fastapi.testclient import TestClient
+
+    from openmarket.api import create_app
+    from openmarket.config import AppConfig
+    from openmarket.history.store import HistoryStore
+    from openmarket.sources.institutional import InstRow
+
+    s = HistoryStore(tmp_path / "h.sqlite")
+    days = [date(2026, 3, 2), date(2026, 3, 3), date(2026, 3, 4)]
+    row = {"code": "A", "name": "a", "market": "上市", "industry": "X", "kind": "stock", "close": 10.0, "prev_close": 10.0, "change": 0, "change_pct": 0, "high": 10.0, "low": 10.0, "open": 10.0}
+    for d in days:
+        s.save_day(d, [row], datetime(d.year, d.month, d.day, 15))
+    for d, f in zip(days, (-1000, 2_000_000, 1_500_400)):
+        s.save_inst_day(d, [InstRow("A", f, 300_000, -20_000, f + 280_000)], datetime(d.year, d.month, d.day, 17))
+    app = create_app(AppConfig(data_dir=tmp_path), start_polling=False, start_history=False, start_concepts=False, history_store=s)
+    with TestClient(app, base_url="http://127.0.0.1") as client:
+        inst = client.get("/api/history/stock/A", params={"to": "2026-03-04", "days": 2}).json()["inst"]
+        assert inst == {"foreign": 1500, "trust": 300, "dealer": -20, "total": 1780, "streak": {"days": 3, "side": "buy"}, "trust_streak": {"days": 3, "side": "buy"}}
+        s.save_day(date(2026, 3, 5), [row], datetime(2026, 3, 5, 15))  # 法人 not out yet for 3/5
+        assert client.get("/api/history/stock/A", params={"to": "2026-03-05", "days": 2}).json()["inst"] is None

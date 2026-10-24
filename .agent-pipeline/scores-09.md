@@ -1,5 +1,5 @@
 | # | Candidate | Impact | Urgency | Effort | Blast | Score | Reason |
 |---|---|---|---|---|---|---|---|
-| Y1 | 個股「同步股」：近 60 日日報酬相關性最高的股票 | 5 | 3 | 4 | 2 | 1.9 | 需求是「哪些股票集體上漲」，相關性同伴直接對應此目標；有引用來源（dqydj、stock-correlation、MarketXLS）；但多數使用者不會因此卡住，且需新 metrics、API、卡片與測試，屬加分而非缺口。 |
+| G1 | 盤中錄製順便記成交量（tick 聚合成本機 1 分 K） | 5 | 4 | 6 | 6 | 0.6 | Cites PKScreener and Kite forum for tick-to-OHLCV, so it is not forced to 1; gap is real but Yahoo fallback exists. Touches the every-poll recorder, blob format, and all linkage/N readers, and cumulative-volume reset and missed-poll handling add risk. |
 
 TOP: none (all below 2)

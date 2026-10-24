@@ -1,6 +1,9 @@
 | # | Candidate | Impact | Urgency | Effort | Blast | Score | Reason |
 |---|---|---|---|---|---|---|---|
-| R2 | 個股卡片顯示所屬族群（自訂＋概念股） | 5 | 3 | 3 | 2 | 2.5 | Requirement is "哪些股票集體上漲、屬於哪個族群"; Yahoo stock page lists 類股/概念股 (cited). Adds one endpoint and two card lines, but the 自訂 and 概念 data depend on unfinished subprojects ②③. |
-| R1 | 即時熱力圖也能切換族群分類 | 6 | 4 | 6 | 4 | 1.0 | Realtime page is the main screen and the requirement names industry heatmap plus 強勢族群; Finviz Themes cited, but only a tag listing page. Touches transform, realtime page and matrix (high blast), and also depends on unfinished ②③. |
+| C5 | N 卡片加群組總成交值與平均漲幅 | 6 | 5 | 3 | 2 | 5.0 | Requirement is 找資金背後的動機; cited screener volume/market-cap columns support it, but the Twelve Data source is about correlation heatmaps, so the citation is weak. |
+| C2 | N 結果匯出 CSV | 4 | 3 | 2 | 2 | 3.0 | Multi-dimension, repeatable comparison; TradingView CSV export is cited; reuses the CSV_EXPORTS table. |
+| C6 | K 時間軸標出同時爆量時點 | 7 | 5 | 4 | 3 | 2.9 | Directly tests 同一筆資金同時進場; XQ 大戶買賣力 is cited; touches K payload and race.js. |
+| C4 | N 卡片可排序 | 3 | 3 | 2 | 2 | 2.3 | UX convenience; does not advance the funding-motive goal; cited TradingView sorting is generic. |
+| C3 | N 卡片顯示連動趨勢（短窗 vs 20 日 R） | 6 | 5 | 5 | 3 | 2.0 | Tests whether co-funding linkage is still current; rolling-correlation sources cited; touches finder.py, finder.js, and tests. |
 
-TOP: R2 (2.5)
+TOP: C5 (5.0)

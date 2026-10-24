@@ -1,6 +1,5 @@
 | # | Candidate | Impact | Urgency | Effort | Blast | Score | Reason |
 |---|---|---|---|---|---|---|---|
-| AL1 | 即時熱力圖「找股票」搜尋框 | 5 | 5 | 3 | 2 | 4.2 | Requirement is 2,400-cell heatmap plus info card on click; top heatmap tools offer quick locate; no overlap with rejected items, no new dependency |
-| AL2 | B 排行名次變化擴充為 5／20 日前 | 4 | 3 | 4 | 3 | 1.0 | Extends bonus-18 rank change to multi-period rotation; cited IBD table supports it, but daily rank change already exists and the API, column, and rank logic all change |
+| O1 | K 的分時相關也排除鎖漲停的平線（與 N 一致） | 7 | 6 | 3 | 4 | 3.5 | Requirement is judging co-investment by intraday correlation, and the user already agreed limit-ups distort it; cited NCCU study says limit observations distort return correlation. Not in section 4, no new dependency, est. ~40 lines in 2–3 files. |
 
-TOP: AL1 (4.2)
+TOP: O1 (3.5)

@@ -1,5 +1,6 @@
 | # | Candidate | Impact | Urgency | Effort | Blast | Score | Reason |
 |---|---|---|---|---|---|---|---|
-| AO1 | 盤中族群轉強提醒（穿越門檻提示） | 3 | 2 | 3 | 2 | 1.0 | Requirement is 盤中看熱力圖找強勢族群 and view-only; alerts are a secondary add-on, not in the requirement. Near-duplicate of V1 (0.4, rejected in result.md as "超出只看盤需求、需權限與去重邏輯"); the crossing rule only partly addresses that. Sources are cited, no new dep, not in scope.md section 4. |
+| Q2 | N 卡片成員 chip tooltip 列各檔法人張數 | 5 | 4 | 1 | 1 | 20.0 | Requirement 尋找資金＝背後動機; top tools show per-stock institutional flow (Goodinfo, 財報狗); bonus-17 already carries per-member inst_net, so this is a tooltip-only change, about 10 lines. |
+| Q1 | N 卡片法人連買／連賣 N 天 | 6 | 5 | 4 | 3 | 2.5 | Requirement asks whether someone keeps building a position; top tools rank 法人連續買超天數 (Goodinfo, CMoney, Yahoo); about 5 files and 45 lines, and it changes the with_history and describe paths. |
 
-TOP: none (all below 2)
+TOP: Q2 (20.0)

@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { OVERSEAS, aggregateCounties, buildMapOption, countyTooltip, turnoverColor } from '../../static/js/countymap.js';
+import { OVERSEAS, aggregateCounties, buildMapOption, countyCompaniesHtml, countyTooltip, turnoverColor } from '../../static/js/countymap.js';
 
 const s = (code, turnover_100m, change_pct, kind = 'stock', industry = 'X') => ({
   code, name: `n${code}`, kind, industry, turnover_100m, change_pct, change: change_pct, market_cap: 100, prev_close: 10,
@@ -49,4 +49,20 @@ test('countyListHtml sorts by the chosen metric and shows shares', async () => {
   assert.deepEqual(order(countyListHtml(rows, 'turnover')), ['臺北市', '新竹市']);
   assert.deepEqual(order(countyListHtml(rows, 'change')), ['新竹市', '臺北市']);
   assert.match(countyListHtml(rows), /75\.0%/);
+});
+
+test('countyCompaniesHtml: every company of the county, sortable, rows open the card', () => {
+  const stocks = [s('1', 10, 1), s('2', 30, -1), s('3', 5, 2)];
+  const { rows } = aggregateCounties(stocks, { 1: ['臺北市'], 2: ['臺北市'], 3: ['臺北市'] });
+  assert.deepEqual(rows[0].members.map((m) => m.code), ['1', '2', '3']); // all of them, not just the top 3
+  const codes = (html) => [...html.matchAll(/data-code="([^"]+)"/g)].map((m) => m[1]);
+  assert.deepEqual(codes(countyCompaniesHtml(rows[0])), ['2', '1', '3']); // 成交值 high first
+  assert.deepEqual(codes(countyCompaniesHtml(rows[0], 'change_pct')), ['3', '1', '2']);
+  assert.deepEqual(codes(countyCompaniesHtml(rows[0], 'code')), ['1', '2', '3']);
+  const html = countyCompaniesHtml(rows[0], 'change_pct');
+  assert.match(html, /data-act="back">← 回縣市/);
+  assert.match(html, /<b>臺北市<\/b> <span class="muted">3 家/);
+  assert.match(html, /data-sort="change_pct"[^>]*>漲跌 ▾/);
+  assert.equal(countyCompaniesHtml(null), '');
+  assert.deepEqual(codes(countyCompaniesHtml(rows[0], 'bogus')), ['2', '1', '3']); // unknown sort: 成交值
 });

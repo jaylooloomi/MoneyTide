@@ -60,6 +60,22 @@ def test_buckets_and_returns_stay_within_a_session():
     assert r[0] == pytest.approx((102 / 101 - 1) * 100) and r[2] is None
 
 
+def test_returns_skip_a_locked_limit_up_line():
+    from openmarket.history.linkage import locked_level
+
+    closes = {0: 100.0, 1: 105.0, 2: 110.0, 3: 110.0, 4: 110.0}
+    row = {"prev_close": 100.0, "high": 110.0}  # limit-up 110: locked from bucket 2
+    lvl = locked_level(closes, row)
+    assert lvl == 110.0
+    r = returns(closes, [0, 1, 2, 3, 4], lvl)
+    assert r[1] == pytest.approx((110 / 105 - 1) * 100) and r[2] is None and r[3] is None
+    # Yahoo back-adjusted scale: the top close still marks the lock
+    scaled = {k: v * 0.97 for k, v in closes.items()}
+    assert returns(scaled, [0, 1, 2, 3, 4], locked_level(scaled, row))[2] is None
+    assert locked_level(closes, {"prev_close": 100.0, "high": 106.0}) is None  # never reached limit-up
+    assert locked_level(closes, None) is None and returns(closes, [0, 1, 2, 3, 4])[2] == 0
+
+
 def test_yahoo_parse_and_symbol():
     days = parse_chart(json.loads((FIX / "yahoo_5m_2330_TW.json").read_text()))
     last = days[max(days)]
@@ -233,3 +249,18 @@ def test_align_bars_undoes_yahoo_back_adjustment():
     assert align_bars(same, {"high": 314.0, "low": 296.5}) == same
     odd = [("09:00", 334.0, 296.5, 300.0, 300.0, 1.0)]  # high off, low equal: not one factor → untouched
     assert align_bars(odd, {"high": 314.0, "low": 296.5}) == odd
+
+
+def test_limit_up_price_is_the_tick_price_not_one_rebuilt_from_the_rounded_pct():
+    from openmarket.history.linkage import limit_up_pct, limit_up_price, locked_level
+
+    assert limit_up_price(487.5) == 536 and limit_up_pct(487.5) == 9.95  # 487.5 × 1.0995 = 536.006
+    assert limit_up_price(333.5) == 366.5 and limit_up_price(100) == 110 and limit_up_price(None) is None
+    closes = {0: 530.0, 1: 536.0, 2: 536.0}
+    assert locked_level(closes, {"prev_close": 487.5, "high": 536.0}) == 536.0  # was None before
+    bad = 0
+    for k in range(1000, 10000):  # every 0.1 tick from 100 to 1000: a high at limit-up is always caught
+        prev = k / 10
+        if locked_level({0: 1.0}, {"prev_close": prev, "high": limit_up_price(prev)}) is None:
+            bad += 1
+    assert bad == 0

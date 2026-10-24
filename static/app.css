@@ -376,3 +376,18 @@ table.link-heat td.self { background: #3a3e48; }
 .fd-filter { margin-bottom: 8px; flex-wrap: wrap; }
 .fd-filter button small { opacity: .7; margin-left: 2px; }
 .fd-filter button:disabled { opacity: .35; cursor: default; }
+.rt-row.bench { cursor: default; background: #ffd4000a; border-bottom: 1px solid #ffd40033; }
+.rt-row.bench .rt-name { color: #ffd400; font-weight: 600; }
+.fd-save { margin-left: 4px; font-size: 11px; padding: 0 6px; flex: none; white-space: nowrap; width: auto; }
+.fd-money { font-size: 12px; margin-bottom: 4px; color: #cfd3dc; }
+.fd-funnel { padding: 2px 10px 0; font-size: 12px; text-align: right; }
+.fd-funnel:empty { display: none; }
+.fd-presets { margin-right: 6px; }
+.fd-seen { flex: none; font-size: 11px; padding: 0 5px; border-radius: 3px; background: #b8301a; color: #fff; white-space: nowrap; }
+.fd-seen.new { background: #2c4a6b; }
+.fd-themes { font-size: 12px; margin-top: 4px; color: #ffcf7a; }
+.fd-detail .panel-h .fd-themes { margin-top: 0; }
+.fd-digest { color: #ffd400; border-color: #6b5a1e; margin-right: 8px; white-space: nowrap; }
+.fd-inst { font-size: 12px; margin-bottom: 4px; color: #cfd3dc; }
+.cm-drill-h { display: flex; align-items: center; gap: 6px; padding: 4px 2px 6px; position: sticky; top: 0; background: var(--panel); z-index: 1; }
+.cm-drill-h button { width: auto; white-space: nowrap; }

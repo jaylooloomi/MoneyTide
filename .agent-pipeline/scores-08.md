@@ -1,6 +1,6 @@
 | # | Candidate | Impact | Urgency | Effort | Blast | Score | Reason |
 |---|---|---|---|---|---|---|---|
-| X1 | 即時產業矩陣加入近 5／20 日欄 | 4 | 3 | 3 | 2 | 2.0 | Requirement is live sector heatmap plus strong-sector tracking; live page lacks multi-week view that bonus-10 added only to history B. Cites OpenBB and finvizfinance perf-period views. Frontend-only change to app.js and index.html. |
-| X2 | 網址保存檢視狀態（日期／分組／模式） | 4 | 3 | 2 | 3 | 2.0 | Requirement is retrospective review of each day's strong sectors; a bookmarkable day/group view serves that. Cites Finviz map URL parameters. Hash sync touches history.js and app.js navigation, so it may conflict with existing routing (not verified). |
+| F1 | 背景預算最近 5 個交易日 | 6 | 6 | 2 | 3 | 6.0 | Requirement is the whole search under 1 min; cites cache-warmer and post-close snapshot practice (maverick-mcp, Barchart). Limited to one file (api.py), ~15 lines, but extra background load at startup. |
+| F2 | N 卡片 20 日迷你走勢（群組累積 vs 大盤） | 5 | 4 | 5 | 4 | 1.0 | Ties to capital-motive persistence, with sourced sparkline precedents (TradingView, Google Sheets). Not requested by the user, 3-4 files, and computing 20-day group paths adds per-search cost against the 1-min goal. |
 
-TOP: X1 (2.0)
+TOP: F1 (6.0)

@@ -43,7 +43,7 @@ export function statsAt(data, m) {
   let locked = false;
   if (limit) {
     for (const [t, , , , c] of bars) {
-      const at = c >= limit - 0.005;
+      const at = c >= limit * (1 - 2e-4); // the price rebuilt from the rounded % can sit just above the real one (487.5 → 536.006)
       if (at && firstLock === null) firstLock = t;
       if (locked && !at) opens += 1;
       locked = at;
@@ -102,10 +102,25 @@ export function priceRange(data) {
   return { min: lo - pad, max: hi + pad, up: showUp ? up : null, down: showDown ? down : null };
 }
 
-export function buildIntradayOption(data, m) {
+export const BENCH_COLORS = ['#7fb3ff', '#f0a35e']; // 大盤, 櫃買
+
+/** A benchmark's race points ([[minute, close %, …]]) up to minute m, drawn at the same % of this
+ *  stock's previous close: on the right-hand % axis the two lines read against each other directly. */
+export function benchPath(points, prev, m) {
+  return (points || []).filter((p) => p[0] <= m).map((p) => [p[0], priceAt(prev, p[1])]);
+}
+
+export function buildIntradayOption(data, m, benches = []) {
   const prev = data.prev_close;
   const bars = data.bars.filter((b) => b[0] <= m);
   const range = priceRange(data);
+  const benchLines = benches.map((b) => ({ name: b.name, all: benchPath(b.points, prev, END), path: benchPath(b.points, prev, m) }));
+  for (const b of benchLines) {
+    for (const [, price] of b.all) {
+      range.min = Math.min(range.min, price);
+      range.max = Math.max(range.max, price);
+    }
+  }
   const s = statsAt(data, m);
   const color = s && s.last < prev ? DOWN : UP;
   const lines = [{ yAxis: prev, lineStyle: { color: '#8a8f9c', type: 'dashed' }, label: { show: false } }];
@@ -140,7 +155,12 @@ export function buildIntradayOption(data, m) {
         const t = ps[0]?.value?.[0];
         const b = bars.find((x) => x[0] === t);
         if (!b) return '';
-        return `${fmtClock(t)}<br>價 ${b[4]}（${fmtPct(pctOf(b[4]))}）<br>高 ${b[2]}　低 ${b[3]}${b[5] != null ? `<br>量 ${Math.round(b[5] / 1000).toLocaleString()} 張` : ''}`;
+        const idx = benchLines
+          .map((x) => [x.name, x.path.filter((p) => p[0] <= t).at(-1)])
+          .filter(([, p]) => p)
+          .map(([name, p]) => `<br>${escapeHtml(name)} ${fmtPct(pctOf(p[1]))}`)
+          .join('');
+        return `${fmtClock(t)}<br>價 ${b[4]}（${fmtPct(pctOf(b[4]))}）<br>高 ${b[2]}　低 ${b[3]}${b[5] != null ? `<br>量 ${Math.round(b[5] / 1000).toLocaleString()} 張` : ''}${idx}`;
       },
     },
     xAxis: [xAxis(0, false), xAxis(1, true)],
@@ -172,6 +192,17 @@ export function buildIntradayOption(data, m) {
           : undefined,
       },
       { name: '均價', type: 'line', xAxisIndex: 0, yAxisIndex: 0, data: vwapPath(data.bars, m), showSymbol: false, lineStyle: { color: '#c39bd3', width: 1.2 } },
+      ...benchLines.map((b, i) => ({
+        name: b.name,
+        type: 'line',
+        xAxisIndex: 0,
+        yAxisIndex: 0,
+        data: b.path,
+        showSymbol: false,
+        silent: true,
+        z: 1,
+        lineStyle: { color: BENCH_COLORS[i % BENCH_COLORS.length], width: 1, type: 'dashed', opacity: 0.8 },
+      })),
       {
         name: '量',
         type: 'bar',
@@ -217,7 +248,7 @@ export function infoHtml(data, s, m) {
 // ---- DOM / ECharts ---------------------------------------------------------------------
 
 /** The chart panel inside `el`; load(code) fetches a member, sync(m) redraws up to minute m. */
-export function mountIntraday(el, { date, onCard }) {
+export function mountIntraday(el, { date, onCard, benchmarks = [] }) {
   el.innerHTML = `<div class="ic-head"><b class="ic-title"></b><span class="muted ic-note"></span>
       <button type="button" class="icon wide ic-card">資訊卡</button></div>
     <div class="ic-body"><div class="ic-chart"></div><div class="ic-side"></div></div>`;
@@ -244,7 +275,7 @@ export function mountIntraday(el, { date, onCard }) {
       state.chart = echarts.init(chartEl);
       new ResizeObserver(() => state.chart?.resize()).observe(chartEl);
     }
-    state.chart.setOption(buildIntradayOption(d, state.m), { notMerge: true });
+    state.chart.setOption(buildIntradayOption(d, state.m, benchmarks), { notMerge: true });
     side.innerHTML = infoHtml(d, statsAt(d, state.m), state.m);
   }
 
@@ -267,7 +298,7 @@ export function mountIntraday(el, { date, onCard }) {
     }
     if (t !== state.ticket) return;
     state.data = d;
-    note.textContent = `${d.step_min === 5 ? '5 分 K' : '1 分 K'}${d.source === 'recorded' ? '（自錄，無成交量）' : ''}；紫線＝均價；● 日內最高點`;
+    note.innerHTML = `${d.step_min === 5 ? '5 分 K' : '1 分 K'}${d.source === 'recorded' ? '（自錄，無成交量）' : ''}；紫線＝均價；● 日內最高點${benchmarks.length ? `；虛線＝${benchmarks.map((b, i) => `<span style="color:${BENCH_COLORS[i % BENCH_COLORS.length]}">${escapeHtml(b.name)}</span>`).join('／')}（同一 % 軸）` : ''}`;
     draw();
   }
 

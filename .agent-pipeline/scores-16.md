@@ -1,5 +1,5 @@
 | # | Candidate | Impact | Urgency | Effort | Blast | Score | Reason |
 |---|---|---|---|---|---|---|---|
-| 1 | AG1 B 排行名次變化欄（▲▼） | 5 | 4 | 3 | 2 | 3.3 | Requirement is 回溯每天強勢族群／輪動; rank change is a useful derivative with cited TradingView rotation dashboards, but C matrix already shows strength and this is additive to B only. |
+| K1 | 歷史頁頂端一行「今天 N 找到 X 群（🔁 Y 群持續）」，點了跳到 N | 5 | 4 | 3 | 2 | 3.3 | Requirement is daily "where is the money going, same money?"; moomoo float/bottom bar shows signal count with drill-down (cited). Effort is 3, not 2, because the 找法2 stored-only read is assumed, not confirmed (bonus-08 only used 找法1). Blast is limited to the toolbar line. |
 
-TOP: 1 (3.3)
+TOP: K1 (3.3)

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import sqlite3
 import threading
+from collections.abc import Iterable
 from contextlib import contextmanager
 from datetime import date, datetime
 from pathlib import Path
@@ -416,18 +417,36 @@ class HistoryStore:
         with self._conn() as c:
             return {date.fromisoformat(r["date"]) for r in c.execute("SELECT date FROM inst_day")}
 
-    def inst_net(self, days: list[date]) -> dict[date, dict[str, float]]:
-        """{day: {code: 三大法人 net shares}}"""
+    def inst_net(self, days: list[date], codes: Iterable[str] | None = None) -> dict[date, dict[str, float]]:
+        """{day: {code: 三大法人 net shares}}; `codes` limits it to those stocks (a few cards, not ~2,000)."""
+        return self._inst_column("total_net", days, codes)
+
+    def _inst_column(self, column: str, days: list[date], codes: Iterable[str] | None) -> dict[date, dict[str, float]]:
         if not days:
             return {}
         out: dict[date, dict[str, float]] = {d: {} for d in days}
-        marks = ", ".join("?" for _ in days)
+        sql = f"SELECT date, code, {column} FROM inst_daily WHERE date IN ({', '.join('?' for _ in days)})"
+        args = [d.isoformat() for d in days]
+        if codes is not None:
+            codes = sorted(set(codes))
+            sql += f" AND code IN ({', '.join('?' for _ in codes)})"
+            args += codes
         with self._conn() as c:
-            for d, code, net in c.execute(
-                f"SELECT date, code, total_net FROM inst_daily WHERE date IN ({marks})", [d.isoformat() for d in days]
-            ):
+            for d, code, net in c.execute(sql, args):
                 out[date.fromisoformat(d)][code] = net or 0.0
         return out
+
+    def inst_split(self, day: date) -> dict[str, tuple[float, float, float]]:
+        """{code: (外資, 投信, 自營) net shares} for one day."""
+        with self._conn() as c:
+            return {
+                code: (f or 0.0, t or 0.0, d or 0.0)
+                for code, f, t, d in c.execute("SELECT code, foreign_net, trust_net, dealer_net FROM inst_daily WHERE date = ?", (day.isoformat(),))
+            }
+
+    def inst_trust(self, days: list[date], codes: Iterable[str] | None = None) -> dict[date, dict[str, float]]:
+        """{day: {code: 投信 net shares}}"""
+        return self._inst_column("trust_net", days, codes)
 
     def inst_version(self, day: date | None = None) -> int:
         return self._inst_version if day is None else self._inst_day_version.get(day, 0)

@@ -7,6 +7,7 @@ import logging
 import mimetypes
 from dataclasses import asdict
 from datetime import date, datetime, time
+from itertools import takewhile
 from collections.abc import AsyncIterator, Mapping
 from pathlib import Path
 
@@ -22,11 +23,12 @@ from .config import STATIC_DIR, TAIPEI, USER_AGENT, AppConfig
 from .explain import explain_day
 from .history.linkage import (
     INTRADAY_HIGH_R, INTRADAY_LOW_R, bucket_closes, daily_linkage, fmt_minute, pair_matrix, peak_minute_from_bars, peak_minute_from_ticks,
-    align_bars, amplitude_pct, limit_down_pct, limit_up_pct, minute_bars, turnover_rate, peak_stats, tick_bars, with_close_bar, race_points, returns, top_members, verdict_r, verdict_timing,
+    align_bars, amplitude_pct, limit_down_pct, limit_up_pct, minute_bars, turnover_rate, peak_stats, tick_bars, with_close_bar, race_points, returns, locked_level, top_members, verdict_r, verdict_timing,
 )
-from .history.finder import FinderParams, run_search
+from .history.finder import INST_STREAK_DAYS, FinderParams, inst_streak, inst_summary, persistence, run_search
+from .history.finder import news_themes as finder_news_themes  # api.py has its own news_themes route
 from .intraday import IntradayRecorder
-from .sources.yahoo_intraday import ONE_MINUTE_DAYS, fetch_bars, fetch_day_1m, fetch_span_1m
+from .sources.yahoo_intraday import INDEX_SYMBOLS, ONE_MINUTE_DAYS, fetch_bars, fetch_day_1m, fetch_span_1m
 from .news_themes import NewsThemeCollector, heat_bursts, themes_for_day, themes_mapping
 from .concepts import ConceptLoader
 from .groups import GroupStore
@@ -514,12 +516,16 @@ def create_app(
 
             if yahoo_sessions:
                 await asyncio.gather(*(one(m) for m in members))
+            benchmarks = await index_race(http, d)
         axis = list(range(0, 55))
+        rows_by_session = {s: {r["code"]: r for r in rs} for s, rs in (await asyncio.to_thread(store.rows, sessions)).items()}
         series = []
         for c in codes:
             r: list = []
             for s in sessions:
-                r.extend(returns(per_code_sessions[c].get(s, {}), axis))
+                closes = per_code_sessions[c].get(s, {})
+                # locked limit-up stretches left out, as in N (a flat locked line says nothing)
+                r.extend(returns(closes, axis, locked_level(closes, rows_by_session.get(s, {}).get(c))))
             series.append(r)
         matrix, r_intraday = pair_matrix(series, min_points=20)
         for m in members:  # 13:30 = the official close (no Yahoo bar covers the closing auction)
@@ -528,6 +534,7 @@ def create_app(
                 race[m["code"]] = [p for p in race[m["code"]] if p[0] < 270] + [[270, close, close, close]]
         peak_list = [peaks[c] for c in codes]
         std, lag = peak_stats(peak_list)
+        inst = (await asyncio.to_thread(store.inst_net, [d])).get(d, {})  # 三大法人 net shares (posted after the close)
         return {
             "date": d.isoformat(),
             "members": [
@@ -535,6 +542,7 @@ def create_app(
                     "code": m["code"], "name": m["name"], "market_cap": m["market_cap"], "change_pct": m["change_pct"],
                     "limit_up_pct": limit_up_pct(m.get("prev_close")),
                     "turnover_rate": turnover_rate(m), "amplitude_pct": amplitude_pct(m),
+                    "inst_net": inst.get(m["code"]),
                 }
                 for m in members
             ],
@@ -545,9 +553,34 @@ def create_app(
             "peak_std_min": std,
             "race": {"step_min": 5 if coarse else 1, "points": race},
             "leader_lag_min": lag,
+            "benchmarks": benchmarks,
             "verdict": {"daily": verdict_r(daily.get("r20")), "intraday": verdict_r(r_intraday, INTRADAY_HIGH_R, INTRADAY_LOW_R), "timing": verdict_timing(std)},
             "notes": notes,
         }
+
+    async def index_race(http: httpx.AsyncClient, d: date) -> list[dict]:
+        """大盤 / 櫃買 for the top of K's timeline: 1m (else 5m) index bars aligned to the official index,
+        ending on its close. A market without a stored index row that day is left out."""
+        index = app.state.history.index_rows().get(d.isoformat(), {})
+
+        async def one(code: str, name: str, market: str) -> dict | None:
+            row = index.get(market)
+            if not row or row.get("close") is None or row.get("change") is None:
+                return None
+            prev = row["close"] - row["change"]
+            bars, _ = await minute_bars_for(http, code, market, d)
+            if not bars:
+                got, _ = await bars_for(http, code, market, [d])
+                bars = got.get(d, [])
+            pts = race_points([(x[0], x[1], x[2], x[3]) for x in align_bars(bars, row)], prev) if bars else []
+            if pts:
+                close = round(row["change"] / prev * 100, 2)
+                pts = [p for p in pts if p[0] < 270] + [[270, close, close, close]]
+            return {"code": code, "name": name, "change_pct": round(row["change"] / prev * 100, 2), "points": pts}
+
+        # both indexes at once: a slow Yahoo must not add its timeouts twice to every K load
+        got = await asyncio.gather(*(one(code, name, market) for code, (name, market) in INDEX_SYMBOLS.items()))
+        return [x for x in got if x is not None]
 
     def _day(day: str) -> date:
         try:
@@ -573,6 +606,7 @@ def create_app(
     # ---- N · 資金連動搜尋 (history/finder.py) -----------------------------------------------------
 
     FINDER_CONCURRENCY = 12  # Yahoo served 92 stocks in ~2 s at 6–24 at once (2026-10-24 test)
+    NEWS_THEME_DAYS = 7  # 📰 only news days this close to the shown day (a gap in collection must not show old news)
     finder_running: dict[tuple, asyncio.Task] = {}
     finder_progress: dict[tuple, dict] = {}  # (date, method, key) → {stage, done, total} while running
 
@@ -665,14 +699,45 @@ def create_app(
                 raise HTTPException(422, f"{f.name}: {raw!r}") from exc
         return dataclasses.replace(base, **values)
 
-    async def finder_result(d: date, method: str, p: FinderParams, refresh: bool = False) -> dict:
+    async def finder_result(d: date, method: str, p: FinderParams, refresh: bool = False, stored_only: bool = False) -> dict:
         store = app.state.history
         groupings, missing = finder_groupings(p.groupings, d)
         key = p.key() + "|" + ",".join(sorted(groupings))
+        def with_history(res: dict) -> dict:
+            # 🔁 the same combination on the earlier days of the window (stored results only, never computed)
+            earlier_days = store.trading_dates(up_to=d, limit=FINDER_PRECOMPUTE_DAYS)[1:]
+            earlier = {e.isoformat(): r for e in earlier_days if (r := store.finder(e, method, key)) is not None}
+            groups = persistence(res.get("groups", []), earlier)
+            # 📰 the news keywords naming each member (the latest 3 news days within a week up to d), attached, not stored
+            news = [store.news_day(x) for x in store.news_dates_sorted(up_to=d, limit=3) if (d - x).days <= NEWS_THEME_DAYS]
+            # 🏦 法人 read now, not from the stored result: it is published after the close
+            by_code = {r["code"]: r for r in store.day_rows(d)}
+            groups = inst_summary(groups, store.inst_net([d]).get(d, {}), by_code)
+            # 法人連買／連賣 over the latest 法人 days up to d
+            # on trading days, stopping at the first one without 法人: a gap must not join two runs
+            have = store.inst_dates()
+            inst_days = list(takewhile(lambda x: x in have, store.trading_dates(up_to=d, limit=INST_STREAK_DAYS)))
+            member_codes = {m["code"] for g in groups for m in g["members"]}  # 20 days × the cards' stocks only
+            groups = inst_streak(groups, store.inst_net(inst_days, member_codes), inst_days)
+            # 外資／投信／自營 summed over the members, in 張 (their motives differ: 投信 themes, 外資 weights)
+            split = store.inst_split(d)
+
+            def by_kind(g: dict) -> dict | None:
+                rows = [split[m["code"]] for m in g["members"] if m["code"] in split]
+                return {k: round(sum(r[i] for r in rows) / 1000) for i, k in enumerate(("foreign", "trust", "dealer"))} if rows else None
+
+            groups = [{**g, "inst_split": by_kind(g)} for g in groups]
+            # 投信連買／連賣: the same streak on 投信 alone (theme / window-dressing positioning)
+            trust = inst_streak(groups, store.inst_trust(inst_days, member_codes), inst_days)
+            groups = [{**g, "trust_streak": t["inst_streak"]} for g, t in zip(groups, trust)]
+            return {**res, "groups": finder_news_themes(groups, news)}
+
         if not refresh:
             hit = await asyncio.to_thread(store.finder, d, method, key)
             if hit is not None:
-                return {**hit, "cached": True, "missing_groupings": missing}
+                return {**await asyncio.to_thread(with_history, hit), "cached": True, "missing_groupings": missing}
+        if stored_only:  # another panel peeking (B's 🔗): never start a search for it
+            return {"date": d.isoformat(), "method": method, "groups": [], "stored": False, "cached": False, "missing_groupings": missing}
         k = (d, method, key)
         task = finder_running.get(k)
         if task is None:
@@ -689,18 +754,25 @@ def create_app(
             task = finder_running[k] = asyncio.create_task(go())
             task.add_done_callback(lambda _: (finder_running.pop(k, None), finder_progress.pop(k, None)))
         res = await task
-        return {**res, "cached": False, "missing_groupings": missing}
+        return {**await asyncio.to_thread(with_history, res), "cached": False, "missing_groupings": missing}
+
+    FINDER_PRECOMPUTE_DAYS = 5  # the latest stored days kept ready, newest first
+    FINDER_PRECOMPUTE_PAUSE = 5  # seconds between two real runs, so the app stays responsive
 
     async def finder_precompute() -> None:
-        """After the close, run both searches with the default thresholds for the latest stored day."""
+        """After the close, keep both searches with the default thresholds ready for the latest
+        FINDER_PRECOMPUTE_DAYS days (a stored day returns at once; only missing ones are computed)."""
         await asyncio.sleep(180)  # let the start-up collectors settle first
         while True:
             try:
-                days = app.state.history.trading_dates(limit=1)
-                groupings, missing = finder_groupings(FinderParams().groupings, days[0]) if days else ({}, ["all"])
-                if days and not missing:
+                for day in app.state.history.trading_dates(limit=FINDER_PRECOMPUTE_DAYS):
+                    _, missing = finder_groupings(FinderParams().groupings, day)
+                    if missing:  # concept / chain groups not loaded yet: try again next round
+                        break
                     for method in ("known", "new"):
-                        await finder_result(days[0], method, FinderParams())
+                        res = await finder_result(day, method, FinderParams())
+                        if not res.get("cached"):
+                            await asyncio.sleep(FINDER_PRECOMPUTE_PAUSE)
             except asyncio.CancelledError:
                 raise
             except Exception:
@@ -708,11 +780,14 @@ def create_app(
             await asyncio.sleep(600)
 
     @app.get("/api/history/finder")
-    async def finder_api(request: Request, day: str = Query(..., alias="date"), method: str = Query("known", pattern="^(known|new)$"), refresh: bool = False) -> dict:
+    async def finder_api(
+        request: Request, day: str = Query(..., alias="date"), method: str = Query("known", pattern="^(known|new)$"),
+        refresh: bool = False, stored_only: bool = False,
+    ) -> dict:
         d = _day(day)
         if not app.state.history.day_rows(d):
             raise HTTPException(404, f"no data for {day}")
-        return await finder_result(d, method, finder_params(request.query_params), refresh)
+        return await finder_result(d, method, finder_params(request.query_params), refresh, stored_only)
 
     @app.get("/api/history/finder/progress")
     def finder_progress_api(request: Request, day: str = Query(..., alias="date"), method: str = Query("known", pattern="^(known|new)$")) -> dict:

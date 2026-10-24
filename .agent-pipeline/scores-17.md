@@ -1,5 +1,6 @@
 | # | Candidate | Impact | Urgency | Effort | Blast | Score | Reason |
 |---|---|---|---|---|---|---|---|
-| 1 | AH1 啟動後背景預熱歷史快取 | 4 | 5 | 3 | 3 | 2.2 | Requirement is browsing past days' strong groups, and the 4–7 s cold start hits that directly; sources are generic Redis/Aerospike cache-warming posts, not heatmap apps; background thread touches HistoryCollector and SQLite timing. |
+| L7 | C 族群輪動改成「捲到才載入」 | 6 | 7 | 2 | 3 | 7.0 | 直接對應「跑太久」抱怨與 C 的 94 秒冷啟動；A/B/K 開頁不被拖慢；1 檔、約 40 行，只改載入時機，不改計算結果。 |
+| L2 | 即時頁收盤後顯示「💡 資金連動」摘要 | 4 | 3 | 2 | 2 | 3.0 | 需求是每天先看資金往哪裡，但收盤後停在即時頁是弱痛點，且未回應慢的問題；摘要列 K1 已在歷史頁做過，只是重複到另一頁；引用的 moomoo float bar 只支持概念。 |
 
-TOP: 1 (2.2)
+TOP: L7 (7.0)

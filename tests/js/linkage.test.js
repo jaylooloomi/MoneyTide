@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { clusterOrder, loners, matrixBlock, matrixHtml, summaryHtml, topPairs } from '../../static/js/linkage.js';
+import { clusterOrder, instSummaryHtml, loners, matrixBlock, matrixHtml, summaryHtml, topPairs } from '../../static/js/linkage.js';
 
 test('matrix: diagonal dash, values, escaping', () => {
   const html = matrixHtml(['A', '<b>'], [[1, 0.82], [0.82, 1]]);
@@ -20,6 +20,15 @@ test('summary shows verdicts and sources', () => {
   assert.match(html, /群體圍攻/);
   assert.match(html, /10-22 自錄、10-21 Yahoo/);
   assert.match(html, /\+3 分/);
+});
+
+test('instSummaryHtml: 法人 of the shown members, labelled as such, nothing before 法人 is out', () => {
+  const html = instSummaryHtml([{ inst_net: 2_010_223 }, { inst_net: 1_208_317 }, { inst_net: -1000 }, { inst_net: null }]);
+  assert.match(html, /法人（前 4 大成員）<\/span> <b class="up">\+3,218 張<\/b> <small class="muted">買超 2／賣超 1<\/small>/);
+  assert.match(html, /不是整個族群/);
+  assert.equal(instSummaryHtml([{ inst_net: null }]), '');
+  assert.equal(instSummaryHtml(undefined), '');
+  assert.match(summaryHtml({ daily: {}, intraday: { sessions: [] }, verdict: {}, leader_lag_min: null, peak_std_min: null, members: [{ inst_net: -5000 }] }), /−5 張/);
 });
 
 // two blocks that move together (A,C) and (B,D), and E on its own

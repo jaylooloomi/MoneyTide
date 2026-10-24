@@ -20,16 +20,17 @@ from __future__ import annotations
 import json
 import math
 import operator
+import re
 from collections.abc import Awaitable, Callable, Iterable, Mapping
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import asdict, dataclass, field
 from datetime import date
 from itertools import combinations
 
-from .linkage import align_bars, amplitude_pct, limit_up_pct, minutes, pearson, turnover_rate
+from .linkage import align_bars, amplitude_pct, limit_up_price, minutes, pearson, turnover_rate
 from .store import HistoryStore
 
-FINDER_VERSION = 2  # part of the cache key: bump when the search logic changes, so stored results are redone
+FINDER_VERSION = 6  # part of the cache key: bump when the search logic changes, so stored results are redone (5 was used by a reverted experiment)
 PEAK_END = 240  # the intraday high is taken over 09:00–13:00
 OPEN_MINUTES = 2  # a high at 09:00–09:02 is the open, not a signal (unless locked limit-up)
 BUCKETS = 54  # 5-minute buckets 09:00–13:25
@@ -53,13 +54,16 @@ class FinderParams:
     dense: float = 0.7  # each member passes with ≥ this share of the group
     min_size: int = 2
     pool_top: int = 50  # 找法2: top N of each ranking
+    new_min_volume_lots: float = 300  # 找法2: the pool only takes stocks that traded at least this many 張
     pool_sources: tuple[str, ...] = ("gain", "turnover", "share_z")
     share_window: int = 20  # days behind the 成交比重暴增 z-score
     groupings: tuple[str, ...] = ("industry", "custom", "concept", "chain", "news")
     max_fetch: int = 400  # at most this many stocks get intraday bars (largest candidate sets first)
 
     def key(self) -> str:
-        return json.dumps({**asdict(self), "v": FINDER_VERSION}, sort_keys=True, ensure_ascii=False)
+        # list-type settings are sets: the same groupings in another order are the same search
+        fields = {k: sorted(v) if isinstance(v, (list, tuple)) else v for k, v in asdict(self).items()}
+        return json.dumps({**fields, "v": FINDER_VERSION}, sort_keys=True, ensure_ascii=False)
 
 
 GROUPING_LABELS = {"industry": "官方產業", "custom": "自訂族群", "concept": "概念股", "chain": "細產業", "news": "新聞族群"}
@@ -225,8 +229,13 @@ def share_z(store: HistoryStore, day: date, window: int) -> dict[str, float]:
 
 
 def candidate_pool(rows: list[dict], z: Mapping[str, float], p: FinderParams) -> dict[str, list[str]]:
-    """找法2: top `pool_top` common stocks of each ranking → {code: [sources]}."""
-    stocks = [r for r in rows if r.get("kind") == "stock" and r.get("change_pct") is not None]
+    """找法2: top `pool_top` common stocks of each ranking → {code: [sources]}; stocks under
+    `new_min_volume_lots` 張 are left out first (two thin stocks moving together are no pool of money)."""
+    stocks = [
+        r for r in rows
+        if r.get("kind") == "stock" and r.get("change_pct") is not None
+        and (r.get("volume_shares") or 0) / 1000 >= p.new_min_volume_lots
+    ]
     rankers = {
         "gain": ("漲幅", lambda r: r.get("change_pct")),
         "turnover": ("週轉率", turnover_rate),
@@ -280,9 +289,7 @@ def intraday_features(by_session: Mapping[date, list[tuple]], rows_by_session: M
     f = Intraday(resolution=resolution)
     for s in sorted(by_session):
         row = rows_by_session.get(s) or {}
-        pct = limit_up_pct(row.get("prev_close"))
-        limit = row["prev_close"] * (1 + pct / 100) if pct is not None else None
-        f.returns.extend(bucket_returns(by_session[s], limit))
+        f.returns.extend(bucket_returns(by_session[s], limit_up_price(row.get("prev_close"))))
     bars = [b for b in by_session.get(day, []) if 0 <= minutes(b[0]) <= 270]
     row = rows_by_session.get(day) or {}
     if not bars:
@@ -294,9 +301,8 @@ def intraday_features(by_session: Mapping[date, list[tuple]], rows_by_session: M
         before = [b for b in window if minutes(b[0]) <= f.peak]
         lo = min(b[2] for b in before)
         f.start = max(minutes(b[0]) for b in before if b[2] == lo)  # the last touch of the low before the run
-    pct = limit_up_pct(row.get("prev_close"))
-    if pct is not None:
-        limit = row["prev_close"] * (1 + pct / 100)
+    limit = limit_up_price(row.get("prev_close"))
+    if limit is not None:
         f.locked_at = next((minutes(b[0]) for b in bars if b[3] >= limit - 0.001), None)
     vol: dict[int, float] = {}
     for b in bars:
@@ -343,15 +349,22 @@ def pair_check(a: Intraday, b: Intraday, p: FinderParams) -> dict:
     return out
 
 
-def confirm(candidates: list[dict], feats: Mapping[str, Intraday], p: FinderParams) -> list[dict]:
-    """Stage B/C on each candidate's pairs; the passing pairs become dense cores again."""
+def confirm(candidates: list[dict], feats: Mapping[str, Intraday], p: FinderParams, funnel: dict | None = None) -> list[dict]:
+    """Stage B/C on each candidate's pairs; the passing pairs become dense cores again.
+    `funnel`, when given, is filled with what happened to each distinct pair (for tuning thresholds):
+    {pairs, no_bars, passed, rejected: {reason: count}}."""
     found = []
     seen = set()
+    outcome: dict[frozenset, str] = {}  # pair → '' (passed) / reason / '沒有分 K'
     for c in candidates:
         checks = {}
         for a, b in combinations(c["members"], 2):
+            e = frozenset((a, b))
             if a in feats and b in feats:
-                checks[frozenset((a, b))] = pair_check(feats[a], feats[b], p)
+                checks[e] = pair_check(feats[a], feats[b], p)
+                outcome[e] = "" if checks[e]["ok"] else checks[e]["reason"]
+            else:
+                outcome.setdefault(e, "沒有分 K")
         ok = [e for e, ch in checks.items() if ch["ok"]]
         for core in dense_cores(ok, p.dense, p.min_size):
             key = tuple(core)
@@ -360,6 +373,17 @@ def confirm(candidates: list[dict], feats: Mapping[str, Intraday], p: FinderPara
             seen.add(key)
             inside = {e: ch for e, ch in checks.items() if e <= set(core)}
             found.append({**c, "members": core, "pairs": inside, "daily": {e: r for e, r in c.get("daily", {}).items() if e <= set(core)}})
+    if funnel is not None:
+        rejected: dict[str, int] = {}
+        for why in outcome.values():
+            if why and why != "沒有分 K":
+                rejected[why] = rejected.get(why, 0) + 1
+        funnel.update(
+            pairs=len(outcome),
+            no_bars=sum(1 for why in outcome.values() if why == "沒有分 K"),
+            passed=sum(1 for why in outcome.values() if why == ""),
+            rejected=dict(sorted(rejected.items(), key=lambda kv: -kv[1])),
+        )
     return found
 
 
@@ -410,7 +434,20 @@ def co_mentions(names: Mapping[str, str], titles: Iterable[str], limit: int = 3)
     return out
 
 
-def describe(g: dict, rows_by_code: Mapping[str, dict], feats: Mapping[str, Intraday], groupings: Mapping[str, Callable], titles: list[str], inst: Mapping[str, float]) -> dict:
+def money_size(members: list[str], rows_by_code: Mapping[str, dict], market_turnover: float) -> dict:
+    """資金規模 of a found group: its turnover (億), that as a share of all common stocks' turnover
+    that day, and the members' equal-weight average change."""
+    rows = [rows_by_code[c] for c in members if c in rows_by_code]
+    total = sum(r.get("turnover_yuan") or 0 for r in rows)
+    pcts = [r["change_pct"] for r in rows if r.get("change_pct") is not None]
+    return {
+        "turnover_100m": round(total / 1e8, 2),
+        "turnover_share": round(total / market_turnover * 100, 3) if market_turnover else None,
+        "avg_pct": round(sum(pcts) / len(pcts), 2) if pcts else None,
+    }
+
+
+def describe(g: dict, rows_by_code: Mapping[str, dict], feats: Mapping[str, Intraday], groupings: Mapping[str, Callable], titles: list[str], inst: Mapping[str, float], market_turnover: float = 0.0) -> dict:
     members = g["members"]
     fmt = lambda m: None if m is None else f"{9 + m // 60:02d}:{m % 60:02d}"  # noqa: E731
     pairs = g.get("pairs", {})
@@ -447,8 +484,111 @@ def describe(g: dict, rows_by_code: Mapping[str, dict], feats: Mapping[str, Intr
         "kind": kind_of(matches, len(members)),
         "news": co_mentions(names, titles),
         "inst_net": sum(v for c in members if (v := inst.get(c)) is not None) or None,
+        **money_size(members, rows_by_code, market_turnover),
         "resolution": max((feats[c].resolution for c in members if c in feats), default=1),
     }
+
+
+def inst_summary(groups: list[dict], inst: Mapping[str, float], rows_by_code: Mapping[str, dict]) -> list[dict]:
+    """三大法人 of each group in the units investors read: net 張 (shares / 1000), ≈ 億元 (shares × close)
+    and how many members were net bought / sold. Attached when a result is served, so 法人 published
+    after the search (TWSE posts it around 15:00–16:30) still shows up; None while the day has none."""
+    out = []
+    for g in groups:
+        nets = {m["code"]: inst[m["code"]] for m in g["members"] if m["code"] in inst}
+        if not nets:
+            out.append({**g, "inst": None})
+            continue
+        closes = {c: rows_by_code.get(c, {}).get("close") for c in nets}
+        # 億元 only when every member with 法人 has a close: a missing one would understate it silently
+        amount = sum(v * closes[c] for c, v in nets.items()) if all(closes.values()) else None
+        out.append({
+            **g,
+            "members": [{**m, "inst_net": inst.get(m["code"])} for m in g["members"]],
+            "inst_net": sum(nets.values()),
+            "inst": {
+                "lots": round(sum(nets.values()) / 1000),
+                "amount_100m": None if amount is None else round(amount / 1e8, 2),
+                "buyers": sum(1 for v in nets.values() if v > 0),
+                "sellers": sum(1 for v in nets.values() if v < 0),
+            },
+        })
+    return out
+
+
+INST_STREAK_DAYS = 20  # 法人連買／連賣: how many 法人 days back a streak is counted at most
+
+
+def inst_streak(groups: list[dict], by_day: Mapping[date, Mapping[str, float]], days: list[date]) -> list[dict]:
+    """法人連買／連賣: on how many consecutive 法人 days (`days` newest first, the shown day first) the
+    group's summed 三大法人 net kept the same sign. Adds `inst_streak` {days, side: buy|sell} (None
+    under 2 days, or when the shown day has no 法人 yet) to copies of the groups."""
+    out = []
+    for g in groups:
+        codes = [m["code"] for m in g["members"]]
+        side, n = None, 0
+        for d in days:
+            nets = [v for c in codes if (v := by_day.get(d, {}).get(c)) is not None]
+            s = (sum(nets) > 0) - (sum(nets) < 0) if nets else 0
+            if s == 0 or (side is not None and s != side):
+                break
+            side, n = s, n + 1
+        out.append({**g, "inst_streak": {"days": n, "side": "buy" if side > 0 else "sell"} if n >= 2 else None})
+    return out
+
+
+# ---- persistence across days --------------------------------------------------------------------
+
+SAME_GROUP = 0.5  # Jaccard overlap at which two days' groups count as the same combination
+
+
+def persistence(groups: list[dict], earlier: Mapping[str, dict]) -> list[dict]:
+    """For each found group, the earlier days (stored results by ISO date) whose result holds the same
+    combination (member overlap ≥ SAME_GROUP). Adds `seen_days` (oldest first) and `checked_days`
+    (how many earlier days had a stored result to compare with) to copies of the groups."""
+    out = []
+    for g in groups:
+        mine = {m["code"] for m in g["members"]}
+        seen = []
+        for day in sorted(earlier):
+            for other in earlier[day].get("groups", []):
+                theirs = {m["code"] for m in other["members"]}
+                if len(mine & theirs) / len(mine | theirs) >= SAME_GROUP:
+                    seen.append(day)
+                    break
+        out.append({**g, "seen_days": seen, "checked_days": len(earlier)})
+    return out
+
+
+THEME_TERM = re.compile(r"^[\u4e00-\u9fffA-Za-z0-9／/+&.\-（）()]+$")  # CJK, letters, digits, a few separators
+THEMES_PER_STOCK = 3
+THEMES_PER_GROUP = 4
+
+
+def news_themes(groups: list[dict], news_days: list[dict]) -> list[dict]:
+    """「為什麼在動」: the news keywords (of the stored news days, {term: {codes: {code: n}}}) that named
+    each member, most mentions first. Adds member `themes` (top THEMES_PER_STOCK) and group `themes`
+    [{term, count}] (how many members a keyword named, top THEMES_PER_GROUP) to copies of the groups."""
+    by_code: dict[str, dict[str, int]] = {}
+    for day in news_days:
+        for term, info in day.items():
+            if not THEME_TERM.match(term):  # headline-parsing leftovers such as '音量🔊'
+                continue
+            for code, n in (info.get("codes") or {}).items():
+                by_code.setdefault(code, {})
+                by_code[code][term] = by_code[code].get(term, 0) + n
+    out = []
+    for g in groups:
+        members = []
+        group_terms: dict[str, int] = {}
+        for m in g["members"]:
+            terms = sorted(by_code.get(m["code"], {}).items(), key=lambda kv: (-kv[1], kv[0]))[:THEMES_PER_STOCK]
+            members.append({**m, "themes": [t for t, _ in terms]})
+            for t, _ in terms:
+                group_terms[t] = group_terms.get(t, 0) + 1
+        top = sorted(group_terms.items(), key=lambda kv: (-kv[1], kv[0]))[:THEMES_PER_GROUP]
+        out.append({**g, "members": members, "themes": [{"term": t, "count": n} for t, n in top]})
+    return out
 
 
 # ---- one full search ----------------------------------------------------------------------------
@@ -527,9 +667,11 @@ async def run_search(
     for code, (by_session, resolution) in got.items():
         aligned = {s: align_bars(b, session_rows.get(s, {}).get(code, {})) for s, b in by_session.items()}
         feats[code] = intraday_features(aligned, {s: session_rows.get(s, {}).get(code, {}) for s in sessions}, day, p, resolution)
-    found = confirm(cands, feats, p)
+    funnel: dict = {}
+    found = confirm(cands, feats, p, funnel)
     inst = store.inst_net([day]).get(day, {})
-    groups = [describe(g, by_code, feats, groupings, titles or [], inst) for g in found]
+    market_turnover = sum(r.get("turnover_yuan") or 0 for r in rows)  # common stocks only (rows above)
+    groups = [describe(g, by_code, feats, groupings, titles or [], inst, market_turnover) for g in found]
     groups.sort(key=lambda g: (-len(g["members"]), -(g["intraday_r"] or 0)))
     timing["intraday"] = round(time.perf_counter() - t, 2)
     return {
@@ -537,6 +679,6 @@ async def run_search(
         "method": method,
         "params": asdict(p),
         "groupings": [GROUPING_LABELS.get(g, g) for g in groupings],
-        "stats": {"candidates": len(cands), "pool": pool_size, "fetched": len(got), "groups": len(groups), "seconds": timing},
+        "stats": {"candidates": len(cands), "pool": pool_size, "fetched": len(got), "groups": len(groups), "seconds": timing, "funnel": funnel},
         "groups": groups,
     }
