@@ -47,6 +47,7 @@
 | 20 | 盤後報告「今天重點」 | 4.2（scores-14.md） | 盤後日報的「今日重點」欄（CMoney 盤後籌碼日報、鉅亨網盤後摘要） | 報告摘要數字下方最多 5 行：🔥 突然湧入（當沖比 ≥ 平常 2 倍）、疑似出貨、證據強、連續出現、最接近的高點錯開配對；複製文字開頭也有。只動 report.js、app.css。10/21：疑似出貨 富晶通＋普誠；證據強 晶技＋台嘉碩／百容＋晟鈦；高點錯開 光頡＋金山電 等 5 對 | `node --test tests/js/report.test.js` | ✅ node 138；瀏覽器確認 10/21 | ① 依「後續會漲」排序重點（研究顯示證據強反而後續弱，會誤導）② 每項都列全部（就不是重點了） |
 | 21 | 🔥 每組標「當沖比是平常的幾倍」 | 7.0（scores-15.md） | 異常量相對自身歷史；本專案 research/exp7 劑量效應 | 盤後報告 🔥 區與 N 卡片 🔥 行每組加「（平常的 N.N 倍）」，≥ 1.5 倍標紅，提示寫出 exp7 的隔天盤中跌幅對照；🔥 與突然湧入的判定不變。動到 evidence.js、report.js、finder.js。08/04：欣興＋南電 1.4 倍、千如＋金山電 1.3 倍 | `node --test tests/js/evidence.test.js` | ✅ node 139；瀏覽器確認 08/04 報告 | ① 直接把突然湧入門檻改成 1.5 倍（使用者決定）② 只標 ≥ 2 倍（樣本太少） |
 | 22 | 收盤後預先計算 5 → 20 天 | 4.2（scores-17.md） | MacKinlay (1997) 事件研究的連續樣本；Alphalens 資料準備 | 新常數 FINDER_PRECOMPUTE_KEEP = 20：收盤後自動補算最近 20 天（已存的直接跳過）；「不只一天」證據看的 🔁 範圍仍是 5 天（FINDER_PRECOMPUTE_DAYS），判定不變。只動 api.py | `.venv/Scripts/python -m pytest -q` | ✅ pytest 298 | ① 直接把 FINDER_PRECOMPUTE_DAYS 改 20（會順便改掉 🔁 證據的範圍）② 每天補 60 天（版本一升要重算 120 次） |
+| 23 | 今天重點的「證據強」附研究結論 | 5.0（scores-18.md） | Alphalens「signal → forward return」並列慣例；research/exp5 | 「今天重點」證據強那行改成「證據強（同步得很整齊；回測 60 天：證據多的組合後續不一定較強）」，避免讀成值得追。只動 report.js | `node --test tests/js/report.test.js` | ✅ node 141 | ① 把證據強從重點拿掉（使用者決定）② 改排序（改判定） |
 
 ## 判斷不值得做
 - C2 群組外盤估計 / 1.7 / 要動 N 結果、卡片與報告，Blast 大，單檔版已在 K 走勢資訊欄
