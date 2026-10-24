@@ -317,7 +317,7 @@ export function trackHtml(dates, rows) {
   const cell = (c) => (c === undefined ? '<td class="muted" title="那天還沒計算">…</td>' : c === null ? '<td class="muted">—</td>' : `<td class="up">✓ ${c}</td>`);
   const moveCell = (t) => (t ? `<td class="${t.avg > 0 ? 'up' : t.avg < 0 ? 'down' : ''}" title="${t.excess == null ? '' : `扣大盤 ${fmtPct(t.excess)}`}">${fmtPct(t.avg)}${t.excess == null ? '' : `<small class="muted">（${fmtPct(t.excess)}）</small>`}</td>` : '<td class="muted">—</td>');
   const cls = (s) => (s.includes('出貨') ? 'down rp-dump' : s.startsWith('消失') ? 'muted' : s.includes('變強') || s.startsWith('連') ? 'up' : '');
-  return `<table class="grid rp-track"><thead><tr><th class="l">群組</th>${dates.map((d) => `<th>${escapeHtml(d.slice(5))}</th>`).join('')}<th title="昨天就有的組合：成員今天的平均漲跌（括號＝扣掉大盤）">今天漲跌</th><th class="l">今天狀態</th></tr></thead><tbody>${rows
+  return `<table class="grid rp-track"><thead><tr><th class="l">群組</th>${dates.map((d) => `<th title="${escapeHtml(d)}">${Number(d.slice(8))}日</th>`).join('')}<th title="昨天就有的組合：成員今天的平均漲跌（括號＝扣掉大盤）">今天漲跌</th><th class="l">今天狀態</th></tr></thead><tbody>${rows
     .map((r) => `<tr><td class="l" title="${escapeHtml(r.names)}">${escapeHtml(r.names)}</td>${r.cells.map(cell).join('')}${moveCell(r.today)}<td class="l ${cls(r.status)}">${escapeHtml(r.status)}</td></tr>`)
     .join('')}</tbody></table>`;
 }
