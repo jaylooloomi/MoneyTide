@@ -138,12 +138,7 @@ export function shapeList(results) {
 }
 
 export function shapeHtml(results) {
-  const by = new Map();
-  for (const res of results) for (const x of res?.shape_pairs || []) {
-    const k = x.members.map((m) => m.code).sort().join(',');
-    if (!by.has(k) || by.get(k).dtw > x.dtw) by.set(k, x);
-  }
-  const list = [...by.values()].sort((a, b) => a.dtw - b.dtw);
+  const list = shapeList(results);
   if (!list.length) return '';
   const rows = list
     .map((x) => `<li>${x.members.map((m) => `<button type="button" class="rp-stock" data-code="${escapeHtml(m.code)}">${escapeHtml(m.name)} <small class="${m.change_pct > 0 ? 'up' : m.change_pct < 0 ? 'down' : ''}">${fmtPct(m.change_pct)}</small></button>`).join(' ')}
