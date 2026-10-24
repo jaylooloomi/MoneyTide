@@ -35,6 +35,7 @@
 | 13 | 互相關峰值落點（誰先動） | 2.7（scores-07.md） | Bacry et al. (2015) lead-lag；本專案 research/m2（N 組合 77% 峰值在 0 分） | minute_evidence 多回傳 peak_lag（−5～+5 分）；K 🔗 交集「同分鐘」說明加「峰值在同一分鐘（像同時下單）」或「峰值錯開 k 分：X 先動」；配對順序反過來時自動翻正負。只顯示，✓ 判定不變。動到 evidence.py、evidence.js、race.js。10/22 華經＋驊宏資：峰值 0 分 | `.venv/Scripts/python -m pytest -q tests/test_evidence.py`；`node --test tests/js/race.test.js tests/js/evidence.test.js` | ✅ pytest 293、node 131；API 確認 | ① 改用峰值落點判定「同分鐘」（改判定）② 標出群組的領頭股（實驗顯示同一對隔天領頭股不固定，會誤導） |
 | 14 | 高點差門檻依分 K 解析度說清楚 | 3.0（scores-08.md） | 本專案 research/exp1（5 分 K 下 ≤ 8 與 ≤ 5 結果相同） | 「條件」高點差說明、5 分 K 卡片提示、agent-brief.md 各補一句：5 分 K 的日子高點時間只落在 5 的倍數，≤ 8 實際等於 ≤ 5。動到 finder.js、agent-brief.md | `node --test tests/js/finder.test.js` | ✅ node 132 | ① 依解析度自動換算門檻（改判定）② 隱藏 5 分 K 日子的高點差欄（資訊變少） |
 | 15 | 交接文件補上研究結論 | 3.0（scores-08.md） | 本專案兩個研究分支的 REPORT.md | docs/study.md 每節末加「實驗結果」，指向 night-shift/study-* 與 night-shift/methods-* | — | 文件 | ① 把 REPORT.md 整份搬進主分支（研究分支各自保留比較清楚） |
+| 16 | 高點錯開但走勢一樣（可能分批推進） | 2.0（scores-09.md） | Sakoe & Chiba (1978) DTW；本專案 research/m2 | N 計算時，對「只因高點差太大被刷掉」的候選配對算分時形狀距離（DTW，帶寬 6），≤ 2.5 的前 10 對存進結果 shape_pairs；盤後報告加一區列出。N 群組與證據不變；FINDER_VERSION 升到 10（舊結果會重算）。動到 evidence.py、finder.py、report.js、app.css。離線 53 天找出 143 對（國巨＋千如、陽明＋萬海、茂矽＋漢磊、台塑＋台化…）；上線 10/21：光頡＋金山電（高點差 9 分）、國巨＋立隆電（28 分）等 5 對 | `.venv/Scripts/python -m pytest -q tests/test_evidence.py`；`node --test tests/js/report.test.js` | ✅ pytest 294、node 133；瀏覽器確認 10/21 報告 | ① 直接把這些配對併進 N 群組（改判定）② 對全部前 150 檔配對都算（上線要多抓分 K） |
 
 ## 判斷不值得做
 - C2 群組外盤估計 / 1.7 / 要動 N 結果、卡片與報告，Blast 大，單檔版已在 K 走勢資訊欄
