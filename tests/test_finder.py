@@ -745,3 +745,24 @@ def test_branch_backfill_takes_earlier_days_but_keeps_the_reserve(tmp_path):
     assert run(300 - 60) == []  # only the reserve left: the backfill waits for tomorrow
     assert run(0) == [("A", old), ("B", old)]  # the earlier day's members
     assert run(0) == []  # stored now
+
+
+
+def test_laggards_are_the_known_group_s_stocks_left_behind():
+    from openmarket.history.finder import laggards
+
+    rows = [
+        {"code": "A", "name": "甲", "kind": "stock", "industry": "X", "change_pct": 9.9, "volume_shares": 1, "turnover_yuan": 9},
+        {"code": "B", "name": "乙", "kind": "stock", "industry": "X", "change_pct": 8.0, "volume_shares": 1, "turnover_yuan": 8},
+        {"code": "C", "name": "丙", "kind": "stock", "industry": "X", "change_pct": 1.0, "volume_shares": 1, "turnover_yuan": 5},
+        {"code": "D", "name": "丁", "kind": "stock", "industry": "X", "change_pct": 6.0, "volume_shares": 1, "turnover_yuan": 7},  # kept up
+        {"code": "E", "name": "戊", "kind": "stock", "industry": "Y", "change_pct": 0.0, "volume_shares": 1, "turnover_yuan": 6},  # another group
+        {"code": "F", "name": "己", "kind": "stock", "industry": "X", "change_pct": -2.0, "volume_shares": 0, "turnover_yuan": 0},  # did not trade
+    ]
+    groupings = {"industry": lambda r: [r["industry"]]}
+    g = {"members": [{"code": "A"}, {"code": "B"}], "avg_pct": 8.95, "matches": [{"grouping": "industry", "label": "官方產業", "group": "X", "overlap": 1.0}]}
+    assert laggards(g, rows, groupings) == {"label": "官方產業", "group": "X", "stocks": [{"code": "C", "name": "丙", "change_pct": 1.0}]}
+    assert laggards({**g, "avg_pct": -3}, rows, groupings) is None  # a falling group: nothing to catch up with
+    assert laggards({**g, "matches": [{**g["matches"][0], "overlap": 0.4}]}, rows, groupings) is None  # no real home
+    big = rows + [{"code": f"Z{i}", "name": "z", "kind": "stock", "industry": "X", "change_pct": 0, "volume_shares": 1} for i in range(40)]
+    assert laggards(g, big, groupings) is None  # 45 stocks in X: too broad to mean anything

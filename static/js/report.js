@@ -114,6 +114,14 @@ export function reportText(date, index, list, rows) {
 
 // ---- HTML ---------------------------------------------------------------------------------------
 
+/** 補漲候選: the same known group's stocks that have not followed yet (where the money may go next). */
+export function laggardsHtml(g) {
+  const l = g.laggards;
+  if (!l?.stocks?.length) return '';
+  const cells = l.stocks.map((s) => `<button type="button" class="rp-stock" data-code="${escapeHtml(s.code)}" title="${escapeHtml(s.code)}：開資訊卡">${escapeHtml(s.name)} <small class="${s.change_pct > 0 ? 'up' : s.change_pct < 0 ? 'down' : ''}">${fmtPct(s.change_pct)}</small></button>`);
+  return `<div class="rp-line" title="同一個已知分類裡、今天漲不到這組平均一半的股票（成交值大的先列）：資金可能擴散的下一站，不是買進建議"><span class="muted">同族群未跟上（${escapeHtml(l.label)}：${escapeHtml(l.group)}）</span> ${cells.join(' ')}</div>`;
+}
+
 /** 籌碼集中度 of the members with 分點 stored (the after-close snapshot), one line; '' without any. */
 export function concHtml(g) {
   const c = g.concentration;
@@ -136,7 +144,7 @@ function groupHtml(x, i, row) {
   return `<div class="rp-group">
     <div class="rp-gh"><span class="rp-n">${i + 1}</span>${members}<span class="rp-ev${x.strong ? ' strong' : ''}" title="資金一致性證據：有資料的項目中 ✓ 的數量">${x.strong ? '證據強 ' : '證據 '}${x.ev.yes}/${x.ev.known}</span>
       <span class="muted rp-src">${x.method === 'new' ? '找法2' : '找法1'}</span></div>
-    <div class="rp-line"><span class="muted">動機判讀</span> ${motive}</div>${concHtml(x.g)}
+    <div class="rp-line"><span class="muted">動機判讀</span> ${motive}</div>${concHtml(x.g)}${laggardsHtml(x.g)}
     <div class="rp-line rp-chips">${chips || '<span class="muted">沒有證據資料</span>'}</div>
     <div class="rp-line"><span class="muted">明天觀察</span> ${escapeHtml(watchOf(x.g, row?.streak || 0).join('；'))}</div>
   </div>`;

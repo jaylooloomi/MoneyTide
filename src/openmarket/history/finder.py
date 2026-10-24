@@ -452,6 +452,38 @@ def match_known(members: list[str], rows_by_code: Mapping[str, dict], groupings:
     return out
 
 
+LAGGARDS_MAX = 5
+LAGGARD_GROUP_MAX = 40  # a known group larger than this (半導體業) says nothing about who follows whom
+
+
+def laggards(g: Mapping, rows: list[dict], groupings: Mapping[str, Callable[[dict], list[str]]]) -> dict | None:
+    """補漲候選: the other stocks of the group's tightest known home — the smallest known group holding at
+    least half of its members, LAGGARD_GROUP_MAX stocks at most — that lagged today (up less than half
+    the group's average while it rose), the most traded first.
+    {label, group, stocks: [{code, name, change_pct}]}; None when the group has no such home or none lag."""
+    avg = g.get("avg_pct")
+    if avg is None or avg <= 0:
+        return None
+    homes = []
+    for m in g.get("matches", []):
+        if m.get("overlap", 0) >= 0.5 and m.get("grouping") in groupings:
+            grouping = groupings[m["grouping"]]
+            those = [r for r in rows if r.get("kind") == "stock" and m["group"] in grouping(r)]
+            if len(those) <= LAGGARD_GROUP_MAX:
+                homes.append((len(those), m, those))
+    if not homes:
+        return None
+    _, best, those = min(homes, key=lambda h: h[0])
+    inside = {m["code"] for m in g.get("members", [])}
+    lag = [r for r in those if r["code"] not in inside and r.get("change_pct") is not None
+           and (r.get("volume_shares") or 0) > 0 and r["change_pct"] < avg / 2]
+    lag.sort(key=lambda r: -(r.get("turnover_yuan") or 0))
+    if not lag:
+        return None
+    return {"label": best["label"], "group": best["group"],
+            "stocks": [{"code": r["code"], "name": r["name"], "change_pct": round(r["change_pct"], 2)} for r in lag[:LAGGARDS_MAX]]}
+
+
 def kind_of(matches: list[dict], size: int) -> str:
     """已知族群: all in one known group; 延伸: at least half and at least 2 of them in one (the rest
     are the stocks that 'should not' move with it); otherwise 跨族群新組合 (a lone member in some

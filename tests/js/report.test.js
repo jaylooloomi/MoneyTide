@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { concHtml, goneReading, mergeGroups, motiveOf, reportText, trackHtml, trackRows, watchOf } from '../../static/js/report.js';
+import { concHtml, goneReading, laggardsHtml, mergeGroups, motiveOf, reportText, trackHtml, trackRows, watchOf } from '../../static/js/report.js';
 import { groupEvidenceItems } from '../../static/js/evidence.js';
 
 const m = (code, name = code) => ({ code, name, change_pct: 5 });
@@ -82,4 +82,10 @@ test('goneReading: 爆量收黑 by most members reads as 出貨; otherwise they 
   assert.equal(goneReading(ms, { 1: { change_pct: -5, vol_ratio: 2.4 }, 2: { change_pct: 1, vol_ratio: 0.8 } }), '疑似出貨'); // half of them
   assert.equal(goneReading(ms, { 1: { change_pct: -2, vol_ratio: 1.1 }, 2: { change_pct: 1, vol_ratio: 0.8 } }), '不再同步');
   assert.equal(goneReading(ms, {}), null);
+});
+
+test('laggardsHtml: the known group and its stocks left behind, each opening its card', () => {
+  const g = { laggards: { label: '官方產業', group: '半導體業', stocks: [{ code: '3', name: '丙', change_pct: 0.5 }] } };
+  assert.match(laggardsHtml(g), /同族群未跟上（官方產業：半導體業）<\/span> <button type="button" class="rp-stock" data-code="3"/);
+  assert.equal(laggardsHtml({}), '');
 });

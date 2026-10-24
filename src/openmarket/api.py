@@ -27,7 +27,7 @@ from .history.linkage import (
     INTRADAY_HIGH_R, INTRADAY_LOW_R, bucket_closes, daily_linkage, fmt_minute, pair_matrix, peak_minute_from_bars, peak_minute_from_ticks,
     align_bars, amplitude_pct, limit_down_pct, limit_up_pct, minute_bars, turnover_rate, peak_stats, tick_bars, with_close_bar, race_points, returns, locked_level, daily_k, index_k, daytrade_ratios, DAYTRADE_HOT, top_members, verdict_r, verdict_timing,
 )
-from .history.finder import INST_STREAK_DAYS, INTRADAY_BASES, FinderParams, inst_streak, inst_summary, margin_changes, margin_summary, pair_extras, persistence, run_search
+from .history.finder import INST_STREAK_DAYS, INTRADAY_BASES, FinderParams, laggards, inst_streak, inst_summary, margin_changes, margin_summary, pair_extras, persistence, run_search
 from .history.finder import news_themes as finder_news_themes  # api.py has its own news_themes route
 from .intraday import IntradayRecorder
 from .sources.yahoo_intraday import INDEX_SYMBOLS, ONE_MINUTE_DAYS, fetch_bars, fetch_day_1m, fetch_span_1m
@@ -946,6 +946,9 @@ def create_app(
                 return {**grp, "branches": group_branches(codes, stored_branches), "concentration": conc or None}
 
             groups = [with_branches(grp) for grp in groups]
+            # 補漲候選: the rest of each group's known home that has not moved yet
+            day_rows = list(by_code.values())
+            groups = [{**grp, "laggards": laggards(grp, day_rows, groupings)} for grp in groups]
             return {**res, "groups": finder_news_themes(groups, news, [x.isoformat() for x in news_dates])}
 
         if not refresh:
