@@ -689,3 +689,13 @@ def test_parse_sector_intraday_buckets():
     assert out["水泥類指數"][0] == 52.0 and out["水泥類指數"][1] == 53.0 and out["水泥類指數"][53] == 55.0
     assert len(out["發行量加權股價指數"]) == 54
     assert parse_sector_intraday({"stat": "很抱歉"}) is None
+
+
+def test_a_missing_session_keeps_the_days_aligned():
+    d1, d2 = date(2026, 1, 2), date(2026, 1, 5)
+    bars = [(f"{9 + k // 12:02d}:{(k % 12) * 5:02d}", 101, 99, 100 + k % 3, 100, 10) for k in range(54)]
+    rows = {d1: {"prev_close": 100}, d2: {"prev_close": 100}}
+    full = intraday_features({d1: bars, d2: bars}, rows, d2, P)
+    gap = intraday_features({d2: bars}, rows, d2, P)  # no bars on d1 (suspended, or none at Yahoo)
+    assert len(gap.returns) == len(full.returns) == 2 * 53
+    assert all(x is None for x in gap.returns[:53]) and gap.returns[53:] == full.returns[53:]

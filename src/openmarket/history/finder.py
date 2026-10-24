@@ -30,7 +30,7 @@ from itertools import combinations
 from .linkage import align_bars, amplitude_pct, limit_up_price, minutes, pearson, turnover_rate
 from .store import HistoryStore
 
-FINDER_VERSION = 8  # part of the cache key: bump when the search logic changes, so stored results are redone (5 was used by a reverted experiment)
+FINDER_VERSION = 9  # part of the cache key: bump when the search logic changes, so stored results are redone (5 was used by a reverted experiment)
 INTRADAY_BASES = ("raw", "market", "sector")  # the 分時 R the funnel filters on: as is / 扣大盤 / 扣大盤＋類股
 PEAK_END = 240  # the intraday high is taken over 09:00–13:00
 OPEN_MINUTES = 2  # a high at 09:00–09:02 is the open, not a signal (unless locked limit-up)
@@ -323,9 +323,11 @@ def bucket_returns(bars: list[tuple], limit: float | None) -> list[float | None]
 def intraday_features(by_session: Mapping[date, list[tuple]], rows_by_session: Mapping[date, dict], day: date, p: FinderParams, resolution: int = 1) -> Intraday:
     """Bars (HH:MM, high, low, close[, open, volume]) per session, already aligned to official prices."""
     f = Intraday(resolution=resolution)
-    for s in sorted(by_session):
+    # every session gets its 53 slots, a session without bars all None: the series of two stocks (and of
+    # the index) stay aligned day by day even when one of them missed a day
+    for s in sorted(set(by_session) | set(rows_by_session)):
         row = rows_by_session.get(s) or {}
-        f.returns.extend(bucket_returns(by_session[s], limit_up_price(row.get("prev_close"))))
+        f.returns.extend(bucket_returns(by_session.get(s, []), limit_up_price(row.get("prev_close"))))
     bars = [b for b in by_session.get(day, []) if 0 <= minutes(b[0]) <= 270]
     row = rows_by_session.get(day) or {}
     if not bars:
@@ -756,9 +758,9 @@ def add_excess(feats: dict[str, Intraday], by_code: Mapping[str, dict], rows: li
         m = cache[key]
         if m is None or len(m) != len(f.returns):
             continue
-        res = residuals(f.returns, m)
-        if any(x is not None for x in res):
-            f.excess, f.factor = res, label
+        # all None when the stock had too few moves (locked limit-up for days): then the funnel says 分時資料不足,
+        # as with the raw R — 沒有指數分時 is kept for a missing index
+        f.excess, f.factor = residuals(f.returns, m), label
 
 
 # ---- 資金一致性證據 of a found group (the same checks as K's 🔗 交集, pair by pair) ----------------
