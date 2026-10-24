@@ -23,13 +23,13 @@
 | 06 | 報告複製文字加入新欄位 | 21.0（scores-03.md） | 盤後籌碼日報類產品（如 CMoney 盤後籌碼日報）文字版與網頁版一致的慣例 | 「複製成文字」每組加上籌碼集中度、同族群未跟上；消失的組合分成「消失・疑似出貨」與「消失」兩行。只動 report.js。08/04 實測文字 7,818 字，含 5 組集中度、32 組補漲候選、疑似出貨一行 | `node --test tests/js/report.test.js` | ✅ node 122；瀏覽器攔截剪貼簿確認 | ① 輸出 Markdown 表格（貼到聊天室會變亂碼）② 另開下載 .txt（多一個按鈕，使用者沒要求） |
 | 07 | 外資分點 vs 官方外資 | 3.0（scores-03.md） | 台灣籌碼分析常見的「外資分點 vs 外資買賣超」比對（HiStock、CMoney 籌碼 K 線） | 資訊卡分點區加一行：分點名單（前 15 大買超／賣超）裡外資券商的合計 vs 證交所／櫃買公布的外資買賣超，方向相反時標「方向相反」。動到 evidence.py、api.py、history.js。10/22：2468 +2,021 vs +1,991、2492 −8,608 vs −10,106（同向） | `.venv/Scripts/python -m pytest -q tests/test_evidence.py` | ✅ pytest 289、node 122；瀏覽器用頁面模組確認卡片 HTML | ① 放進 🧾 證據（只有前 15 名，會漏算）② 用券商代號對照表（HiStock 只給名稱） |
 | 08 | 集團當成一種分類（2 片） | 2.5（scores-04.md） | XQ 全球贏家、CMoney 的「集團股」類股；MoneyDJ 轉投資資料 | 片1：伺服器把轉投資／董監串起來的集團做成分組（「XX集團」，203 個），B 區新增「集團」按鈕，網址 #…/group 可直接開。片2：N 找法1 的分類可勾「集團」，預設不勾（避免預先算好的結果全部失效）。動到 api.py、history/api.py、finder.py、index.html、history.js、finder.js（分兩片，各 ≤ 5 檔） | `.venv/Scripts/python -m pytest -q tests/test_relations.py`；`node --test tests/js/finder.test.js` | ✅ pytest 291、node 123；瀏覽器確認 B 區集團排行與 N 勾選 | ① 預設就勾集團（每天預先算好的 N 結果都會變成另一把快取鍵）② 用持股 ≥ 50% 的子公司關係（太嚴，大多數集團會被拆散） |
+| 09 | 當沖比與平常比較 | 2.3（scores-03.md） | 異常量分析（相對自身歷史，Campbell, Grossman & Wang 1993 的量訊息觀念） | N 卡片 🔥 行每檔加「（平常 X%）」＝前 20 個交易日平均，今天 ≥ 2 倍標紅；🔥 判定仍是 50%。動到 api.py、linkage.py、finder.js。10/22：華經 61.2%（平常 60%，本來就常被當沖）、耀登 60.2%（平常 38%） | `.venv/Scripts/python -m pytest -q tests/test_money_flow.py`；`node --test tests/js/finder.test.js` | ✅ pytest 291、node 124；瀏覽器確認 N 卡片 | ① 改成用 z 分數判定 🔥（會改使用者定的 50% 規則）② 用 60 日平均（上櫃只回補 60 天，前段沒資料） |
 
 ## 判斷不值得做
 - C2 群組外盤估計 / 1.7 / 要動 N 結果、卡片與報告，Blast 大，單檔版已在 K 走勢資訊欄
 - C5 誰先動（lead-lag）/ 0.4 / 1 分 K 雜訊大、計算量高、要動 N 計算路徑
 - D1 隔天表現回測 / 1.7 / 需要 60 天的 N 結果，目前只部分存在，成本高
 - D2 今日資金網路圖 / 0.8 / 只改呈現方式，不幫判斷有無計畫
-- E2 當沖比異常倍數 / 2.3 / 先處理使用者半夜追加的檢核項目，時間允許再做
 
 ## 需要你決定的事
 - [存疑] 證據清單其他門檻要不要放進「條件」
