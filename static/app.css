@@ -156,7 +156,7 @@ button { font: inherit; color: inherit; cursor: pointer; }
   /* max-content: auto rows collapse to ~0 inside this fixed-height scroll container */
   grid-template-rows: var(--hab-h, 480px) max-content max-content max-content max-content max-content; /* A/B height: draggable */
   grid-auto-rows: max-content;
-  grid-template-areas: "a b" "k k" "n n" "j j" "c c" "d d";
+  grid-template-areas: "a b" "k k" "j j" "c c" "d d"; /* N lives on 分頁2 */
 }
 .hA { grid-area: a; } .hB { grid-area: b; } .hC { grid-area: c; } .hD { grid-area: d; } .hJ { grid-area: j; } .hK { grid-area: k; } .hN { grid-area: n; }
 /* A and B stay pinned while the panels below scroll under them; the shadow hides the grid gap */
@@ -184,7 +184,7 @@ table.rot tr.bench:nth-child(2) td { box-shadow: 0 3px 0 -1px #ffd40066; } /* li
 .tag { padding: 2px 7px; border-radius: 3px; color: #fff; font-size: 12px; text-decoration: none; white-space: nowrap; }
 .tag small { opacity: .85; margin-left: 4px; }
 @media (max-width: 1100px) {
-  .hist { grid-template-columns: 1fr; grid-template-rows: var(--hab-h, 420px) var(--hab-h, 420px) max-content max-content max-content max-content max-content; grid-template-areas: "a" "b" "k" "n" "j" "c" "d"; }
+  .hist { grid-template-columns: 1fr; grid-template-rows: var(--hab-h, 420px) var(--hab-h, 420px) max-content max-content max-content max-content max-content; grid-template-areas: "a" "b" "k" "j" "c" "d"; }
   .hA, .hB { position: relative; box-shadow: none; } /* stacked, pinning both would fill the screen */
   .panel-resizer-v { display: none; }
 }
@@ -368,7 +368,7 @@ table.link-heat td.self { background: #3a3e48; }
 .fd-news { font-size: 12px; margin-top: 4px; color: #cfd3dc; line-height: 1.5; }
 .fd-detail { margin: 0 10px 10px; border: 1px solid #ffd40066; border-radius: 6px; }
 .fd-detail-body { padding: 8px 10px; }
-#historyView .panel.hN.loading::after { display: none; } /* N shows its own progress bar instead */
+.panel.hN.loading::after { display: none; } /* N shows its own progress bar instead */
 .fd-progress { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 4; width: min(380px, 80%); padding: 10px 14px; border-radius: 8px; background: #2b3a55f2; box-shadow: 0 4px 16px #0008; opacity: 1 !important; }
 .fd-bar { height: 8px; border-radius: 4px; background: #1a2233; overflow: hidden; }
 .fd-bar span { display: block; height: 100%; width: 0; background: linear-gradient(90deg, #4f8cff, #7fd3ff); transition: width .4s ease; }

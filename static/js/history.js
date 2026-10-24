@@ -314,16 +314,10 @@ async function loadFinderDigest() {
     btn.id = 'hFinderDigest';
     btn.className = 'icon wide fd-digest';
     btn.hidden = true;
-    btn.title = 'N · 資金連動搜尋今天的結果（🔁＝前幾天也出現過的組合）；點一下捲到 N';
+    btn.title = 'N · 資金連動搜尋今天的結果（🔁＝前幾天也出現過的組合）；點一下到分頁2 看 N';
     btn.addEventListener('click', () => {
-      // the history view is the scroller; A/B may be sticky on top of it (wide screens), so land below them
-      const view = $('#historyView');
-      const target = $('#hFinderPanel');
-      if (!view || !target) return;
-      const sticky = [...view.querySelectorAll('.hA, .hB')].filter((el) => getComputedStyle(el).position === 'sticky');
-      const covered = Math.max(0, ...sticky.map((el) => el.getBoundingClientRect().bottom - view.getBoundingClientRect().top));
-      const top = view.scrollTop + target.getBoundingClientRect().top - view.getBoundingClientRect().top - covered - 8;
-      view.scrollTo({ top, behavior: 'smooth' });
+      setHistTab(2); // N lives on 分頁2
+      $('#historyTab2').scrollTo({ top: 0, behavior: 'smooth' });
     });
     $('#hStatus').before(btn);
   }
@@ -726,7 +720,7 @@ export async function showHistory() {
     newsPanel = mountNewsPanel($('#historyView'), { getDate: () => st.date, onPick: pickNewsTheme, onStock: openHistCard });
     newsPanel.load();
     linkPanel = mountLinkagePanel($('#historyView'), { onStock: openHistCard });
-    finderPanel = mountFinderPanel($('#historyView'), {
+    finderPanel = mountFinderPanel($('#historyTab2'), { // N on 分頁2 (it loads when its tab is shown)
       onStock: openHistCard,
       onResult: () => {
         // N just stored a result: B's 🔗 and the 💡 digest may change
@@ -1203,6 +1197,8 @@ function setHistTab(tab) {
     b.setAttribute('aria-selected', String(on));
   }
   if (histTab.current === 1) window.dispatchEvent(new Event('resize')); // charts drawn while hidden get their size back
+  // N is on 分頁2: its on-screen observer can miss a tab being shown, so tell it directly
+  if (histTab.current === 2 && st.date) finderPanel?.refresh(st.date);
   writeHash();
 }
 
