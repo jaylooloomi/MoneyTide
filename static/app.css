@@ -495,6 +495,7 @@ table.link-heat td.self { background: #3a3e48; }
 .rp-right { position: sticky; top: 0; } /* the table stays in view while the groups scroll */
 .rp-track-wrap { max-height: calc(100vh - 220px); overflow: auto; } /* a long table scrolls on its own */
 .rp-gone { margin: 6px 0; }
+.rp-track td.rp-dump { font-weight: 600; }
 .rp-progress { margin: 0 0 6px; color: #ffd400; }
 @media (max-width: 900px) { .rp-cols { grid-template-columns: minmax(0, 1fr); } .rp-right { position: static; } .rp-track-wrap { max-height: none; } }
 .rp-track { table-layout: fixed; }

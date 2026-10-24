@@ -5,6 +5,7 @@
 import { escapeHtml, fmtPct } from './transform.js';
 import { evidenceCount, groupEvidenceItems, isStrong } from './evidence.js';
 
+export const DUMP_VOL = 2; // 出貨: a member that fell on 2× its 5-day volume the day the group vanished
 export const GONE_SHOWN = 12; // 消失 rows listed before 「其餘 N 組」
 export const TRACK_DAYS = 5; // the 跨天追蹤 columns: the report day and the 4 trading days before it
 
@@ -81,6 +82,18 @@ export function trackRows(days) {
   });
 }
 
+/**
+ * The day a group vanished: did its members fall on heavy volume (爆量收黑 — Wyckoff's distribution, the
+ * money leaving) or just stop moving together? quotes {code: {change_pct, vol_ratio}} of that day.
+ * → '疑似出貨' / '不再同步' / null (no quotes).
+ */
+export function goneReading(members, quotes) {
+  const q = members.map((m) => quotes?.[m.code]).filter((x) => x && x.change_pct != null);
+  if (!q.length) return null;
+  const dumped = q.filter((x) => x.change_pct < 0 && x.vol_ratio != null && x.vol_ratio >= DUMP_VOL).length;
+  return dumped * 2 >= q.length ? '疑似出貨' : '不再同步';
+}
+
 /** The report as plain text (複製成文字: for notes or a chat). */
 export function reportText(date, index, list, rows) {
   const lines = [`${date} 盤後報告`];
@@ -132,7 +145,7 @@ function groupHtml(x, i, row) {
 export function trackHtml(dates, rows) {
   if (!rows.length) return '<p class="hint">這幾天沒有找到群組。</p>';
   const cell = (c) => (c === undefined ? '<td class="muted" title="那天還沒計算">…</td>' : c === null ? '<td class="muted">—</td>' : `<td class="up">✓ ${c}</td>`);
-  const cls = (s) => (s.startsWith('消失') ? 'down' : s.includes('變強') || s.startsWith('連') ? 'up' : '');
+  const cls = (s) => (s.includes('出貨') ? 'down rp-dump' : s.startsWith('消失') ? 'muted' : s.includes('變強') || s.startsWith('連') ? 'up' : '');
   return `<table class="grid rp-track"><thead><tr><th class="l">群組</th>${dates.map((d) => `<th>${escapeHtml(d.slice(5))}</th>`).join('')}<th class="l">今天狀態</th></tr></thead><tbody>${rows
     .map((r) => `<tr><td class="l" title="${escapeHtml(r.names)}">${escapeHtml(r.names)}</td>${r.cells.map(cell).join('')}<td class="l ${cls(r.status)}">${escapeHtml(r.status)}</td></tr>`)
     .join('')}</tbody></table>`;
@@ -187,6 +200,18 @@ export function mountReportPanel(container, { onStock, query, condText }) {
     }
     if (t !== state.ticket) return;
     const bench = (index?.benchmarks || []).map((b) => ({ name: b.name.replace(/（.*）/, ''), change_pct: b.change_pct }));
+    // the vanished groups' members on the report day: 爆量收黑 or not
+    const goneCodes = trackRows(per).filter((r) => r.status.startsWith('消失')).flatMap((r) => r.members.map((m) => m.code));
+    state.quotes = null;
+    if (goneCodes.length) {
+      try {
+        const r = await fetch(`/api/history/quotes?date=${encodeURIComponent(date)}&codes=${encodeURIComponent([...new Set(goneCodes)].join(','))}`);
+        state.quotes = r.ok ? (await r.json()).quotes : null;
+      } catch {
+        state.quotes = null;
+      }
+      if (t !== state.ticket) return;
+    }
     draw(date, dates, per, bench, '');
     // the days before that N never computed (only the latest 5 are, after the close): one at a time, the
     // nearest first, the table filled in as each one lands; a new date stops it
@@ -207,6 +232,12 @@ export function mountReportPanel(container, { onStock, query, condText }) {
     state.last = [date, dates, per, bench, progress];
     const list = per.at(-1) || [];
     const rows = trackRows(per);
+    for (const r of rows) {
+      if (r.status.startsWith('消失') && state.quotes) {
+        const g = goneReading(r.members, state.quotes);
+        if (g) r.status = g === '疑似出貨' ? '消失・疑似出貨（爆量收黑）' : '消失・不再同步';
+      }
+    }
     // the gone ones can outnumber today's many times over: the first few, the rest on demand
     const gone = rows.filter((r) => r.status.startsWith('消失'));
     const shownRows = state.allGone ? rows : rows.filter((r) => !r.status.startsWith('消失') || gone.indexOf(r) < GONE_SHOWN);

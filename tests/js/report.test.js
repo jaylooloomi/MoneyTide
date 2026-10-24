@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { concHtml, mergeGroups, motiveOf, reportText, trackHtml, trackRows, watchOf } from '../../static/js/report.js';
+import { concHtml, goneReading, mergeGroups, motiveOf, reportText, trackHtml, trackRows, watchOf } from '../../static/js/report.js';
 import { groupEvidenceItems } from '../../static/js/evidence.js';
 
 const m = (code, name = code) => ({ code, name, change_pct: 5 });
@@ -55,7 +55,7 @@ test('trackRows: streaks, new, back again, gone, and days not computed', () => {
   assert.deepEqual(rows.map((r) => r.names), ['A、B', 'E、F', 'G、H', 'C、D']); // today's first, then the gone
   const html = trackHtml(['2026-10-16', '2026-10-19', '2026-10-20', '2026-10-21', '2026-10-22'], rows);
   assert.match(html, /<td class="muted" title="那天還沒計算">…<\/td>/);
-  assert.match(html, /<td class="l down">消失（資金撤出？）<\/td>/);
+  assert.match(html, /<td class="l muted">消失（資金撤出？）<\/td>/);
 });
 
 test('reportText: the copy-paste version', () => {
@@ -74,4 +74,12 @@ test('concHtml: each member with 分點 stored, signed; nothing without', () => 
   assert.match(concHtml(g), /籌碼集中度<\/span> 甲 <span class="up">\+12\.3%<\/span>、乙 <span class="down">-4\.0%<\/span>/);
   assert.equal(concHtml({ members: [] }), '');
   assert.equal(concHtml({ members: [], concentration: null }), '');
+});
+
+test('goneReading: 爆量收黑 by most members reads as 出貨; otherwise they just stopped moving together', () => {
+  const ms = [{ code: '1' }, { code: '2' }];
+  assert.equal(goneReading(ms, { 1: { change_pct: -5, vol_ratio: 2.4 }, 2: { change_pct: -3, vol_ratio: 2.1 } }), '疑似出貨');
+  assert.equal(goneReading(ms, { 1: { change_pct: -5, vol_ratio: 2.4 }, 2: { change_pct: 1, vol_ratio: 0.8 } }), '疑似出貨'); // half of them
+  assert.equal(goneReading(ms, { 1: { change_pct: -2, vol_ratio: 1.1 }, 2: { change_pct: 1, vol_ratio: 0.8 } }), '不再同步');
+  assert.equal(goneReading(ms, {}), null);
 });

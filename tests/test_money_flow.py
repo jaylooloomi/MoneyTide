@@ -282,3 +282,19 @@ def test_tpex_daytrade_beside_twse(tmp_path):
     s.save_daytrade_tpex_day(d, parse_tpex_daytrade(payload), datetime(2026, 10, 22, 19, tzinfo=TAIPEI))
     assert daytrade_ratios(s, [d], ["1", "2"]) == {"1": {d: 45.0}, "2": {d: 50.0}}  # TWSE's row kept, TPEx's added
     assert s.daytrade_tpex_tried() == {d}
+
+
+def test_quotes_api_change_and_volume_ratio(tmp_path):
+    from fastapi.testclient import TestClient
+
+    from openmarket.api import create_app
+    from openmarket.config import AppConfig
+
+    s = HistoryStore(tmp_path / "h.sqlite")
+    days = [date(2026, 10, 19), date(2026, 10, 20), date(2026, 10, 21)]
+    for d, vol in zip(days, (1e6, 1e6, 3e6)):
+        s.save_day(d, build_rows([DailyRow("1", "1", "上市", 10, -0.5, 10.5, 10.5, 10, vol, vol * 10)], INFOS, {}), datetime(2026, 10, 21, 15, tzinfo=TAIPEI))
+    app = create_app(AppConfig(data_dir=tmp_path), start_polling=False, start_history=False, start_concepts=False, history_store=s)
+    with TestClient(app, base_url="http://127.0.0.1") as client:
+        q = client.get("/api/history/quotes", params={"date": "2026-10-21", "codes": "1,9"}).json()["quotes"]
+    assert q == {"1": {"change_pct": pytest.approx(-4.7619, abs=1e-3), "vol_ratio": 3.0}}  # 3M ÷ the 1M average; "9" unknown

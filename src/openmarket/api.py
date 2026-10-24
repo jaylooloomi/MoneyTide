@@ -722,6 +722,18 @@ def create_app(
         got = await asyncio.gather(*(one(code, name, market) for code, (name, market) in INDEX_SYMBOLS.items()))
         return [x for x in got if x is not None]
 
+    @app.get("/api/history/quotes")
+    def history_quotes(codes: str, day: str = Query(..., alias="date")) -> dict:
+        """漲跌幅 and 量比 (÷ the 5 days before) of a few stocks on one day: 盤後報告's 出貨 check."""
+        from .history.finder import volume_ratio
+
+        d = _day(day)
+        store = app.state.history
+        wanted = set(c for c in codes.split(",") if c)
+        vr = volume_ratio(store, d, 5)
+        rows = {r["code"]: r for r in store.day_rows(d) if r["code"] in wanted}
+        return {"date": d.isoformat(), "quotes": {c: {"change_pct": r.get("change_pct"), "vol_ratio": round(vr[c], 2) if c in vr else None} for c, r in rows.items()}}
+
     @app.get("/api/history/index-race")
     async def index_race_day(day: str = Query(..., alias="date")) -> dict:
         """大盤／櫃買 of one day, for K's chart when a 5 日 K candle picks another day."""
