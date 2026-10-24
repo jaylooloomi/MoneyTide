@@ -298,3 +298,13 @@ def test_quotes_api_change_and_volume_ratio(tmp_path):
     with TestClient(app, base_url="http://127.0.0.1") as client:
         q = client.get("/api/history/quotes", params={"date": "2026-10-21", "codes": "1,9"}).json()["quotes"]
     assert q == {"1": {"change_pct": pytest.approx(-4.7619, abs=1e-3), "vol_ratio": 3.0}}  # 3M ÷ the 1M average; "9" unknown
+
+
+
+def test_daytrade_group_average_as_shown():
+    from openmarket.history.linkage import daytrade_group
+
+    g = daytrade_group({"1": 50.0, "2": 49.9, "3": None})  # 49.95 → 50.0 as shown: 🔥; "3" has no data
+    assert g == {"by_code": {"1": 50.0, "2": 49.9}, "avg": 50.0, "hot": True}
+    assert daytrade_group({"1": 49.9, "2": 49.9})["hot"] is False
+    assert daytrade_group({"1": None}) == {"by_code": {}, "avg": None, "hot": False}

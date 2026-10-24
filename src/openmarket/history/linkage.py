@@ -405,6 +405,14 @@ def index_k(store: HistoryStore, day: date, markets: list[str], days: int = K5_D
 DAYTRADE_HOT = 50.0  # (40 marked nearly every group on a busy day) 當沖比 (% of the day's traded shares) from which the move reads as 隔日沖 hot money
 
 
+def daytrade_group(vals: Mapping[str, float | None]) -> dict:
+    """A group's 當沖: {by_code, avg, hot}. Members without data are left out of the average; the average
+    is rounded to 0.1% (as shown) before the DAYTRADE_HOT test, so 49.96 shows as 50.0% and is 🔥."""
+    known = {c: v for c, v in vals.items() if v is not None}
+    avg = round(sum(known.values()) / len(known), 1) if known else None
+    return {"by_code": known, "avg": avg, "hot": avg is not None and avg >= DAYTRADE_HOT}
+
+
 def daytrade_ratios(store: HistoryStore, days: list[date], codes: list[str]) -> dict[str, dict[date, float]]:
     """{code: {day: 當沖比 %}} (上市 and 上櫃 alike)."""
     dt = store.daytrade(days, codes)

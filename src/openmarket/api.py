@@ -25,7 +25,7 @@ from .explain import explain_day
 from .history.linkage import (
     pearson,
     INTRADAY_HIGH_R, INTRADAY_LOW_R, bucket_closes, daily_linkage, fmt_minute, pair_matrix, peak_minute_from_bars, peak_minute_from_ticks,
-    align_bars, amplitude_pct, limit_down_pct, limit_up_pct, minute_bars, turnover_rate, peak_stats, tick_bars, with_close_bar, race_points, returns, locked_level, daily_k, index_k, daytrade_ratios, DAYTRADE_HOT, top_members, verdict_r, verdict_timing,
+    align_bars, amplitude_pct, limit_down_pct, limit_up_pct, minute_bars, turnover_rate, peak_stats, tick_bars, with_close_bar, race_points, returns, locked_level, daily_k, index_k, daytrade_ratios, daytrade_group, DAYTRADE_HOT, top_members, verdict_r, verdict_timing,
 )
 from .history.finder import INST_STREAK_DAYS, INTRADAY_BASES, FinderParams, laggards, inst_streak, inst_summary, margin_changes, margin_summary, pair_extras, persistence, run_search
 from .history.finder import news_themes as finder_news_themes  # api.py has its own news_themes route
@@ -934,8 +934,7 @@ def create_app(
 
             def with_daytrade(grp: dict) -> dict:
                 vals = {m["code"]: dtr.get(m["code"], {}).get(d) for m in grp["members"]}
-                known = {c: v for c, v in vals.items() if v is not None}
-                return {**grp, "daytrade": {"by_code": known, "hot": bool(known) and sum(known.values()) / len(known) >= DAYTRADE_HOT}}
+                return {**grp, "daytrade": daytrade_group(vals)}
 
             groups = [with_daytrade(grp) for grp in groups]
             # 🏦 分點 from the stored days only (the after-close snapshot fills them): nothing is fetched here

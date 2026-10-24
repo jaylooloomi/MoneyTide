@@ -158,8 +158,8 @@ test('filter chips: 找法1 by source grouping (a group can count twice), 找法
   assert.match(filterHtml(evd, 'all'), /title="資金一致性證據夠多[^"]*（1 組）"/);
   assert.ok(filterOptions(known).every((o) => o.tip)); // every chip has one
   assert.ok(evidenceRank(evd.groups[0]) > evidenceRank(evd.groups[1]));
-  const hot = cardHtml({ ...G, daytrade: { by_code: { 1: 52.4, 2: 47 }, hot: true } }, 1);
-  assert.match(hot, /<div class="fd-dt"[^>]*>🔥 當沖比高：甲 52%、乙 47%/);
+  const hot = cardHtml({ ...G, daytrade: { by_code: { 1: 53.6, 2: 47 }, avg: 50.3, hot: true } }, 1);
+  assert.match(hot, /<div class="fd-dt"[^>]*>🔥 當沖比高（平均 50\.3%）：甲 52\.4%、乙 47\.0%/); // the average decides, shown as computed
   assert.doesNotMatch(cardHtml({ ...G, daytrade: { by_code: { 1: 10 }, hot: false } }, 1), /fd-dt/);
   const brCard = cardHtml({ ...G, branches: { common: [{ name: '美商高盛', ranks: { 1: 2, 2: 2 }, nets: {} }], ok: true, have: 2 } }, 1);
   assert.match(brCard, /<div class="fd-br"[^>]*>🏦 <b>美商高盛<\/b> 甲（第 2）、乙（第 2）/);
