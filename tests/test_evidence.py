@@ -93,3 +93,13 @@ def test_concentration_top15_net_over_volume():
     assert concentration(data, 2_000_000, top=1) == 10.0  # (300 − 100) ÷ 2,000
     assert concentration({"buy": [], "sell": []}, 1e6) is None  # an empty page: no data, not 0%
     assert concentration(None, 1e6) is None and concentration({"error": "x"}, 1e6) is None and concentration(data, 0) is None
+
+
+
+def test_buyer_cost_is_the_top_buyers_net_weighted_price():
+    from openmarket.history.evidence import buyer_cost
+
+    data = {"buy": [{"name": "甲", "net": 300, "avg": 50.0}, {"name": "乙", "net": 100, "avg": 54.0}, {"name": "丙", "net": 50, "avg": None}], "sell": []}
+    assert buyer_cost(data) == 51.0  # (300×50 + 100×54) ÷ 400; 丙 has no price
+    assert buyer_cost(data, top=1) == 50.0
+    assert buyer_cost({"buy": [], "sell": []}) is None and buyer_cost(None) is None and buyer_cost({"error": "x"}) is None

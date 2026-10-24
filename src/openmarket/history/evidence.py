@@ -181,6 +181,14 @@ def concentration(data: Mapping | None, volume_shares: float | None, top: int = 
     return round(net / (volume_shares / 1000) * 100, 1)
 
 
+def buyer_cost(data: Mapping | None, top: int = 5) -> float | None:
+    """主力成本: the top `top` 買超 分點's 均價, weighted by their 買超張數 (HiStock's 均價 per branch);
+    None without 分點 or prices."""
+    rows = [r for r in (data or {}).get("buy", [])[:top] if r.get("avg") and r.get("net", 0) > 0] if data and "error" not in data else []
+    net = sum(r["net"] for r in rows)
+    return round(sum(r["avg"] * r["net"] for r in rows) / net, 2) if net else None
+
+
 def group_branches(members: list[str], data: Mapping[str, Mapping], top: int = 15) -> dict | None:
     """分點 of a group from the stored days: {common: [{name, ranks: {code: rank}, nets: {code: 張}}] (branches
     among the top `top` 買超 of 2+ members, most members first), ok (most pairs share a top-5 buyer),

@@ -839,6 +839,7 @@ export function cardRelationsHtml(r) {
   return parts.join('');
 }
 
+export const COST_TIP = '主力成本＝當天買超前 5 大分點的買進均價，依買超張數加權。收盤高於成本＝這批買家當天帳上獲利，低於＝套牢；只看這一天的進出，不是累積持股成本';
 export const CONC_TIP = '籌碼集中度＝（前 15 大買超分點的買超 − 前 15 大賣超分點的賣超）÷ 當日成交量。正數＝大買家吃下的比大賣家倒出的多，籌碼往少數人集中；常見的看法是 > 10% 偏集中、< −10% 偏分散';
 
 /** The card's 🏦 block: top 5 買超 / 賣超 分點 of the day (HiStock), 張, and its 籌碼集中度. */
@@ -849,7 +850,9 @@ export function cardBranchesHtml(b) {
     rows.slice(0, 5).map((r) => `<li>${escapeHtml(r.name)} <span class="${sign > 0 ? 'up' : 'down'}">${sign > 0 ? '+' : ''}${Math.round(r.net).toLocaleString()}</span>${r.avg ? ` <small class="muted">@${r.avg}</small>` : ''}</li>`).join('');
   const c = b.concentration;
   const conc = c == null ? '' : `　<span class="${c > 0 ? 'up' : c < 0 ? 'down' : ''}" title="${escapeHtml(CONC_TIP)}">籌碼集中度 ${c > 0 ? '+' : ''}${c.toFixed(1)}%</span>`;
-  return `<div class="muted">🏦 分點（HiStock）買超前 5／賣超前 5，張${conc}</div><div class="card-br-cols"><ol>${list(b.buy || [], 1)}</ol><ol>${list(b.sell || [], -1)}</ol></div>`;
+  const gap = b.cost && b.close ? (b.close / b.cost - 1) * 100 : null;
+  const cost = gap == null ? '' : `<div class="muted" title="${escapeHtml(COST_TIP)}">主力成本（前 5 大買超均價）<b>${b.cost.toFixed(2)}</b>，收盤 ${b.close} → <span class="${gap > 0 ? 'up' : gap < 0 ? 'down' : ''}">${gap > 0 ? '+' : ''}${gap.toFixed(1)}%</span>${gap > 0 ? '（主力帳上獲利）' : gap < 0 ? '（主力帳上套牢）' : ''}</div>`;
+  return `<div class="muted">🏦 分點（HiStock）買超前 5／賣超前 5，張${conc}</div>${cost}<div class="card-br-cols"><ol>${list(b.buy || [], 1)}</ol><ol>${list(b.sell || [], -1)}</ol></div>`;
 }
 
 async function loadCardBranches(code, date) {

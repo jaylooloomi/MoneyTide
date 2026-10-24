@@ -49,7 +49,7 @@ from .sources.moneydj import fetch_relations
 from .sources.company_address import fetch_company_names
 from .relations import NameIndex, RelationCollector, merge_edges, relation_edges, relation_groups
 from .history.factors import factor_of, industry_sizes
-from .history.evidence import bucket_of, chip_sync, concentration, excess_matrix, group_branches, minute_evidence, percentile_of, shared_buyers
+from .history.evidence import bucket_of, buyer_cost, chip_sync, concentration, excess_matrix, group_branches, minute_evidence, percentile_of, shared_buyers
 from .sources.sector_index import fetch_sector_day
 from .sources.daytrade import fetch_daytrade_day, fetch_tpex_daytrade_day
 from .sources.histock_branch import BranchQueue
@@ -1125,8 +1125,9 @@ def create_app(
             except Exception as exc:  # unofficial source: say why, never fail the panel
                 out[c] = {"error": f"分點資料抓取失敗：{exc}"}
         ok = {c: v for c, v in out.items() if "error" not in v}
-        vols = {r["code"]: r.get("volume_shares") for r in await asyncio.to_thread(store.day_rows, d) if r["code"] in ok}
-        out = {c: v if c not in ok else {**v, "concentration": concentration(v, vols.get(c))} for c, v in out.items()}
+        rows_d = {r["code"]: r for r in await asyncio.to_thread(store.day_rows, d) if r["code"] in ok}
+        out = {c: v if c not in ok else {**v, "concentration": concentration(v, rows_d.get(c, {}).get("volume_shares")),
+                                         "cost": buyer_cost(v), "close": rows_d.get(c, {}).get("close")} for c, v in out.items()}
         pairs = {f"{a},{b}": shared_buyers(ok.get(a), ok.get(b)) for i, a in enumerate(wanted) for b in wanted[i + 1:]}
         return {"date": d.isoformat(), "branches": out, "pairs": pairs, "queue": branch_queue().status()}
 
