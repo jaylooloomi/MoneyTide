@@ -527,7 +527,8 @@ export function mountRace(box, d, { onStock } = {}) {
     for (const [c, el] of rows) {
       const i = state.picked.indexOf(c);
       el.classList.toggle('on', i >= 0);
-      el.style.outlineColor = i >= 0 && state.picked.length > 1 ? `${PICK_COLORS[i % PICK_COLORS.length]}aa` : '';
+      if (i >= 0 && state.picked.length > 1) el.style.setProperty('--pick', `${PICK_COLORS[i % PICK_COLORS.length]}cc`);
+      else el.style.removeProperty('--pick');
     }
     chart.show(state.picked.map((c) => ({ code: c, name: byCode.get(c)?.name }))).then(() => chart.sync(state.m));
     drawK5();

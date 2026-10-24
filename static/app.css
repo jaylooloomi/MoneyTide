@@ -304,7 +304,7 @@ table.link-matrix td, table.link-matrix th { padding: 2px 4px; font-size: 11px; 
 .rt-axis span:first-child { transform: none; }
 .rt-axis span:last-child { transform: translateX(-100%); }
 .rt-board { position: relative; }
-.rt-layer { position: absolute; top: 0; bottom: 0; left: 122px; right: 278px; pointer-events: none; z-index: 1; }
+.rt-layer { position: absolute; top: 0; bottom: 0; left: 122px; right: 216px; pointer-events: none; z-index: 1; } /* = .rt-axis margins: rank+name on the left, gap+stat+gap+5 日 K (6+140+6+64) on the right */
 .rt-after { position: absolute; top: 0; bottom: 0; right: 0; background: #ffffff08; border-left: 1px dashed #555a66; }
 .rt-head { position: absolute; top: -4px; bottom: 0; width: 2px; margin-left: -1px; background: #ffd400; box-shadow: 0 0 6px #ffd40088; pointer-events: auto; cursor: ew-resize; touch-action: none; }
 .rt-head::before { content: ''; position: absolute; top: 0; bottom: 0; left: -8px; right: -8px; } /* a wider grab area */
@@ -328,7 +328,10 @@ table.link-matrix td, table.link-matrix th { padding: 2px 4px; font-size: 11px; 
 .race-main { flex: 1 1 700px; min-width: 700px; max-width: 1100px; } /* the track keeps ≥ 360px: the 5 日 K column wraps first */
 @media (max-width: 760px) { .race-main { min-width: 0; } }
 .race-side { flex: 1 1 520px; min-width: 360px; max-width: 760px; border: 1px solid var(--line, #2a2e37); border-radius: 6px; padding: 6px 8px; }
-.rt-row.on { background: #ffffff0d; outline: 1px solid #ffd40066; outline-offset: -1px; border-radius: 3px; z-index: 2; } /* inside the row and above its neighbours: rows are placed by rank, not DOM order */
+.rt-row.on { background: #ffffff0d; border-radius: 3px; z-index: 2; } /* above its neighbours: rows are placed by rank, not DOM order */
+/* the frame as a border on top of the row's content: a border snaps to whole pixels, where an outline on a
+   row at a fractional y (404.7px) blurs one edge away */
+.rt-row.on::after { content: ''; position: absolute; inset: 0; border: 1px solid var(--pick, #ffd40099); border-radius: 3px; pointer-events: none; z-index: 3; }
 .ic-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 4px; }
 .ic-head .ic-card { margin-left: auto; }
 .ic-body { display: flex; gap: 8px; }
