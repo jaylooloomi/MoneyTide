@@ -105,10 +105,21 @@ export function reportText(date, index, list, rows) {
     lines.push('', `${i + 1}. ${namesOf(x.g)}（證據 ${x.ev.yes}/${x.ev.known}${x.strong ? '・證據強' : ''}）`);
     for (const m of motiveOf(x.g, items)) lines.push(`   ${m.label}：${m.text}`);
     lines.push(`   ✓ ${items.filter((t) => t.ok === true).map((t) => t.short).join('、') || '—'}　✗ ${items.filter((t) => t.ok === false).map((t) => t.short).join('、') || '—'}`);
+    const conc = Object.entries(x.g.concentration || {});
+    if (conc.length) {
+      const name = (code) => x.g.members.find((m) => m.code === code)?.name || code;
+      lines.push(`   籌碼集中度：${conc.map(([c, v]) => `${name(c)} ${v > 0 ? '+' : ''}${v.toFixed(1)}%`).join('、')}`);
+    }
+    const lag = x.g.laggards;
+    if (lag?.stocks?.length) lines.push(`   同族群未跟上（${lag.label}：${lag.group}）：${lag.stocks.map((s) => `${s.name} ${fmtPct(s.change_pct)}`).join('、')}`);
     lines.push(`   明天觀察：${watchOf(x.g, row?.streak || 0).join('；')}`);
   });
+  // the vanished ones, 疑似出貨 (爆量收黑) apart from the ones that only stopped moving together
   const gone = rows.filter((r) => r.status.startsWith('消失'));
-  if (gone.length) lines.push('', `消失：${gone.map((r) => r.names).join('／')}`);
+  const dumped = gone.filter((r) => r.status.includes('出貨'));
+  if (dumped.length) lines.push('', `消失・疑似出貨：${dumped.map((r) => r.names).join('／')}`);
+  const rest = gone.filter((r) => !r.status.includes('出貨'));
+  if (rest.length) lines.push('', `消失：${rest.map((r) => r.names).join('／')}`);
   return lines.join('\n');
 }
 

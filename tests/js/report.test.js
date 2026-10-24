@@ -89,3 +89,17 @@ test('laggardsHtml: the known group and its stocks left behind, each opening its
   assert.match(laggardsHtml(g), /同族群未跟上（官方產業：半導體業）<\/span> <button type="button" class="rp-stock" data-code="3"/);
   assert.equal(laggardsHtml({}), '');
 });
+
+test('reportText carries 籌碼集中度, 補漲候選 and 疑似出貨 too', () => {
+  const g = grp(['1', '2'], { excess: true }, {
+    concentration: { 1: 17.5 },
+    laggards: { label: '細產業', group: '被動元件', stocks: [{ code: '3', name: '丙', change_pct: 0.5 }] },
+  });
+  g.members = [m('1', '甲'), m('2', '乙')];
+  const list = mergeGroups({ groups: [g] }, null);
+  const rows = [...trackRows([list]), { key: 'x', names: '戊、己', members: [], cells: [], status: '消失・疑似出貨（爆量收黑）', streak: 0 }];
+  const text = reportText('2026-08-04', [], list, rows);
+  assert.match(text, /籌碼集中度：甲 \+17\.5%/);
+  assert.match(text, /同族群未跟上（細產業：被動元件）：丙 \+0\.50%/);
+  assert.match(text, /消失・疑似出貨：戊、己/);
+});
