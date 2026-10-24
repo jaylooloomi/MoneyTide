@@ -174,7 +174,7 @@ export function hotHtml(list, stats, wide = null) {
   // the same next day by evidence (does more evidence mean more follow-through?)
   const ev = w?.evidence;
   const evLine = ev && Object.keys(ev).length
-    ? `<p class="rp-line" title="伺服器端 5 項證據（扣指數、隨機、同爆量、同分鐘、同漲跌）的 ✓ 數；沒資料的項目不算 ✓">依證據數分組（所有已存的日子）隔天：${[['ev4', '✓ ≥ 4 項'], ['ev2', '✓ 2～3 項'], ['ev0', '✓ ≤ 1 項']]
+    ? `<p class="rp-line" title="伺服器端 5 項證據（扣指數、隨機、同爆量、同分鐘、同漲跌）的 ✓ 數；沒資料的項目不算 ✓。同爆量、同分鐘要 1 分 K（約 30 天內才有），所以 ✓ ≥ 4 只會出現在最近的日子。研究（study 分支 exp5）：只看最近 30 天，仍是證據越少、後續越強">依證據數分組（所有已存的日子）隔天：${[['ev4', '✓ ≥ 4 項'], ['ev2', '✓ 2～3 項'], ['ev0', '✓ ≤ 1 項']]
       .filter(([k]) => ev[k])
       .map(([k, label]) => `<br>${line(label, ev[k])}`)
       .join('')}</p>`
