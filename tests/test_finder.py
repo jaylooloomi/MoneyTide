@@ -633,7 +633,7 @@ def test_branch_snapshot_skips_stored_members(tmp_path):
             if st["last"]:
                 break
             _t.sleep(0.05)
-        assert st["date"] == "2026-03-02" and st["total"] == 0 and st["errors"] == 0
+        assert st["total"] == 0 and st["errors"] == 0  # every day's members stored: nothing to do
         assert client.get("/api/branches/status").json()["queue"]["today"] == 0  # not a single HiStock page
 
 
@@ -699,3 +699,49 @@ def test_a_missing_session_keeps_the_days_aligned():
     gap = intraday_features({d2: bars}, rows, d2, P)  # no bars on d1 (suspended, or none at Yahoo)
     assert len(gap.returns) == len(full.returns) == 2 * 53
     assert all(x is None for x in gap.returns[:53]) and gap.returns[53:] == full.returns[53:]
+
+
+def test_branch_backfill_takes_earlier_days_but_keeps_the_reserve(tmp_path):
+    import time as _t
+    from datetime import datetime
+
+    from fastapi.testclient import TestClient
+
+    from openmarket.api import create_app
+    from openmarket.config import AppConfig
+    from openmarket.history.store import HistoryStore
+
+    s = HistoryStore(tmp_path / "h.sqlite")
+    old, new = date(2026, 3, 2), date(2026, 3, 3)
+    for d in (old, new):
+        s.save_day(d, [{"code": c, "name": c, "market": "上市", "industry": "X", "kind": "stock", "close": 10.0, "prev_close": 10.0, "change": 0, "change_pct": 0} for c in ("A", "B")], datetime(2026, 3, 3, 15))
+        s.save_finder(d, "known", "k", {"groups": [{"members": [{"code": "A"}, {"code": "B"}]}]})
+    for c in ("A", "B"):
+        s.save_branches(c, new, {"buy": [], "sell": []}, datetime(2026, 3, 3, 16))  # the latest day is done
+
+    class FakeQueue:  # no HiStock here: counts the pages asked for
+        def __init__(self, used):
+            self.today, self.asked = used, []
+
+        def status(self):
+            return {"today": self.today, "cap": 300, "blocked": False}
+
+        async def fetch(self, code, day):
+            self.asked.append((code, day))
+            self.today += 1
+            return {"buy": [], "sell": []}
+
+    def run(used):
+        app = create_app(AppConfig(data_dir=tmp_path), start_polling=False, start_history=False, start_concepts=False, history_store=s)
+        app.state.branch_queue = q = FakeQueue(used)
+        with TestClient(app, base_url="http://127.0.0.1") as client:
+            client.post("/api/branches/snapshot")
+            for _ in range(100):
+                if client.get("/api/branches/status").json()["snapshot"]["last"]:
+                    break
+                _t.sleep(0.05)
+        return q.asked
+
+    assert run(300 - 60) == []  # only the reserve left: the backfill waits for tomorrow
+    assert run(0) == [("A", old), ("B", old)]  # the earlier day's members
+    assert run(0) == []  # stored now

@@ -51,7 +51,7 @@ from .relations import NameIndex, RelationCollector, merge_edges, relation_edges
 from .history.factors import factor_of, industry_sizes
 from .history.evidence import bucket_of, chip_sync, excess_matrix, group_branches, minute_evidence, percentile_of, shared_buyers
 from .sources.sector_index import fetch_sector_day
-from .sources.daytrade import fetch_daytrade_day
+from .sources.daytrade import fetch_daytrade_day, fetch_tpex_daytrade_day
 from .sources.histock_branch import BranchQueue
 from .sources.company_address import fetch_county_groups
 from .sources.google_news import fetch_headlines
@@ -214,6 +214,7 @@ def create_app(
                 fetch_sectors=lambda d: fetch_sector_day(client, d),
                 fetch_daytrade=lambda d: fetch_daytrade_day(client, d),
                 fetch_exrights=lambda a, b: fetch_exrights_range(client, a, b),
+                fetch_daytrade_tpex=lambda d: fetch_tpex_daytrade_day(client, d),
             )
             tasks.append(asyncio.create_task(app.state.collector.run()))
             # 轉投資／董監 from MoneyDJ: one stock at a time, slowly, after the start-up has settled
@@ -789,7 +790,9 @@ def create_app(
                                     new.append((c, s, have[s]))
                     except Exception:  # unofficial source: this stock falls back to the 5m bars
                         pass
-                if minute_ok and have.get(sessions[-1]):
+                # stored 1m bars are used however old the day is (Yahoo only serves the last ~30 days, but
+                # what was fetched then is kept): every session stored, the shown day with bars
+                if (minute_ok or len(have) == len(sessions)) and have.get(sessions[-1]):
                     out[c] = ({s: have.get(s, []) for s in sessions}, 1)
                     return
                 async with gate:
@@ -1022,30 +1025,44 @@ def create_app(
                     count[m["code"]] = count.get(m["code"], 0) + 1
         return sorted(count, key=lambda c: -count[c])[:SNAPSHOT_MAX]
 
+    BRANCH_BACKFILL_DAYS = 60  # earlier days whose N members get their 分點 too (HiStock keeps about a year)
+    BRANCH_RESERVE = 60  # pages of the daily cap the backfill leaves for clicks in K (🔗 交集, the card)
+
     async def branch_snapshot_once() -> dict:
-        """Fetch the 分點 of the latest day's N members that are not stored yet (slowly, one queue)."""
+        """Fetch the 分點 of the latest day's N members that are not stored yet, then — with what the daily
+        cap has left beyond BRANCH_RESERVE — the members of earlier days with stored N results, newest
+        first (slowly, one queue)."""
         store = app.state.history
-        days = store.trading_dates(limit=1)
         now = datetime.now(TAIPEI)
-        if not days or (days[0] == now.date() and now.time() < SNAPSHOT_READY):
-            return snapshot_state
-        d = days[0]
-        codes = snapshot_codes(d)
-        have = await asyncio.to_thread(store.branches, codes, d)
-        todo = [c for c in codes if c not in have]
-        snapshot_state.update(running=True, date=d.isoformat(), done=0, total=len(todo), errors=0)
+        days = store.trading_dates(limit=1 + BRANCH_BACKFILL_DAYS)
+        if days and days[0] == now.date() and now.time() < SNAPSHOT_READY:
+            days = days[1:]  # today is not out yet: the earlier days still can be
+        snapshot_state.update(running=True, done=0, total=0, errors=0)
         try:
-            for c in todo:
-                try:
-                    data = await branch_queue().fetch(c, d)
-                    plain = {k: [{f: getattr(r, f) for f in r.__slots__} for r in v] for k, v in data.items()}
-                    await asyncio.to_thread(store.save_branches, c, d, plain, datetime.now(TAIPEI))
-                except Exception as exc:
-                    snapshot_state["errors"] += 1
-                    logging.getLogger(__name__).warning("branch snapshot %s %s failed: %s", c, d, exc)
-                    if "上限" in str(exc) or "暫停" in str(exc):
-                        break  # the daily cap or a refusal: stop for today
-                snapshot_state["done"] += 1
+            for i, d in enumerate(days):
+                q = branch_queue().status()
+                if i and q["today"] >= q["cap"] - BRANCH_RESERVE:
+                    break  # the backfill never eats the pages kept for clicks
+                codes = await asyncio.to_thread(snapshot_codes, d)
+                have = await asyncio.to_thread(store.branches, codes, d)
+                todo = [c for c in codes if c not in have]
+                if not todo:
+                    continue
+                snapshot_state.update(date=d.isoformat(), total=snapshot_state["total"] + len(todo))
+                for c in todo:
+                    q = branch_queue().status()
+                    if i and q["today"] >= q["cap"] - BRANCH_RESERVE:
+                        return snapshot_state
+                    try:
+                        data = await branch_queue().fetch(c, d)
+                        plain = {k: [{f: getattr(r, f) for f in r.__slots__} for r in v] for k, v in data.items()}
+                        await asyncio.to_thread(store.save_branches, c, d, plain, datetime.now(TAIPEI))
+                    except Exception as exc:
+                        snapshot_state["errors"] += 1
+                        logging.getLogger(__name__).warning("branch snapshot %s %s failed: %s", c, d, exc)
+                        if "上限" in str(exc) or "暫停" in str(exc):
+                            return snapshot_state  # the daily cap or a refusal: stop for today
+                    snapshot_state["done"] += 1
         finally:
             snapshot_state.update(running=False, last=datetime.now(TAIPEI).isoformat())
         return snapshot_state
