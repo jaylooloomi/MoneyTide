@@ -217,3 +217,19 @@ def test_collector_backfills_sectors_and_c_shows_them(tmp_path):
     assert sector["金融（上市）"]["values"][0] == -1.0 and "金融保險業" in sector["金融（上市）"]["hint"]
     breadth = {b["name"]: b for b in rotation(s, 2, "breadth", 5.0, up_to=date(2026, 10, 22))["benchmarks"]}
     assert breadth["電子（上市）"]["values"][1] is not None  # other metrics: the sector's 上市 common stocks
+
+
+def test_parse_daytrade_and_ratios(tmp_path):
+    from openmarket.history.linkage import daytrade_ratios
+    from openmarket.sources.daytrade import parse_daytrade
+
+    payload = {"stat": "OK", "tables": [{"title": "當日沖銷交易統計資訊", "data": [["1", "2", "3", "4", "5", "6"]]},
+                                        {"title": "115年10月22日 當日沖銷交易標的及成交量值", "data": [["2330", "台積電", "", "8,392,000", "1", "2"], ["2303", "聯電", "Y", "614,000", "1", "2"]]}]}
+    assert parse_daytrade(payload) == {"2330": 8392000, "2303": 614000}
+    assert parse_daytrade({"stat": "很抱歉，沒有符合條件的資料!"}) is None
+    s = HistoryStore(tmp_path / "h.sqlite")
+    d = date(2026, 10, 22)
+    s.save_day(d, build_rows([DailyRow("1", "1", "上市", 100, 1, 99, 101, 99, 10_000_000, 9e8, 10**7)], INFOS, {}), datetime(2026, 10, 22, 15, tzinfo=TAIPEI))
+    s.save_daytrade_day(d, {"1": 4_500_000}, datetime(2026, 10, 22, 19, tzinfo=TAIPEI))
+    assert daytrade_ratios(s, [d], ["1", "2"]) == {"1": {d: 45.0}, "2": {}}
+    assert s.daytrade_dates() == {d}

@@ -58,6 +58,17 @@ CREATE TABLE IF NOT EXISTS margin_day (
     rows INTEGER NOT NULL DEFAULT 0,
     fetched_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS daytrade_daily (
+    date TEXT NOT NULL,
+    code TEXT NOT NULL,
+    shares REAL,
+    PRIMARY KEY (date, code)
+);
+CREATE TABLE IF NOT EXISTS daytrade_day (
+    date TEXT PRIMARY KEY,
+    rows INTEGER NOT NULL DEFAULT 0,
+    fetched_at TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS corp_invest (
     code TEXT NOT NULL,
     name TEXT NOT NULL,
@@ -674,6 +685,30 @@ class HistoryStore:
                 "INSERT OR REPLACE INTO finder_result (date, method, params, result, computed_at) VALUES (?, ?, ?, ?, ?)",
                 (day.isoformat(), method, params, json.dumps(result, ensure_ascii=False), datetime.now().astimezone().isoformat()),
             )
+
+    # ---- 當日沖銷 shares per listed stock (TWSE only) ----------------------------------------------
+
+    def save_daytrade_day(self, day: date, rows: dict | None, fetched_at: datetime) -> None:
+        with self._lock, self._conn() as c:
+            c.execute("DELETE FROM daytrade_daily WHERE date = ?", (day.isoformat(),))
+            c.executemany("INSERT INTO daytrade_daily (date, code, shares) VALUES (?, ?, ?)", [(day.isoformat(), k, v) for k, v in (rows or {}).items()])
+            c.execute("INSERT OR REPLACE INTO daytrade_day (date, rows, fetched_at) VALUES (?, ?, ?)", (day.isoformat(), len(rows or {}), fetched_at.isoformat()))
+
+    def daytrade_dates(self) -> set[date]:
+        with self._conn() as c:
+            return {date.fromisoformat(r["date"]) for r in c.execute("SELECT date FROM daytrade_day WHERE rows > 0")}
+
+    def daytrade(self, days: list[date], codes: Iterable[str]) -> dict[date, dict[str, float]]:
+        """{day: {code: 當沖成交股數}} for the given stocks."""
+        codes = sorted(set(codes))
+        if not days or not codes:
+            return {}
+        out: dict[date, dict[str, float]] = {d: {} for d in days}
+        sql = f"SELECT date, code, shares FROM daytrade_daily WHERE date IN ({', '.join('?' for _ in days)}) AND code IN ({', '.join('?' for _ in codes)})"
+        with self._conn() as c:
+            for d, code, sh in c.execute(sql, [d.isoformat() for d in days] + codes):
+                out[date.fromisoformat(d)][code] = sh
+        return out
 
     # ---- company relations (轉投資 / 法人董監, relations.py) and official full names -----------------
 

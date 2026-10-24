@@ -26,6 +26,7 @@ IndexFetcher = Callable[[str, date], Awaitable[list]]  # (market, any day of the
 InstFetcher = Callable[[date], Awaitable[list | None]]  # day -> InstRow list, None when not published
 MarginFetcher = Callable[[date], Awaitable[list | None]]  # day -> MarginRow list, None when not published
 INST_DAYS = 250  # 三大法人 backfill window (stored trading days)
+DAYTRADE_DAYS = 60  # TWSE 當日沖銷 backfill window (one request a day)
 SECTOR_DAYS = 120  # TWSE 類股指數 backfill window (one request a day)
 MARGIN_DAYS = 120  # 融資融券 backfill window (two requests a day, so a shorter first backfill)
 
@@ -89,6 +90,7 @@ class HistoryCollector:
         fetch_inst: InstFetcher | None = None,
         fetch_margin: MarginFetcher | None = None,
         fetch_sectors: Callable[[date], Awaitable[dict | None]] | None = None,
+        fetch_daytrade: Callable[[date], Awaitable[dict | None]] | None = None,
     ) -> None:
         self.store = store
         self._fetch_twse = fetch_twse
@@ -106,6 +108,8 @@ class HistoryCollector:
         self.margin_state = BackfillState()
         self._fetch_sectors = fetch_sectors
         self.sector_state = BackfillState()
+        self._fetch_daytrade = fetch_daytrade
+        self.daytrade_state = BackfillState()
 
     def pending_days(self, now: datetime) -> list[date]:
         """Weekdays within the backfill window that are not stored yet, newest first."""
@@ -163,6 +167,7 @@ class HistoryCollector:
         await self.collect_inst()
         await self.collect_margin()
         await self.collect_sectors()
+        await self.collect_daytrade()
         await asyncio.to_thread(warm_history_cache, self.store)  # bonus-19
 
     async def collect_index(self) -> None:
@@ -258,6 +263,32 @@ class HistoryCollector:
             self.sector_state.done += 1
             await self._sleep(self._delay)
         self.sector_state.running = False
+
+    async def collect_daytrade(self) -> None:
+        """TWSE 當日沖銷 for stored trading days that have none yet (newest first); a day the site has
+        nothing for is retried on later passes until DAILY_GIVE_UP, then left alone."""
+        if self._fetch_daytrade is None:
+            return
+        with self.store._conn() as c:
+            tried = {date.fromisoformat(r["date"]) for r in c.execute("SELECT date FROM daytrade_day")}
+        todo = [d for d in self.store.trading_dates(limit=DAYTRADE_DAYS) if d not in tried]
+        self.daytrade_state = BackfillState(running=bool(todo), total=len(todo))
+        for d in todo:
+            try:
+                rows = await self._fetch_daytrade(d)
+                local = self._clock().astimezone(TAIPEI)
+                if rows is None and d == local.date() and local.time() < DAILY_GIVE_UP:
+                    pass  # published in the evening: try again next pass
+                else:
+                    self.store.save_daytrade_day(d, rows, self._clock())
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:
+                log.warning("day-trading data for %s failed: %s", d, exc)
+                self.daytrade_state.error = f"{d}: {exc}"
+            self.daytrade_state.done += 1
+            await self._sleep(self._delay)
+        self.daytrade_state.running = False
 
     async def run(self) -> None:
         while True:

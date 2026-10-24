@@ -25,7 +25,7 @@ from .explain import explain_day
 from .history.linkage import (
     pearson,
     INTRADAY_HIGH_R, INTRADAY_LOW_R, bucket_closes, daily_linkage, fmt_minute, pair_matrix, peak_minute_from_bars, peak_minute_from_ticks,
-    align_bars, amplitude_pct, limit_down_pct, limit_up_pct, minute_bars, turnover_rate, peak_stats, tick_bars, with_close_bar, race_points, returns, locked_level, daily_k, index_k, top_members, verdict_r, verdict_timing,
+    align_bars, amplitude_pct, limit_down_pct, limit_up_pct, minute_bars, turnover_rate, peak_stats, tick_bars, with_close_bar, race_points, returns, locked_level, daily_k, index_k, daytrade_ratios, DAYTRADE_HOT, top_members, verdict_r, verdict_timing,
 )
 from .history.finder import INST_STREAK_DAYS, FinderParams, inst_streak, inst_summary, margin_changes, margin_summary, pair_extras, persistence, run_search
 from .history.finder import news_themes as finder_news_themes  # api.py has its own news_themes route
@@ -50,6 +50,7 @@ from .sources.company_address import fetch_company_names
 from .relations import NameIndex, RelationCollector, merge_edges, relation_edges, relation_groups
 from .history.evidence import bucket_of, chip_sync, excess_matrix, minute_evidence, percentile_of
 from .sources.sector_index import fetch_sector_day
+from .sources.daytrade import fetch_daytrade_day
 from .sources.company_address import fetch_county_groups
 from .sources.google_news import fetch_headlines
 from .sources.news_themes import fetch_day_headlines
@@ -209,6 +210,7 @@ def create_app(
                 fetch_inst=lambda d: fetch_inst_day(client, d, asyncio.sleep, REQUEST_DELAY_SECONDS),
                 fetch_margin=lambda d: fetch_margin_day(client, d, asyncio.sleep, REQUEST_DELAY_SECONDS),
                 fetch_sectors=lambda d: fetch_sector_day(client, d),
+                fetch_daytrade=lambda d: fetch_daytrade_day(client, d),
             )
             tasks.append(asyncio.create_task(app.state.collector.run()))
             # 轉投資／董監 from MoneyDJ: one stock at a time, slowly, after the start-up has settled
@@ -852,6 +854,15 @@ def create_app(
                 return {**grp, "evidence_chips": {"ok": None if not known else sum(known) * 2 > len(known), "pairs": len(known)}}
 
             groups = [with_chips(grp) for grp in groups]
+            # 🔥 當沖比 of the members (上市 only): a high one reads as 隔日沖 hot money, shown apart from 🧾
+            dtr = daytrade_ratios(store, [d], ev_codes)
+
+            def with_daytrade(grp: dict) -> dict:
+                vals = {m["code"]: dtr.get(m["code"], {}).get(d) for m in grp["members"]}
+                known = {c: v for c, v in vals.items() if v is not None}
+                return {**grp, "daytrade": {"by_code": known, "hot": bool(known) and sum(known.values()) / len(known) >= DAYTRADE_HOT}}
+
+            groups = [with_daytrade(grp) for grp in groups]
             return {**res, "groups": finder_news_themes(groups, news, [x.isoformat() for x in news_dates])}
 
         if not refresh:

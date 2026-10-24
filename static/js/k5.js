@@ -49,7 +49,7 @@ export function k5Svg(series, w, h, full = false, sel = null) {
       parts.push(`<line x1="${slot * i}" x2="${slot * i}" y1="0" y2="${h}" stroke="#8a8f9c" stroke-dasharray="3 3" stroke-width="1"/>`);
       parts.push(`<text x="${slot * i + 3}" y="9" font-size="9" fill="#8a8f9c">之後</text>`);
     }
-    if (full) parts.push(`<g data-k5date="${escapeHtml(x.date)}" style="cursor:pointer"${x.after ? ' opacity="0.55"' : ''}><title>${escapeHtml(x.date)}：點一下看這天的分時走勢</title>`);
+    if (full) parts.push(`<g data-k5date="${escapeHtml(x.date)}" style="cursor:pointer"${x.after ? ' opacity="0.55"' : ''}><title>${escapeHtml(x.date)}${x.dt !== null && x.dt !== undefined ? `　當沖比 ${x.dt}%` : ''}：點一下看這天的分時走勢</title>`);
     const open = x.open ?? x.close;
     const color = x.close > open ? UP : x.close < open ? DOWN : x.pct > 0 ? UP : x.pct < 0 ? DOWN : FLAT;
     const y1 = y(Math.max(open, x.close));

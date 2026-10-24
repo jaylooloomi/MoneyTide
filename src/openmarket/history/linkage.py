@@ -352,6 +352,7 @@ def daily_k(store: HistoryStore, day: date, codes: list[str], days: int = K5_DAY
                 by_code[r["code"]][d] = r
     shown = [x for x in dates if x <= day][-days:] + later
     inst = store.inst_net(shown, codes)
+    dtr = daytrade_ratios(store, shown, codes)
     out: dict[str, list[dict]] = {}
     for c in codes:
         series = []
@@ -372,6 +373,7 @@ def daily_k(store: HistoryStore, day: date, codes: list[str], days: int = K5_DAY
                 "vr": round(vol / (sum(before) / len(before)), 2) if vol is not None and before else None,
                 "inst": round(net / 1000) if net is not None else None,
                 "after": d > day,
+                "dt": dtr.get(c, {}).get(d),
             })
         out[c] = series
     return out
@@ -397,4 +399,20 @@ def index_k(store: HistoryStore, day: date, markets: list[str], days: int = K5_D
                 "lots": None, "limit": False, "vr": None, "inst": None, "after": d > day,
             })
         out[m] = series
+    return out
+
+
+DAYTRADE_HOT = 40.0  # 當沖比 (% of the day's traded shares) from which the move reads as 隔日沖 hot money
+
+
+def daytrade_ratios(store: HistoryStore, days: list[date], codes: list[str]) -> dict[str, dict[date, float]]:
+    """{code: {day: 當沖比 %}} (TWSE stocks only: TPEx publishes no per-stock figure)."""
+    dt = store.daytrade(days, codes)
+    rows = store.rows(days)
+    out: dict[str, dict[date, float]] = {c: {} for c in codes}
+    for d in days:
+        vol = {r["code"]: r.get("volume_shares") for r in rows.get(d, [])}
+        for c, sh in dt.get(d, {}).items():
+            if c in out and vol.get(c):
+                out[c][d] = round(sh / vol[c] * 100, 1)
     return out

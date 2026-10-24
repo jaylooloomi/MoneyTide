@@ -10,7 +10,7 @@ from ..config import TAIPEI
 
 from .ingest import INDEX_MARKETS, HistoryCollector, index_window
 from .finder import INST_STREAK_DAYS, inst_streak, margin_changes, margin_summary
-from .linkage import group_r20
+from .linkage import DAYTRADE_HOT, daytrade_ratios, group_r20
 from .metrics import METRICS, Grouping, day_stocks, flow_baseline, group_flows, group_stats, industry_grouping, movers, rotation, stock_history, group_index, group_periods, group_rank_change
 from .store import HistoryStore
 
@@ -116,6 +116,17 @@ def create_history_router(
             "trust_streak": inst_streak(one, store.inst_trust(days, [code]), days)[0]["inst_streak"],
         }
 
+    def stock_daytrade(store: HistoryStore, code: str, d: date, market: str | None) -> dict | None:
+        """當沖比 today and its 5-day average; {otc: True} for 上櫃 (no per-stock figure published)."""
+        if market == "上櫃":
+            return {"otc": True}
+        days = store.trading_dates(up_to=d, limit=5)
+        r = daytrade_ratios(store, days, [code]).get(code, {})
+        if d not in r:
+            return None
+        vals = list(r.values())
+        return {"today": r[d], "avg5": round(sum(vals) / len(vals), 1), "days": len(vals), "hot": r[d] >= DAYTRADE_HOT}
+
     def stock_margin(store: HistoryStore, code: str, d: date) -> dict | None:
         """融資融券 of one stock on d (張) with its 融資連增／連減 streak; None while d has none for it."""
         have = store.margin_dates()
@@ -132,7 +143,8 @@ def create_history_router(
         data = stock_history(get_store(), code, _date(to), days)
         if data is None:
             raise HTTPException(404, f"no data for {code} on {to}")
-        return {**data, "inst": stock_inst(get_store(), code, _date(to)), "margin": stock_margin(get_store(), code, _date(to))}
+        return {**data, "inst": stock_inst(get_store(), code, _date(to)), "margin": stock_margin(get_store(), code, _date(to)),
+                "daytrade": stock_daytrade(get_store(), code, _date(to), data.get("market"))}
 
     # bonus-04: cumulative group index comparison
     @r.get("/index")

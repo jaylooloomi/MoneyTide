@@ -152,6 +152,9 @@ test('filter chips: 找法1 by source grouping (a group can count twice), 找法
   const evd = { ...known, groups: [{ ...known.groups[0], ...strong }, { ...known.groups[1], evidence: { excess: { ok: false } } }, known.groups[2]] };
   assert.deepEqual(filterOptions(evd).at(-1), { key: '@ev', label: '🧾 證據強', n: 1 });
   assert.ok(evidenceRank(evd.groups[0]) > evidenceRank(evd.groups[1]));
+  const hot = cardHtml({ ...G, daytrade: { by_code: { 1: 52.4, 2: 47 }, hot: true } }, 1);
+  assert.match(hot, /<div class="fd-dt"[^>]*>🔥 當沖比高：甲 52%、乙 47%/);
+  assert.doesNotMatch(cardHtml({ ...G, daytrade: { by_code: { 1: 10 }, hot: false } }, 1), /fd-dt/);
   const html = filterHtml(fresh, '跨族群新組合');
   assert.match(html, /data-filter="跨族群新組合" class="on"/);
   assert.match(html, /data-filter="已知族群的延伸" disabled/);

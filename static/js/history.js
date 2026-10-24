@@ -815,6 +815,13 @@ export function cardMarginRows(m) {
       <tr><td>融券</td><td>${n(m.short_chg)} 張</td><td>券資比</td><td>${m.short_ratio == null ? '—' : `${m.short_ratio.toFixed(1)}%`} ${s}</td></tr>`;
 }
 
+/** The card's 當沖比 row: today and the 5-day average, 🔥 when high; 上櫃 has no per-stock figure. */
+export function cardDaytradeRow(t) {
+  if (!t) return '';
+  if (t.otc) return '<tr><td>當沖比</td><td colspan="3" class="muted">上櫃無逐檔當沖資料</td></tr>';
+  return `<tr><td>當沖比</td><td class="${t.hot ? 'up' : ''}">${t.hot ? '🔥 ' : ''}${t.today.toFixed(1)}%</td><td>${t.days} 日平均</td><td>${t.avg5.toFixed(1)}%</td></tr>`;
+}
+
 /** The card's 🏢 block: the listed companies it holds / is held by, and its group (crawled slowly). */
 export function cardRelationsHtml(r) {
   if (!r) return '';
@@ -857,6 +864,7 @@ async function openHistCard(code) {
       <tr><td>成交量</td><td>${fmtNum(d.volume_lots, 0)} 張</td><td>市值</td><td>${fmtCap(d.market_cap)}</td></tr>
       ${cardInstRows(d.inst)}
       ${cardMarginRows(d.margin)}
+      ${cardDaytradeRow(d.daytrade)}
     </table>
     <div class="card-rel" id="hCardRel"></div>
     <div class="memb" data-memb="${escapeHtml(d.code)}"></div>

@@ -183,6 +183,11 @@ export function cardHtml(g, i) {
   ].filter(Boolean);
   const inst = instParts.length ? `<div class="fd-inst">🏦 ${instParts.join('　')}</div>` : '';
   const margin = marginText(g);
+  const dt = g.daytrade?.hot
+    ? `<div class="fd-dt" title="當沖成交股數 ÷ 成交股數（上市才有逐檔資料）；當沖比高多半是隔日沖等短線熱錢，跟有計畫的佈局不同（不算在 🧾 證據裡）">🔥 當沖比高：${Object.entries(g.daytrade.by_code)
+        .map(([c, v]) => `${escapeHtml(g.members.find((m) => m.code === c)?.name || c)} ${v.toFixed(0)}%`)
+        .join('、')}</div>`
+    : '';
   const rel = g.relations?.length || g.rel_group ? `<div class="fd-rel" title="轉投資／法人董監（MoneyDJ 整理自公開資訊觀測站）：一起動有結構性的原因">🏢 ${relationsHtml(g.relations, g.rel_group)}</div>` : '';
   const news = g.news?.length ? `<div class="fd-news">📰 ${g.news.map((t) => escapeHtml(t)).join('<br>📰 ')}</div>` : '';
   const themes = g.themes?.length
@@ -199,7 +204,7 @@ export function cardHtml(g, i) {
     <div class="fd-top"><span class="link-badge" style="background:${KIND_COLOR[g.kind] || '#3a3e48'}">${escapeHtml(g.kind)}</span>
       <span class="fd-title" title="${tip}">${title}</span>${seen}<span class="muted">${g.members.length} 檔</span>
       <button type="button" class="icon fd-save" data-save="${i}" title="把這群股票存成自訂族群，之後在 B／C／K 追蹤">＋族群</button></div>
-    <div class="fd-chips">${chips}</div>${groupEvidenceHtml(g)}${money}${inst}${margin}${rel}
+    <div class="fd-chips">${chips}</div>${groupEvidenceHtml(g)}${dt}${money}${inst}${margin}${rel}
     <div class="fd-facts">${facts}</div>${themes}${news}
   </div>`;
 }

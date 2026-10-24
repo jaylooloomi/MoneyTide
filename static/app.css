@@ -462,3 +462,4 @@ table.link-heat td.self { background: #3a3e48; }
 .fd-filter-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .fd-sort { width: auto; white-space: nowrap; }
 .fd-sort.on { background: #2f5fd0; color: #fff; }
+.fd-dt { font-size: 12px; margin-bottom: 4px; color: #ff9f43; }
