@@ -45,6 +45,7 @@
 | 18 | N 卡片也顯示籌碼集中度 | 3.8（scores-11.md） | HiStock「主力進出」、CMoney／Goodinfo「籌碼集中度」；加分項 01 | N 卡片在 🏦 分點行下多一行「🏦 籌碼集中度 甲 +17.5%、乙 −3.0%」（伺服器已算好 g.concentration）。只動 finder.js | `node --test tests/js/finder.test.js` | ✅ node 136 | ① 放進卡片標題列（太擠）② 算群組平均（成員有正有負時平均會誤導） |
 | 19 | 證據多寡的隔天表現（重估 D1） | 7.0（scores-12.md） | MacKinlay (1997) 事件研究；Alphalens 依因子分組的 forward returns | /api/history/next-day 依已存群組的 5 項伺服器端證據 ✓ 數分成 ≥4／2～3／≤1 三組各自統計隔天；盤後報告 🔥 區顯示。沒資料的項目不算 ✓。動到 linkage.py、api.py、report.js。60 天：✓≥4 86 組 隔天扣大盤 −0.02%、開高走低 60%；✓2～3 622 組 +0.06%、54%；✓≤1 82 組 +1.48%、50%——證據越多隔天越弱 | `.venv/Scripts/python -m pytest -q tests/test_money_flow.py`；`node --test tests/js/report.test.js` | ✅ pytest 298、node 137；API 確認 | ① 用前端完整 10 項證據（伺服器端要重寫一份，留待使用者決定是否改計分）② 只看證據強（樣本太小） |
 | 20 | 盤後報告「今天重點」 | 4.2（scores-14.md） | 盤後日報的「今日重點」欄（CMoney 盤後籌碼日報、鉅亨網盤後摘要） | 報告摘要數字下方最多 5 行：🔥 突然湧入（當沖比 ≥ 平常 2 倍）、疑似出貨、證據強、連續出現、最接近的高點錯開配對；複製文字開頭也有。只動 report.js、app.css。10/21：疑似出貨 富晶通＋普誠；證據強 晶技＋台嘉碩／百容＋晟鈦；高點錯開 光頡＋金山電 等 5 對 | `node --test tests/js/report.test.js` | ✅ node 138；瀏覽器確認 10/21 | ① 依「後續會漲」排序重點（研究顯示證據強反而後續弱，會誤導）② 每項都列全部（就不是重點了） |
+| 21 | 🔥 每組標「當沖比是平常的幾倍」 | 7.0（scores-15.md） | 異常量相對自身歷史；本專案 research/exp7 劑量效應 | 盤後報告 🔥 區與 N 卡片 🔥 行每組加「（平常的 N.N 倍）」，≥ 1.5 倍標紅，提示寫出 exp7 的隔天盤中跌幅對照；🔥 與突然湧入的判定不變。動到 evidence.js、report.js、finder.js。08/04：欣興＋南電 1.4 倍、千如＋金山電 1.3 倍 | `node --test tests/js/evidence.test.js` | ✅ node 139；瀏覽器確認 08/04 報告 | ① 直接把突然湧入門檻改成 1.5 倍（使用者決定）② 只標 ≥ 2 倍（樣本太少） |
 
 ## 判斷不值得做
 - C2 群組外盤估計 / 1.7 / 要動 N 結果、卡片與報告，Blast 大，單檔版已在 K 走勢資訊欄
