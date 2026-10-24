@@ -815,10 +815,9 @@ export function cardMarginRows(m) {
       <tr><td>融券</td><td>${n(m.short_chg)} 張</td><td>券資比</td><td>${m.short_ratio == null ? '—' : `${m.short_ratio.toFixed(1)}%`} ${s}</td></tr>`;
 }
 
-/** The card's 當沖比 row: today and the 5-day average, 🔥 when high; 上櫃 has no per-stock figure. */
+/** The card's 當沖比 row: today and the 5-day average, 🔥 when high (上市 and 上櫃). */
 export function cardDaytradeRow(t) {
   if (!t) return '';
-  if (t.otc) return '<tr><td>當沖比</td><td colspan="3" class="muted">上櫃無逐檔當沖資料</td></tr>';
   return `<tr><td>當沖比</td><td class="${t.hot ? 'up' : ''}">${t.hot ? '🔥 ' : ''}${t.today.toFixed(1)}%</td><td>${t.days} 日平均</td><td>${t.avg5.toFixed(1)}%</td></tr>`;
 }
 

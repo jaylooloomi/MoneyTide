@@ -117,9 +117,7 @@ def create_history_router(
         }
 
     def stock_daytrade(store: HistoryStore, code: str, d: date, market: str | None) -> dict | None:
-        """當沖比 today and its 5-day average; {otc: True} for 上櫃 (no per-stock figure published)."""
-        if market == "上櫃":
-            return {"otc": True}
+        """當沖比 today and its 5-day average (上市 and 上櫃); None while d has none for it."""
         days = store.trading_dates(up_to=d, limit=5)
         r = daytrade_ratios(store, days, [code]).get(code, {})
         if d not in r:

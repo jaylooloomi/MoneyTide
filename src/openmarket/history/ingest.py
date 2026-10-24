@@ -92,6 +92,7 @@ class HistoryCollector:
         fetch_sectors: Callable[[date], Awaitable[dict | None]] | None = None,
         fetch_daytrade: Callable[[date], Awaitable[dict | None]] | None = None,
         fetch_exrights: Callable[[date, date], Awaitable[dict]] | None = None,
+        fetch_daytrade_tpex: Callable[[date], Awaitable[dict | None]] | None = None,
     ) -> None:
         self.store = store
         self._fetch_twse = fetch_twse
@@ -112,6 +113,7 @@ class HistoryCollector:
         self._fetch_daytrade = fetch_daytrade
         self.daytrade_state = BackfillState()
         self._fetch_exrights = fetch_exrights
+        self._fetch_daytrade_tpex = fetch_daytrade_tpex
         self.exright_state = BackfillState()
 
     def pending_days(self, now: datetime) -> list[date]:
@@ -293,6 +295,25 @@ class HistoryCollector:
             self.daytrade_state.done += 1
             await self._sleep(self._delay)
         self.daytrade_state.running = False
+        await self.collect_daytrade_tpex()
+
+    async def collect_daytrade_tpex(self) -> None:
+        """TPEx 當日沖銷 for the same window, tracked apart (the TWSE days were stored before TPEx had any)."""
+        if self._fetch_daytrade_tpex is None:
+            return
+        tried = self.store.daytrade_tpex_tried()
+        todo = [d for d in self.store.trading_dates(limit=DAYTRADE_DAYS) if d not in tried]
+        for d in todo:
+            try:
+                rows = await self._fetch_daytrade_tpex(d)
+                local = self._clock().astimezone(TAIPEI)
+                if not (rows is None and d == local.date() and local.time() < DAILY_GIVE_UP):
+                    self.store.save_daytrade_tpex_day(d, rows, self._clock())
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:
+                log.warning("TPEx day-trading data for %s failed: %s", d, exc)
+            await self._sleep(self._delay)
 
     async def collect_exrights(self) -> None:
         """除權息參考價 for the stored days whose rows lack a 昨收, one request per month and site."""

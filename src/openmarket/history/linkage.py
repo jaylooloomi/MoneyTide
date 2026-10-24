@@ -406,7 +406,7 @@ DAYTRADE_HOT = 40.0  # 當沖比 (% of the day's traded shares) from which the m
 
 
 def daytrade_ratios(store: HistoryStore, days: list[date], codes: list[str]) -> dict[str, dict[date, float]]:
-    """{code: {day: 當沖比 %}} (TWSE stocks only: TPEx publishes no per-stock figure)."""
+    """{code: {day: 當沖比 %}} (上市 and 上櫃 alike)."""
     dt = store.daytrade(days, codes)
     rows = store.rows(days)
     out: dict[str, dict[date, float]] = {c: {} for c in codes}

@@ -262,3 +262,23 @@ def test_ex_rights_fill_the_missing_prev_close(tmp_path):
     assert rows["1"]["prev_close"] == 36.1 and rows["1"]["change"] == 1.9 and rows["1"]["change_pct"] == round((38 / 36.1 - 1) * 100, 4)
     assert rows["2"]["prev_close"] == 9.5  # a row that had its 昨收 is left alone
     assert s.ex_rights_gaps() == []  # looked up: not asked again
+
+
+def test_tpex_daytrade_beside_twse(tmp_path):
+    from openmarket.history.linkage import daytrade_ratios
+    from openmarket.sources.daytrade import parse_tpex_daytrade
+
+    payload = {"tables": [
+        {"title": "現股當沖交易統計資訊", "fields": ["當日沖銷交易總成交股數"], "data": [["551,652,000"]]},
+        {"title": "", "fields": ["證券代號", "證券名稱", "暫停現股賣出後現款買進當沖註記", "當日沖銷交易成交股數", "當日沖銷交易買進成交金額", "當日沖銷交易賣出成交金額"],
+         "data": [["2", "乙", " ", "3,000,000", "1", "2"]]},
+    ]}
+    assert parse_tpex_daytrade(payload) == {"2": 3000000}
+    assert parse_tpex_daytrade({"tables": [{"fields": ["證券代號", "當日沖銷交易成交股數"], "data": []}]}) is None
+    s = HistoryStore(tmp_path / "h.sqlite")
+    d = date(2026, 10, 22)
+    s.save_day(d, build_rows([DailyRow("1", "1", "上市", 100, 1, 99, 101, 99, 10_000_000, 9e8), DailyRow("2", "2", "上櫃", 50, 1, 49, 51, 49, 6_000_000, 3e8)], INFOS, {}), datetime(2026, 10, 22, 15, tzinfo=TAIPEI))
+    s.save_daytrade_day(d, {"1": 4_500_000}, datetime(2026, 10, 22, 19, tzinfo=TAIPEI))
+    s.save_daytrade_tpex_day(d, parse_tpex_daytrade(payload), datetime(2026, 10, 22, 19, tzinfo=TAIPEI))
+    assert daytrade_ratios(s, [d], ["1", "2"]) == {"1": {d: 45.0}, "2": {d: 50.0}}  # TWSE's row kept, TPEx's added
+    assert s.daytrade_tpex_tried() == {d}

@@ -58,6 +58,11 @@ CREATE TABLE IF NOT EXISTS margin_day (
     rows INTEGER NOT NULL DEFAULT 0,
     fetched_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS daytrade_tpex_day (
+    date TEXT PRIMARY KEY,
+    rows INTEGER NOT NULL DEFAULT 0,
+    fetched_at TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS exright_day (
     date TEXT PRIMARY KEY,
     filled INTEGER NOT NULL DEFAULT 0,
@@ -768,7 +773,18 @@ class HistoryStore:
             rows = c.execute(f"SELECT date, data FROM sector_intraday WHERE date IN ({', '.join('?' for _ in days)})", [d.isoformat() for d in days]).fetchall()
         return {date.fromisoformat(r["date"]): json.loads(r["data"]) for r in rows}
 
-    # ---- 當日沖銷 shares per listed stock (TWSE only) ----------------------------------------------
+    # ---- 當日沖銷 shares per stock (TWSE; TPEx added on top, tracked on its own) ------------------
+
+    def save_daytrade_tpex_day(self, day: date, rows: dict | None, fetched_at: datetime) -> None:
+        """TPEx's stocks into the same table, beside TWSE's (which this leaves alone)."""
+        with self._lock, self._conn() as c:
+            c.executemany("INSERT OR REPLACE INTO daytrade_daily (date, code, shares) VALUES (?, ?, ?)", [(day.isoformat(), k, v) for k, v in (rows or {}).items()])
+            c.execute("INSERT OR REPLACE INTO daytrade_tpex_day (date, rows, fetched_at) VALUES (?, ?, ?)", (day.isoformat(), len(rows or {}), fetched_at.isoformat()))
+
+    def daytrade_tpex_tried(self) -> set[date]:
+        with self._conn() as c:
+            return {date.fromisoformat(r["date"]) for r in c.execute("SELECT date FROM daytrade_tpex_day")}
+
 
     def save_daytrade_day(self, day: date, rows: dict | None, fetched_at: datetime) -> None:
         with self._lock, self._conn() as c:
