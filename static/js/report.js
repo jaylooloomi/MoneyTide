@@ -5,6 +5,7 @@
 import { escapeHtml, fmtPct } from './transform.js';
 import { evidenceCount, groupEvidenceItems, isStrong } from './evidence.js';
 
+export const GONE_SHOWN = 12; // 消失 rows listed before 「其餘 N 組」
 export const TRACK_DAYS = 5; // the 跨天追蹤 columns: the report day and the 4 trading days before it
 const SHOW_MAX = 8; // groups written out in full; the rest under 其餘
 
@@ -125,7 +126,7 @@ export function trackHtml(dates, rows) {
   const cell = (c) => (c === undefined ? '<td class="muted" title="那天還沒計算">…</td>' : c === null ? '<td class="muted">—</td>' : `<td class="up">✓ ${c}</td>`);
   const cls = (s) => (s.startsWith('消失') ? 'down' : s.includes('變強') || s.startsWith('連') ? 'up' : '');
   return `<table class="grid rp-track"><thead><tr><th class="l">群組</th>${dates.map((d) => `<th>${escapeHtml(d.slice(5))}</th>`).join('')}<th class="l">今天狀態</th></tr></thead><tbody>${rows
-    .map((r) => `<tr><td class="l">${escapeHtml(r.names)}</td>${r.cells.map(cell).join('')}<td class="l ${cls(r.status)}">${escapeHtml(r.status)}</td></tr>`)
+    .map((r) => `<tr><td class="l" title="${escapeHtml(r.names)}">${escapeHtml(r.names)}</td>${r.cells.map(cell).join('')}<td class="l ${cls(r.status)}">${escapeHtml(r.status)}</td></tr>`)
     .join('')}</tbody></table>`;
 }
 
@@ -140,7 +141,7 @@ export function mountReportPanel(container, { onStock }) {
     <div class="rp-body"><p class="hint">選一天看報告。</p></div>`;
   container.append(sec);
   const body = sec.querySelector('.rp-body');
-  const state = { ticket: 0, text: '' };
+  const state = { ticket: 0, text: '', allGone: false, last: null };
 
   async function result(date, method, storedOnly) {
     const q = new URLSearchParams({ date, method });
@@ -191,8 +192,15 @@ export function mountReportPanel(container, { onStock }) {
   }
 
   function draw(date, dates, per, bench, progress) {
+    state.last = [date, dates, per, bench, progress];
     const list = per.at(-1) || [];
     const rows = trackRows(per);
+    // the gone ones can outnumber today's many times over: the first few, the rest on demand
+    const gone = rows.filter((r) => r.status.startsWith('消失'));
+    const shownRows = state.allGone ? rows : rows.filter((r) => !r.status.startsWith('消失') || gone.indexOf(r) < GONE_SHOWN);
+    const more = gone.length > GONE_SHOWN
+      ? `<button type="button" class="icon wide rp-gone">${state.allGone ? '收起消失的組合' : `其餘 ${gone.length - GONE_SHOWN} 組消失的組合`}</button>`
+      : '';
     state.text = reportText(date, bench, list, rows);
     const strong = list.filter((x) => x.strong).length;
     const going = rows.filter((r) => r.streak >= 1 && r.cells.at(-1) != null).length;
@@ -206,11 +214,16 @@ export function mountReportPanel(container, { onStock }) {
       </div><div class="rp-right">
         <h3 class="rp-h">跨天追蹤 <small class="muted">格子＝那天的證據 ✓ 數；— 那天沒有這組；… 還沒計算</small></h3>
         ${progress ? `<p class="hint rp-progress">${escapeHtml(progress)}</p>` : ''}
-        ${trackHtml(dates, rows)}
+        <div class="rp-track-wrap">${trackHtml(dates, shownRows)}${more}</div>
       </div></div>`;
   }
 
   body.addEventListener('click', (e) => {
+    if (e.target.closest('.rp-gone') && state.last) {
+      state.allGone = !state.allGone;
+      draw(...state.last);
+      return;
+    }
     const b = e.target.closest('.rp-stock');
     if (b) onStock?.(b.dataset.code);
   });
